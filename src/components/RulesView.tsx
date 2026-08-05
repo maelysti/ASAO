@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import {
   Sliders,
   Cpu,
@@ -17,6 +17,7 @@ import {
   ShieldAlert,
   Zap,
   Info,
+  BookOpen,
 } from "lucide-react";
 import { RuleItem, SportyEntryPoint, AIRecapPrediction } from "../types";
 
@@ -33,6 +34,18 @@ interface RulesViewProps {
   isScanningAI: boolean;
 }
 
+export interface ConditionRow {
+  id: string;
+  connector: "IF" | "AND" | "OR";
+  param: string;
+  operator: "<" | ">" | "<=" | ">=" | "=" | "!=" | "BETWEEN";
+  valueType: "PARAM" | "VALUE";
+  valueParam?: string;
+  valueNumber?: number;
+  minVal?: number;
+  maxVal?: number;
+}
+
 export const RulesView: React.FC<RulesViewProps> = ({
   rules,
   entryPoints,
@@ -46,36 +59,130 @@ export const RulesView: React.FC<RulesViewProps> = ({
   isScanningAI,
 }) => {
   // New Rule Form State
-  const [betType, setBetType] = useState<string>("1X2");
   const [ruleTitle, setRuleTitle] = useState<string>("Anomalie de Classement");
-  const [assignedLeagueId, setAssignedLeagueId] = useState<number | "ALL">("ALL");
-  const [param1, setParam1] = useState<string>("Rank1");
-  const [operator1, setOperator1] = useState<string>("<");
-  const [param2, setParam2] = useState<string>("Rank2");
-  const [hasSecondCond, setHasSecondCond] = useState<boolean>(true);
-  const [logicalOp, setLogicalOp] = useState<string>("AND");
-  const [param3, setParam3] = useState<string>("Odds1");
-  const [operator2, setOperator2] = useState<string>(">");
-  const [param4, setParam4] = useState<string>("Odds2");
-  const [thenOutcome, setThenOutcome] = useState<string>("2");
+  const [betType, setBetType] = useState<string>("1X2");
+  const [assignedLeagueId, setAssignedLeagueId] = useState<number | "ALL">(
+    "ALL"
+  );
+  const [thenOutcome, setThenOutcome] = useState<string>("1");
+
+  // Multi-condition rows state
+  const [conditionRows, setConditionRows] = useState<ConditionRow[]>([
+    {
+      id: "cond-1",
+      connector: "IF",
+      param: "Rank1",
+      operator: "<=",
+      valueType: "VALUE",
+      valueNumber: 5,
+    },
+    {
+      id: "cond-2",
+      connector: "AND",
+      param: "Odds1",
+      operator: "BETWEEN",
+      valueType: "VALUE",
+      minVal: 1.4,
+      maxVal: 1.9,
+    },
+  ]);
 
   const [expandedRuleId, setExpandedRuleId] = useState<string | null>("#R1");
 
-  // Construct condition string from form state
-  const constructedCondition = React.useMemo(() => {
-    let cond = `IF${param1} ${operator1} ${param2}`;
-    if (hasSecondCond) {
-      cond += ` ${logicalOp} ${param3} ${operator2} ${param4}`;
+  // Construct readable condition string dynamically from rows
+  const constructedCondition = useMemo(() => {
+    if (conditionRows.length === 0) return `IF True THEN ${thenOutcome}`;
+
+    const parts = conditionRows.map((row) => {
+      let str = `${row.connector} ${row.param} ${row.operator}`;
+      if (row.operator === "BETWEEN") {
+        str += ` ${row.minVal ?? 1.0} AND ${row.maxVal ?? 2.0}`;
+      } else if (row.valueType === "PARAM") {
+        str += ` ${row.valueParam || "Rank2"}`;
+      } else {
+        str += ` ${row.valueNumber ?? 1}`;
+      }
+      return str;
+    });
+
+    return `${parts.join(" ")} THEN ${thenOutcome}`;
+  }, [conditionRows, thenOutcome]);
+
+  // Presets loader
+  const handleLoadPreset = (presetType: string) => {
+    if (presetType === "surcote") {
+      setRuleTitle("Surcote Favori à Domicile");
+      setBetType("1X2");
+      setThenOutcome("1");
+      setConditionRows([
+        { id: "c1", connector: "IF", param: "Rank1", operator: "<=", valueType: "VALUE", valueNumber: 5 },
+        { id: "c2", connector: "AND", param: "Odds1", operator: "BETWEEN", valueType: "VALUE", minVal: 1.4, maxVal: 1.9 },
+      ]);
+    } else if (presetType === "over25") {
+      setRuleTitle("Journée à Buts Over 2.5");
+      setBetType("Plus/Moins 2.5");
+      setThenOutcome("Over 2.5");
+      setConditionRows([
+        { id: "c1", connector: "IF", param: "RoundNumber", operator: "BETWEEN", valueType: "VALUE", minVal: 5, maxVal: 20 },
+        { id: "c2", connector: "AND", param: "RankDiff", operator: "<=", valueType: "VALUE", valueNumber: 5 },
+      ]);
+    } else if (presetType === "doublechance") {
+      setRuleTitle("Sécurité Domicile Indomptable 1X");
+      setBetType("Double Chance");
+      setThenOutcome("1X");
+      setConditionRows([
+        { id: "c1", connector: "IF", param: "Rank1", operator: "<=", valueType: "VALUE", valueNumber: 10 },
+        { id: "c2", connector: "AND", param: "Rank2", operator: ">", valueType: "VALUE", valueNumber: 6 },
+      ]);
+    } else if (presetType === "draw") {
+      setRuleTitle("Piège du Nul (Cotes Serrées)");
+      setBetType("1X2");
+      setThenOutcome("X");
+      setConditionRows([
+        { id: "c1", connector: "IF", param: "OddsDiff", operator: "<", valueType: "VALUE", valueNumber: 0.3 },
+        { id: "c2", connector: "AND", param: "RankDiff", operator: "<=", valueType: "VALUE", valueNumber: 3 },
+      ]);
     }
-    cond += `THEN${thenOutcome}`;
-    return cond;
-  }, [param1, operator1, param2, hasSecondCond, logicalOp, param3, operator2, param4, thenOutcome]);
+  };
+
+  const handleAddConditionRow = () => {
+    setConditionRows((prev) => [
+      ...prev,
+      {
+        id: `cond-${Date.now()}`,
+        connector: prev.length === 0 ? "IF" : "AND",
+        param: "Rank1",
+        operator: "<",
+        valueType: "VALUE",
+        valueNumber: 5,
+      },
+    ]);
+  };
+
+  const handleRemoveConditionRow = (id: string) => {
+    setConditionRows((prev) => {
+      const filtered = prev.filter((r) => r.id !== id);
+      if (filtered.length > 0 && filtered[0].connector !== "IF") {
+        filtered[0].connector = "IF";
+      }
+      return filtered;
+    });
+  };
+
+  const handleUpdateRow = (id: string, updates: Partial<ConditionRow>) => {
+    setConditionRows((prev) =>
+      prev.map((r) => (r.id === id ? { ...r, ...updates } : r))
+    );
+  };
 
   const handleFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const newId = `#R${rules.length + 1}`;
     const selectedEp = entryPoints.find((ep) => ep.id === assignedLeagueId);
-    const leagueName = assignedLeagueId === "ALL" ? "Toutes les ligues" : selectedEp?.name || `Ligue #${assignedLeagueId}`;
+    const leagueName =
+      assignedLeagueId === "ALL"
+        ? "Toutes les ligues"
+        : selectedEp?.name || `Ligue #${assignedLeagueId}`;
 
     const now = new Date();
     const dateStr = `${now.toLocaleDateString("fr-FR", {
@@ -96,37 +203,38 @@ export const RulesView: React.FC<RulesViewProps> = ({
       isActive: true,
     });
 
-    // Reset Title
     setRuleTitle("Nouvelle Règle Stratégique");
   };
 
-  const totalValidated = rules.reduce((acc, r) => acc + r.stats.validatedCount, 0);
+  const totalValidated = rules.reduce(
+    (acc, r) => acc + r.stats.validatedCount,
+    0
+  );
   const totalFailed = rules.reduce((acc, r) => acc + r.stats.failedCount, 0);
   const totalEvaluated = totalValidated + totalFailed;
-  const globalSuccessRate = totalEvaluated > 0 ? ((totalValidated / totalEvaluated) * 100).toFixed(1) : "0.0";
+  const globalSuccessRate =
+    totalEvaluated > 0
+      ? ((totalValidated / totalEvaluated) * 100).toFixed(1)
+      : "0.0";
 
   return (
     <div className="space-y-6 pb-12">
       {/* Top Banner & Control Panel */}
       <div className="bg-gradient-to-r from-slate-900 via-slate-900 to-slate-950 border border-slate-800 rounded-3xl p-6 shadow-2xl relative overflow-hidden">
         <div className="absolute top-0 right-0 w-96 h-96 bg-emerald-500/5 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute bottom-0 left-1/3 w-80 h-80 bg-cyan-500/5 rounded-full blur-3xl pointer-events-none" />
 
         <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 relative z-10">
           <div>
             <div className="flex items-center gap-2.5">
-              <span className="p-2 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 text-slate-950 font-black shadow-md shadow-emerald-500/20">
+              <span className="p-2.5 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 text-slate-950 font-black shadow-md shadow-emerald-500/20">
                 <Sliders className="w-5 h-5" />
               </span>
               <h2 className="text-2xl font-black text-white tracking-tight">
-                Gestionnaire de Règles & Intelligence Artificielle (IA)
+                ÉDITEUR AVANCÉ DE RÈGLES & ALGOS
               </h2>
             </div>
             <p className="text-sm text-slate-400 mt-1 max-w-2xl">
-              Définissez des critères algorithmiques ou utilisez le mode IA pour scanner l'intégralité des compétitions.
-              Les règles sont directement évaluées sur chaque match terminé (
-              <span className="text-emerald-400 font-bold">VALIDÉ</span> /{" "}
-              <span className="text-rose-400 font-bold">ERREUR</span>).
+              Constructeur visuel de conditions complexes (AND/OR, cotes, rangs, cotes entre tranches, journées) avec évaluation en temps réel.
             </p>
           </div>
 
@@ -141,7 +249,9 @@ export const RulesView: React.FC<RulesViewProps> = ({
               }`}
             >
               <Sliders className="w-4 h-4" />
-              <span>Option Manuel ({rules.filter((r) => r.mode === "Manuel").length})</span>
+              <span>
+                Constructeur Manuel ({rules.filter((r) => r.mode === "Manuel").length})
+              </span>
             </button>
 
             <button
@@ -198,14 +308,17 @@ export const RulesView: React.FC<RulesViewProps> = ({
         </div>
       </div>
 
-      {/* MODE IA: RECAP DE PLUS HAUTE PROBABILITE */}
+      {/* MODE IA SCANNER */}
       {activeMode === "IA" && (
         <div className="space-y-6">
           <div className="bg-slate-900 border border-cyan-500/30 rounded-3xl p-6 shadow-xl relative overflow-hidden">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-2xl bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center text-cyan-400">
-                  <Cpu className="w-6 h-6 animate-spin" style={{ animationDuration: "6s" }} />
+                  <Cpu
+                    className="w-6 h-6 animate-spin"
+                    style={{ animationDuration: "6s" }}
+                  />
                 </div>
                 <div>
                   <h3 className="text-lg font-extrabold text-white">
@@ -220,10 +333,14 @@ export const RulesView: React.FC<RulesViewProps> = ({
               <button
                 onClick={onRunAIScan}
                 disabled={isScanningAI}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-extrabold text-xs shadow-lg shadow-cyan-500/25 transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
+                className="flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-extrabold text-xs shadow-lg shadow-cyan-500/25 transition-all cursor-pointer disabled:opacity-50"
               >
-                <Zap className={`w-4 h-4 ${isScanningAI ? "animate-bounce" : ""}`} />
-                <span>{isScanningAI ? "Analyse en cours..." : "Lancer un nouveau Scan IA"}</span>
+                <Zap
+                  className={`w-4 h-4 ${isScanningAI ? "animate-bounce" : ""}`}
+                />
+                <span>
+                  {isScanningAI ? "Analyse en cours..." : "Lancer un nouveau Scan IA"}
+                </span>
               </button>
             </div>
 
@@ -232,7 +349,7 @@ export const RulesView: React.FC<RulesViewProps> = ({
               {aiRecaps.map((recap, idx) => (
                 <div
                   key={idx}
-                  className="bg-slate-950/90 border border-slate-800 hover:border-cyan-500/50 rounded-2xl p-4 transition-all duration-200 flex flex-col justify-between space-y-3"
+                  className="bg-slate-950/90 border border-slate-800 hover:border-cyan-500/50 rounded-2xl p-4 transition-all flex flex-col justify-between space-y-3"
                 >
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between">
@@ -244,37 +361,41 @@ export const RulesView: React.FC<RulesViewProps> = ({
                       </span>
                     </div>
 
-                    <h4 className="font-extrabold text-sm text-white">{recap.matchName}</h4>
+                    <h4 className="font-extrabold text-sm text-white">
+                      {recap.matchName}
+                    </h4>
                     <p className="text-xs text-slate-300 leading-relaxed bg-slate-900/80 p-2.5 rounded-xl border border-slate-800/80">
                       {recap.rationale}
                     </p>
                   </div>
 
-                  <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between">
-                    <div className="text-xs font-mono font-bold text-slate-300">
-                      Prédiction: <span className="text-emerald-400 font-extrabold text-sm">{recap.prediction}</span>
-                    </div>
-
+                  <div className="flex items-center justify-between pt-2 border-t border-slate-800">
+                    <span className="text-xs font-mono font-bold text-slate-400">
+                      Pari IA:{" "}
+                      <strong className="text-emerald-400 font-black">
+                        {recap.prediction}
+                      </strong>
+                    </span>
                     <button
                       onClick={() => {
-                        const newId = `#R${rules.length + 1}`;
                         onCreateRule({
-                          id: newId,
-                          betType: "1X2",
-                          generatedDate: `Généré le ${new Date().toLocaleDateString("fr-FR")} (IA)`,
+                          id: `#R_AI_${Date.now().toString().slice(-4)}`,
+                          betType: recap.prediction,
+                          generatedDate: new Date().toLocaleString("fr-FR"),
                           title: `Règle IA: ${recap.matchName}`,
-                          conditionText: recap.proposedRuleCondition || "IFRank1 < Rank2 AND Odds1 > Odds2THEN2",
-                          assignedLeagueId: recap.competitionId,
+                          conditionText:
+                            recap.proposedRuleCondition ||
+                            `IF Rank1 <= 5 AND Odds1 < 2.0 THEN ${recap.prediction}`,
+                          assignedLeagueId: recap.competitionId || "ALL",
                           assignedLeagueName: recap.competitionName,
                           mode: "IA",
                           aiConfidence: recap.probability,
                           isActive: true,
                         });
                       }}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/40 text-cyan-300 text-[11px] font-extrabold transition-all cursor-pointer"
+                      className="px-3 py-1 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 text-cyan-300 font-bold text-[11px] transition-colors cursor-pointer"
                     >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>Activer cette Règle IA</span>
+                      Ajouter aux Règles
                     </button>
                   </div>
                 </div>
@@ -284,22 +405,60 @@ export const RulesView: React.FC<RulesViewProps> = ({
         </div>
       )}
 
-      {/* MODE MANUEL: CRÉATION ET CRITÈRES */}
+      {/* MODE MANUEL: ADVANCED MULTI-CONDITION RULE CONSTRUCTOR */}
       {activeMode === "Manuel" && (
         <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-6">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <h3 className="text-lg font-extrabold text-white flex items-center gap-2">
               <Plus className="w-5 h-5 text-emerald-400" />
-              <span>Créer une Nouvelle Règle Personnalisée</span>
+              <span>Créer une Règle Algorithmique Multi-Conditions</span>
             </h3>
-            <span className="text-xs text-slate-400 font-mono bg-slate-950 px-3 py-1 rounded-full border border-slate-800">
-              Aperçu: {constructedCondition}
+            <span className="text-xs text-slate-400 font-mono bg-slate-950 px-3.5 py-1.5 rounded-xl border border-slate-800 font-extrabold text-emerald-400 max-w-full truncate">
+              Expression : {constructedCondition}
             </span>
           </div>
 
-          <form onSubmit={handleFormSubmit} className="space-y-4">
+          {/* Quick Presets Bar */}
+          <div className="bg-slate-950/80 p-3.5 rounded-2xl border border-slate-800/90 space-y-2">
+            <span className="text-[11px] font-extrabold text-amber-400 uppercase tracking-wider block flex items-center gap-1.5">
+              <BookOpen className="w-3.5 h-3.5" />
+              <span>Modèles de Stratégie Prédéfinis (1-Clic) :</span>
+            </span>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => handleLoadPreset("surcote")}
+                className="px-3 py-1.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/25 text-xs font-extrabold transition-all cursor-pointer"
+              >
+                🏆 Surcote Favori Dom (Top 5)
+              </button>
+              <button
+                type="button"
+                onClick={() => handleLoadPreset("over25")}
+                className="px-3 py-1.5 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 hover:bg-amber-500/25 text-xs font-extrabold transition-all cursor-pointer"
+              >
+                ⚽ Journée à Buts Over 2.5
+              </button>
+              <button
+                type="button"
+                onClick={() => handleLoadPreset("doublechance")}
+                className="px-3 py-1.5 rounded-xl bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 hover:bg-cyan-500/25 text-xs font-extrabold transition-all cursor-pointer"
+              >
+                🛡️ Sécurité Double Chance 1X
+              </button>
+              <button
+                type="button"
+                onClick={() => handleLoadPreset("draw")}
+                className="px-3 py-1.5 rounded-xl bg-purple-500/15 border border-purple-500/30 text-purple-300 hover:bg-purple-500/25 text-xs font-extrabold transition-all cursor-pointer"
+              >
+                🎯 Piège du Nul (Cotes Équilibrées)
+              </button>
+            </div>
+          </div>
+
+          <form onSubmit={handleFormSubmit} className="space-y-5">
+            {/* Rule metadata fields */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Rule Title */}
               <div>
                 <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">
                   Titre de la Règle
@@ -308,13 +467,12 @@ export const RulesView: React.FC<RulesViewProps> = ({
                   type="text"
                   value={ruleTitle}
                   onChange={(e) => setRuleTitle(e.target.value)}
-                  placeholder="Ex: Anomalie de Classement"
+                  placeholder="Ex: Anomalie Surcote Favori"
                   required
                   className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs font-semibold text-white focus:outline-none focus:border-emerald-500"
                 />
               </div>
 
-              {/* Bet Type */}
               <div>
                 <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">
                   Type de Pari
@@ -331,13 +489,14 @@ export const RulesView: React.FC<RulesViewProps> = ({
                 </select>
               </div>
 
-              {/* Assign League */}
               <div>
                 <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">
                   Assignation aux Ligues
                 </label>
                 <select
-                  value={assignedLeagueId === "ALL" ? "ALL" : assignedLeagueId.toString()}
+                  value={
+                    assignedLeagueId === "ALL" ? "ALL" : assignedLeagueId.toString()
+                  }
                   onChange={(e) => {
                     const val = e.target.value;
                     setAssignedLeagueId(val === "ALL" ? "ALL" : parseInt(val, 10));
@@ -354,112 +513,200 @@ export const RulesView: React.FC<RulesViewProps> = ({
               </div>
             </div>
 
-            {/* Condition Constructor Controls */}
+            {/* Condition Rows List Builder */}
             <div className="bg-slate-950/80 p-4 rounded-2xl border border-slate-800 space-y-3">
-              <span className="text-xs font-extrabold text-amber-400 uppercase tracking-wider block">
-                Condition Algorithmique (Expression IF ... THEN)
-              </span>
-
-              <div className="flex flex-wrap items-center gap-2 text-xs">
-                <span className="font-black text-slate-400 font-mono">IF</span>
-
-                {/* Param 1 */}
-                <select
-                  value={param1}
-                  onChange={(e) => setParam1(e.target.value)}
-                  className="bg-slate-900 border border-slate-700 px-2.5 py-1.5 rounded-lg font-mono font-bold text-amber-300"
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-extrabold text-amber-400 uppercase tracking-wider block">
+                  Conditions de Déclenchement (IF ... AND ... OR)
+                </span>
+                <button
+                  type="button"
+                  onClick={handleAddConditionRow}
+                  className="flex items-center gap-1 text-xs font-extrabold text-emerald-400 hover:text-emerald-300 bg-emerald-500/10 px-2.5 py-1 rounded-lg border border-emerald-500/30 cursor-pointer"
                 >
-                  <option value="Rank1">Rank1 (Classement Domicile)</option>
-                  <option value="Rank2">Rank2 (Classement Visiteur)</option>
-                  <option value="Odds1">Odds1 (Cote Domicile)</option>
-                  <option value="Odds2">Odds2 (Cote Visiteur)</option>
-                </select>
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Ajouter une condition</span>
+                </button>
+              </div>
 
-                {/* Operator 1 */}
-                <select
-                  value={operator1}
-                  onChange={(e) => setOperator1(e.target.value)}
-                  className="bg-slate-900 border border-slate-700 px-2 py-1.5 rounded-lg font-mono font-bold text-emerald-400"
-                >
-                  <option value="<">&lt; (inférieur à)</option>
-                  <option value=">">&gt; (supérieur à)</option>
-                  <option value="<=">&lt;= (inférieur ou égal)</option>
-                  <option value=">=">&gt;= (supérieur ou égal)</option>
-                  <option value="=">= (égal à)</option>
-                </select>
+              <div className="space-y-2.5">
+                {conditionRows.map((row, idx) => (
+                  <div
+                    key={row.id}
+                    className="flex flex-wrap items-center gap-2 p-3 bg-slate-900 border border-slate-800 rounded-xl text-xs"
+                  >
+                    {/* Connector */}
+                    {idx === 0 ? (
+                      <span className="font-mono font-black text-slate-400 px-2 py-1 bg-slate-950 rounded border border-slate-800">
+                        IF
+                      </span>
+                    ) : (
+                      <select
+                        value={row.connector}
+                        onChange={(e) =>
+                          handleUpdateRow(row.id, {
+                            connector: e.target.value as "AND" | "OR",
+                          })
+                        }
+                        className="font-mono font-black text-indigo-400 bg-slate-950 border border-slate-800 px-2 py-1 rounded cursor-pointer"
+                      >
+                        <option value="AND">AND</option>
+                        <option value="OR">OR</option>
+                      </select>
+                    )}
 
-                {/* Param 2 */}
-                <select
-                  value={param2}
-                  onChange={(e) => setParam2(e.target.value)}
-                  className="bg-slate-900 border border-slate-700 px-2.5 py-1.5 rounded-lg font-mono font-bold text-amber-300"
-                >
-                  <option value="Rank2">Rank2 (Classement Visiteur)</option>
-                  <option value="Rank1">Rank1 (Classement Domicile)</option>
-                  <option value="Odds2">Odds2 (Cote Visiteur)</option>
-                  <option value="Odds1">Odds1 (Cote Domicile)</option>
-                  <option value="5">5 (Top 5)</option>
-                  <option value="3">3 (Top 3)</option>
-                  <option value="1.80">1.80 (Cote 1.80)</option>
-                </select>
+                    {/* Param */}
+                    <select
+                      value={row.param}
+                      onChange={(e) =>
+                        handleUpdateRow(row.id, { param: e.target.value })
+                      }
+                      className="bg-slate-950 border border-slate-800 px-2.5 py-1.5 rounded-lg font-mono font-bold text-amber-300 cursor-pointer"
+                    >
+                      <option value="Rank1">Rank1 (Rang Domicile)</option>
+                      <option value="Rank2">Rank2 (Rang Visiteur)</option>
+                      <option value="RankDiff">RankDiff (|Rank1 - Rank2|)</option>
+                      <option value="Odds1">Odds1 (Cote Domicile)</option>
+                      <option value="OddsX">OddsX (Cote Nul)</option>
+                      <option value="Odds2">Odds2 (Cote Visiteur)</option>
+                      <option value="OddsDiff">OddsDiff (|Odds1 - Odds2|)</option>
+                      <option value="RoundNumber">RoundNumber (Journée)</option>
+                      <option value="HomePoints">Points Domicile</option>
+                      <option value="AwayPoints">Points Visiteur</option>
+                    </select>
 
-                {/* Second condition toggle */}
-                <span className="font-black text-indigo-400 font-mono ml-2">AND</span>
+                    {/* Operator */}
+                    <select
+                      value={row.operator}
+                      onChange={(e) =>
+                        handleUpdateRow(row.id, {
+                          operator: e.target.value as any,
+                        })
+                      }
+                      className="bg-slate-950 border border-slate-800 px-2 py-1.5 rounded-lg font-mono font-bold text-emerald-400 cursor-pointer"
+                    >
+                      <option value="<">&lt; (inférieur à)</option>
+                      <option value=">">&gt; (supérieur à)</option>
+                      <option value="<=">&lt;= (inférieur ou égal)</option>
+                      <option value=">=">&gt;= (supérieur ou égal)</option>
+                      <option value="=">= (égal à)</option>
+                      <option value="!=">!= (différent de)</option>
+                      <option value="BETWEEN">BETWEEN (entre tranches)</option>
+                    </select>
 
-                <select
-                  value={param3}
-                  onChange={(e) => setParam3(e.target.value)}
-                  className="bg-slate-900 border border-slate-700 px-2.5 py-1.5 rounded-lg font-mono font-bold text-cyan-300"
-                >
-                  <option value="Odds1">Odds1 (Cote Domicile)</option>
-                  <option value="Odds2">Odds2 (Cote Visiteur)</option>
-                  <option value="Rank1">Rank1</option>
-                  <option value="Rank2">Rank2</option>
-                </select>
+                    {/* Value inputs based on operator */}
+                    {row.operator === "BETWEEN" ? (
+                      <div className="flex items-center gap-1 font-mono">
+                        <input
+                          type="number"
+                          step="0.05"
+                          value={row.minVal ?? 1.4}
+                          onChange={(e) =>
+                            handleUpdateRow(row.id, {
+                              minVal: parseFloat(e.target.value) || 1.0,
+                            })
+                          }
+                          className="w-16 bg-slate-950 border border-slate-800 px-2 py-1 rounded text-cyan-300 font-bold"
+                        />
+                        <span className="text-slate-500 font-bold">ET</span>
+                        <input
+                          type="number"
+                          step="0.05"
+                          value={row.maxVal ?? 2.0}
+                          onChange={(e) =>
+                            handleUpdateRow(row.id, {
+                              maxVal: parseFloat(e.target.value) || 2.0,
+                            })
+                          }
+                          className="w-16 bg-slate-950 border border-slate-800 px-2 py-1 rounded text-cyan-300 font-bold"
+                        />
+                      </div>
+                    ) : (
+                      <>
+                        <select
+                          value={row.valueType}
+                          onChange={(e) =>
+                            handleUpdateRow(row.id, {
+                              valueType: e.target.value as "PARAM" | "VALUE",
+                            })
+                          }
+                          className="bg-slate-950 border border-slate-800 px-2 py-1 rounded text-slate-400 cursor-pointer"
+                        >
+                          <option value="VALUE">Valeur fixe</option>
+                          <option value="PARAM">Autre Variable</option>
+                        </select>
 
-                <select
-                  value={operator2}
-                  onChange={(e) => setOperator2(e.target.value)}
-                  className="bg-slate-900 border border-slate-700 px-2 py-1.5 rounded-lg font-mono font-bold text-emerald-400"
-                >
-                  <option value=">">&gt;</option>
-                  <option value="<">&lt;</option>
-                  <option value="<=">&lt;=</option>
-                  <option value=">=">&gt;=</option>
-                </select>
+                        {row.valueType === "PARAM" ? (
+                          <select
+                            value={row.valueParam || "Rank2"}
+                            onChange={(e) =>
+                              handleUpdateRow(row.id, {
+                                valueParam: e.target.value,
+                              })
+                            }
+                            className="bg-slate-950 border border-slate-800 px-2 py-1.5 rounded-lg font-mono font-bold text-amber-300 cursor-pointer"
+                          >
+                            <option value="Rank2">Rank2</option>
+                            <option value="Rank1">Rank1</option>
+                            <option value="Odds2">Odds2</option>
+                            <option value="Odds1">Odds1</option>
+                          </select>
+                        ) : (
+                          <input
+                            type="number"
+                            step="0.1"
+                            value={row.valueNumber ?? 5}
+                            onChange={(e) =>
+                              handleUpdateRow(row.id, {
+                                valueNumber: parseFloat(e.target.value) || 0,
+                              })
+                            }
+                            className="w-20 bg-slate-950 border border-slate-800 px-2.5 py-1 rounded font-mono font-bold text-amber-300"
+                          />
+                        )}
+                      </>
+                    )}
 
-                <select
-                  value={param4}
-                  onChange={(e) => setParam4(e.target.value)}
-                  className="bg-slate-900 border border-slate-700 px-2.5 py-1.5 rounded-lg font-mono font-bold text-cyan-300"
-                >
-                  <option value="Odds2">Odds2 (Cote Visiteur)</option>
-                  <option value="Odds1">Odds1 (Cote Domicile)</option>
-                  <option value="2.10">2.10</option>
-                  <option value="1.50">1.50</option>
-                </select>
+                    {/* Delete row button */}
+                    {conditionRows.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveConditionRow(row.id)}
+                        className="p-1 rounded-lg bg-slate-950 hover:bg-rose-500/20 text-slate-500 hover:text-rose-400 transition-colors ml-auto cursor-pointer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
 
-                {/* THEN outcome */}
-                <span className="font-black text-emerald-400 font-mono ml-2">THEN</span>
-
+              {/* THEN Outcome Selection */}
+              <div className="pt-3 border-t border-slate-800 flex items-center gap-3">
+                <span className="font-black text-emerald-400 font-mono text-sm">
+                  THEN Pronostic :
+                </span>
                 <select
                   value={thenOutcome}
                   onChange={(e) => setThenOutcome(e.target.value)}
-                  className="bg-emerald-500 text-slate-950 font-black px-3 py-1.5 rounded-lg font-mono"
+                  className="bg-emerald-500 text-slate-950 font-black px-4 py-2 rounded-xl font-mono text-xs cursor-pointer shadow-md shadow-emerald-500/20"
                 >
                   <option value="1">1 (Victoire Domicile)</option>
                   <option value="X">X (Match Nul)</option>
                   <option value="2">2 (Victoire Visiteur)</option>
                   <option value="1X">1X (Double Chance Domicile)</option>
                   <option value="X2">X2 (Double Chance Visiteur)</option>
-                  <option value="Over2.5">Plus de 2.5 Buts</option>
+                  <option value="12">12 (Victoire d'une des 2)</option>
+                  <option value="Over 2.5">Over 2.5 (Plus de 2.5 Buts)</option>
+                  <option value="Under 2.5">Under 2.5 (Moins de 2.5 Buts)</option>
+                  <option value="G/NG">Les 2 Équipes Marquent</option>
                 </select>
               </div>
             </div>
 
             <button
               type="submit"
-              className="w-full py-3 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-xs shadow-lg shadow-emerald-500/20 hover:from-emerald-400 hover:to-teal-400 transition-all cursor-pointer"
+              className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-xs shadow-xl shadow-emerald-500/20 hover:from-emerald-400 hover:to-teal-400 transition-all cursor-pointer"
             >
               Enregistrer & Activer cette Règle
             </button>
@@ -524,7 +771,8 @@ export const RulesView: React.FC<RulesViewProps> = ({
                   {/* Row 3: Success Rate % (X/Y) */}
                   <div className="flex items-center justify-between bg-slate-950/80 p-2.5 rounded-2xl border border-slate-800/80">
                     <span className="text-xs font-black text-emerald-400 font-mono">
-                      {rule.stats.successRate.toFixed(1)}% Réussite ({rule.stats.validatedCount}/
+                      {rule.stats.successRate.toFixed(1)}% Réussite (
+                      {rule.stats.validatedCount}/
                       {rule.stats.validatedCount + rule.stats.failedCount})
                     </span>
                     <span className="text-[10px] font-bold text-slate-400 font-mono">
@@ -544,7 +792,9 @@ export const RulesView: React.FC<RulesViewProps> = ({
                 {/* Action Bar */}
                 <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between">
                   <button
-                    onClick={() => setExpandedRuleId(isExpanded ? null : rule.id)}
+                    onClick={() =>
+                      setExpandedRuleId(isExpanded ? null : rule.id)
+                    }
                     className="text-xs font-bold text-slate-400 hover:text-white flex items-center gap-1.5 transition-colors cursor-pointer"
                   >
                     <Info className="w-3.5 h-3.5 text-cyan-400" />
@@ -581,7 +831,8 @@ export const RulesView: React.FC<RulesViewProps> = ({
                 {isExpanded && (
                   <div className="mt-4 pt-3 border-t border-slate-800 space-y-2 max-h-60 overflow-y-auto scrollbar-none">
                     <span className="text-[10px] font-extrabold uppercase text-slate-400 tracking-wider block">
-                      Évaluations en Direct ({rule.evaluations?.length || 0} matchs)
+                      Évaluations en Direct ({rule.evaluations?.length || 0}{" "}
+                      matchs)
                     </span>
 
                     {rule.evaluations && rule.evaluations.length > 0 ? (
@@ -591,7 +842,9 @@ export const RulesView: React.FC<RulesViewProps> = ({
                           className="flex items-center justify-between p-2 rounded-xl bg-slate-950 border border-slate-800 text-xs"
                         >
                           <div>
-                            <div className="font-extrabold text-white">{ev.matchName}</div>
+                            <div className="font-extrabold text-white">
+                              {ev.matchName}
+                            </div>
                             <div className="text-[10px] text-slate-400">
                               {ev.categoryName} • Round {ev.roundNumber}
                             </div>

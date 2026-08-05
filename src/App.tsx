@@ -30,11 +30,12 @@ import { RankingView } from "./components/RankingView";
 import { RulesView } from "./components/RulesView";
 
 import { ExtractionView } from "./components/ExtractionView";
+import { GlobalAnalysisView } from "./components/GlobalAnalysisView";
 
 import { RuleItem, AIRecapPrediction, ExtractedMatchRecord } from "./types";
 import { DEFAULT_RULES, processAllRules, runAIModeAnalysis } from "./utils/ruleEngine";
 
-import { AlertTriangle, Key, RefreshCw, Trophy, Layers, Activity, Database, Download, ListOrdered, Sliders, Zap } from "lucide-react";
+import { AlertTriangle, Key, RefreshCw, Trophy, Layers, Activity, Database, Download, ListOrdered, Sliders, Zap, BarChart3 } from "lucide-react";
 
 export default function App() {
   const [token, setToken] = useState<string>(getStoredToken());
@@ -50,7 +51,7 @@ export default function App() {
   const [isRoundLoading, setIsRoundLoading] = useState<boolean>(false);
   const [currentTab, setCurrentTab] = useState<MatchTimeFilter>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
-  const [activeMainView, setActiveMainView] = useState<"current" | "ranking" | "results" | "rules" | "extraction" | "database">("current");
+  const [activeMainView, setActiveMainView] = useState<"current" | "ranking" | "results" | "rules" | "extraction" | "database" | "global_analysis">("current");
 
   // Rules & AI State
   const [rules, setRules] = useState<RuleItem[]>(DEFAULT_RULES);
@@ -644,6 +645,18 @@ export default function App() {
                 <Database className="w-3.5 h-3.5 text-emerald-400" />
                 <span>DATABASE ({extractedDatabase.length})</span>
               </button>
+
+              <button
+                onClick={() => setActiveMainView("global_analysis")}
+                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  activeMainView === "global_analysis"
+                    ? "bg-gradient-to-r from-emerald-400 to-amber-400 text-slate-950 shadow-md shadow-emerald-500/20 font-black"
+                    : "text-slate-400 hover:text-white hover:bg-slate-800/60"
+                }`}
+              >
+                <BarChart3 className="w-3.5 h-3.5 text-amber-300" />
+                <span>ANALYSER GLOBALE</span>
+              </button>
             </div>
           </div>
 
@@ -805,6 +818,7 @@ export default function App() {
                     key={ev.id || idx}
                     event={ev}
                     matchIndex={idx + 1}
+                    database={extractedDatabase}
                     onSelectEvent={(e) => setSelectedEvent(e)}
                   />
                 ))}
@@ -876,6 +890,15 @@ export default function App() {
             isScanningAI={isScanningAI}
           />
         </main>
+      ) : activeMainView === "global_analysis" ? (
+        <main className="flex-1 max-w-7xl w-full mx-auto px-4 lg:px-8 py-6">
+          <GlobalAnalysisView
+            database={extractedDatabase}
+            entryPoints={validEntryPoints}
+            allMatchesByComp={allMatchesByComp}
+            onCreateRuleFromDb={handleCreateRule}
+          />
+        </main>
       ) : (
         <main className="flex-1 max-w-7xl w-full mx-auto px-4 lg:px-8 py-6">
           <ExtractionView
@@ -917,6 +940,7 @@ export default function App() {
 
       <MatchDetailModal
         event={selectedEvent}
+        database={extractedDatabase}
         onClose={() => setSelectedEvent(null)}
       />
 

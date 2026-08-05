@@ -1,18 +1,22 @@
 import React, { useState } from "react";
-import { X, Shield, Clock, Trophy, Code, Copy, Check, Activity, Sparkles, Layers, Hash } from "lucide-react";
-import { SportyEvent } from "../types";
+import { X, Shield, Clock, Trophy, Code, Copy, Check, Activity, Sparkles, Layers, Hash, Database, BarChart2 } from "lucide-react";
+import { SportyEvent, ExtractedMatchRecord } from "../types";
 import { classifyMatchStatus, CombinedMatchData, getTeamLogoUrl } from "../services/sportyApi";
+import { getH2HAnalysisForMatch } from "../utils/globalAnalysisEngine";
 
 interface MatchDetailModalProps {
   event: SportyEvent | CombinedMatchData | null;
+  database?: ExtractedMatchRecord[];
   onClose: () => void;
 }
 
-export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({ event, onClose }) => {
+export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({ event, database = [], onClose }) => {
   const [copied, setCopied] = useState(false);
   const [showRawJson, setShowRawJson] = useState(false);
 
   if (!event) return null;
+
+  const h2h = getH2HAnalysisForMatch(event, database);
 
   const isCombined = "categoryName" in event;
   const status = classifyMatchStatus(event as any);
@@ -193,6 +197,44 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({ event, onClo
                     )}
                   </div>
                 </div>
+              </div>
+
+              {/* Analyse H2H & Algo Database Injected */}
+              <div className="bg-slate-950/90 border border-emerald-500/30 rounded-2xl p-4 shadow-xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Database className="w-4 h-4 text-emerald-400" />
+                    <h3 className="text-xs font-extrabold text-white uppercase tracking-wider">
+                      Analyse H2H & Algo Database ({h2h.source})
+                    </h3>
+                  </div>
+                  <span className="text-xs font-mono font-black text-amber-400 bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded-full">
+                    Confiance {h2h.confidence}%
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-slate-900/80 p-3 rounded-xl border border-slate-800 text-center text-xs font-mono">
+                  <div>
+                    <span className="text-[10px] text-slate-500 block">H2H Directs</span>
+                    <span className="font-extrabold text-white">{h2h.directMatchesCount} Matchs</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-500 block">Bilan H2H</span>
+                    <span className="font-extrabold text-emerald-400">{h2h.homeWins}V - {h2h.draws}N - {h2h.awayWins}V</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-500 block">Moy. Buts</span>
+                    <span className="font-extrabold text-cyan-400">{h2h.avgGoals}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-500 block">Pronostic Algo</span>
+                    <span className="font-black text-slate-950 bg-emerald-400 px-2 py-0.5 rounded uppercase">{h2h.prediction}</span>
+                  </div>
+                </div>
+
+                <p className="text-xs text-slate-300 bg-slate-900/60 p-2.5 rounded-xl border border-slate-800/80 leading-relaxed">
+                  💡 <strong className="text-emerald-400">Raisonnement :</strong> {h2h.rationale}
+                </p>
               </div>
 
               {/* Markets & Odds Breakdown */}

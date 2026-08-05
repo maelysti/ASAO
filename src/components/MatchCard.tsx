@@ -1,17 +1,21 @@
 import React from "react";
-import { Clock, Shield, Activity, Layers, Database, Lightbulb, AlertCircle } from "lucide-react";
-import { SportyEvent } from "../types";
+import { Clock, Shield, Activity, Layers, Database, Lightbulb, AlertCircle, Sparkles } from "lucide-react";
+import { SportyEvent, ExtractedMatchRecord } from "../types";
 import { classifyMatchStatus, CombinedMatchData, getTeamLogoUrl } from "../services/sportyApi";
+import { getH2HAnalysisForMatch } from "../utils/globalAnalysisEngine";
 
 interface MatchCardProps {
   event: SportyEvent | CombinedMatchData;
   matchIndex?: number;
+  database?: ExtractedMatchRecord[];
   onSelectEvent: (event: any) => void;
 }
 
-export const MatchCard: React.FC<MatchCardProps> = ({ event, matchIndex, onSelectEvent }) => {
+export const MatchCard: React.FC<MatchCardProps> = ({ event, matchIndex, database = [], onSelectEvent }) => {
   const isCombined = "categoryName" in event;
   const statusCategory = classifyMatchStatus(event as any);
+
+  const h2h = getH2HAnalysisForMatch(event, database);
 
   // Format date cleanly in 12h AM/PM format matching screenshot (e.g. 07:54 AM)
   const formatMatchTime = (isoString?: string) => {
@@ -376,12 +380,21 @@ export const MatchCard: React.FC<MatchCardProps> = ({ event, matchIndex, onSelec
         </button>
       </div>
 
-      {/* Bottom History Alert Box */}
-      <div className="bg-[#1a0f13] border border-rose-950/80 rounded-xl p-2.5 text-center text-rose-300/90 text-[10px] font-extrabold flex items-center justify-center gap-2">
-        <Database className="w-3.5 h-3.5 text-rose-400 shrink-0" />
-        <span className="leading-tight">
-          AUCUN HISTORIQUE DOMICILE/EXTÉRIEUR POUR CES ÉQUIPES DANS CETTE COMPÉTITION
-        </span>
+      {/* Dynamic Bottom H2H Database Banner */}
+      <div className="bg-slate-900/95 border border-emerald-500/30 rounded-xl p-2.5 flex items-center justify-between gap-2 shadow-inner">
+        <div className="flex items-center gap-1.5 text-[11px] font-extrabold text-slate-200">
+          <Database className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+          <span className="truncate">H2H Algo Database:</span>
+        </div>
+        <div className="flex items-center gap-1.5 font-mono">
+          <span className="text-[10px] text-slate-400">Pronostic</span>
+          <span className="bg-emerald-400 text-slate-950 font-black text-xs px-2 py-0.5 rounded uppercase">
+            {h2h.prediction}
+          </span>
+          <span className="text-[10px] font-bold text-amber-400">
+            ({h2h.confidence}%)
+          </span>
+        </div>
       </div>
     </div>
   );
