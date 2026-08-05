@@ -199,7 +199,7 @@ export interface ExtractedMatchRecord {
   allOddsSummary?: string;
   headToHeadHistory?: string[];
   extractedAt: string; // ISO string or formatted timestamp
-  source: "Live Extraction" | "Imported JSON";
+  source: "Live Extraction" | "Imported JSON" | "Automated Results Collector" | string;
 }
 
 export interface AIDatabaseRuleInsight {

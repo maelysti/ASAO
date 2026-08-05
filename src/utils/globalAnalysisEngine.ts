@@ -1,5 +1,53 @@
 import { ExtractedMatchRecord, SportyEvent } from "../types";
-import { CombinedMatchData } from "../services/sportyApi";
+import { CombinedMatchData, InstantLeagueRoundResult } from "../services/sportyApi";
+
+/**
+ * Converts raw fetched Instant League round results into standardized ExtractedMatchRecords for database persistence
+ */
+export function convertRoundResultsToExtractedRecords(
+  rounds: InstantLeagueRoundResult[],
+  competitionId: number,
+  categoryName: string
+): ExtractedMatchRecord[] {
+  const records: ExtractedMatchRecord[] = [];
+  rounds.forEach((r) => {
+    (r.matches || []).forEach((m, idx) => {
+      const homeName = m.homeTeam?.name || m.name?.split(" vs ")[0] || "Home";
+      const awayName = m.awayTeam?.name || m.name?.split(" vs ")[1] || "Away";
+
+      const matchId = m.id || competitionId * 100000 + (r.roundNumber || 1) * 100 + idx;
+
+      const scoreStr = m.score || "0:0";
+      const [h, a] = scoreStr.split(":").map((s) => parseInt(s, 10) || 0);
+
+      const goalMins = (m.goals || []).map((g) => `${g.minute}'`).join(", ");
+
+      records.push({
+        id: matchId,
+        matchName: `${homeName} vs ${awayName}`,
+        homeTeamName: homeName,
+        awayTeamName: awayName,
+        homeRank: m.homeTeam?.position || 0,
+        awayRank: m.awayTeam?.position || 0,
+        homePoints: m.homeTeam?.points || 0,
+        awayPoints: m.awayTeam?.points || 0,
+        competitionId: competitionId,
+        competitionName: categoryName,
+        roundNumber: r.roundNumber || 0,
+        status: "Finished",
+        expectedStart: r.expectedStart,
+        score: m.score,
+        halfTimeScore: m.halfTimeScore,
+        goalsCount: h + a,
+        goalMinutes: goalMins,
+        goalsDetail: m.goals || [],
+        extractedAt: new Date().toISOString(),
+        source: "Automated Results Collector",
+      });
+    });
+  });
+  return records;
+}
 
 export interface GlobalStrategyInsight {
   id: string;

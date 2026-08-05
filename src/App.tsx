@@ -44,7 +44,13 @@ export default function App() {
   const [instantMatches, setInstantMatches] = useState<CombinedMatchData[]>([]);
   const [rawInstantResponses, setRawInstantResponses] = useState<Record<number, any>>({});
   const [rankingTeams, setRankingTeams] = useState<RankingTeam[]>([]);
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
+    return localStorage.getItem("virtual_show_sidebar_collapsed") === "true";
+  });
+
+  useEffect(() => {
+    localStorage.setItem("virtual_show_sidebar_collapsed", isSidebarCollapsed ? "true" : "false");
+  }, [isSidebarCollapsed]);
 
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(8035);
   const [selectedRoundIndex, setSelectedRoundIndex] = useState<number>(0);
@@ -945,6 +951,7 @@ export default function App() {
             onSelectCategory={handleSelectCategory}
             token={token}
             database={extractedDatabase}
+            onAutoSaveResultsToDatabase={handleAddExtractedRecords}
           />
         </main>
       ) : activeMainView === "rules" ? (

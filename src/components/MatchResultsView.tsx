@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   Trophy,
   Calendar,
@@ -19,6 +19,10 @@ import {
   CheckCircle2,
   BarChart2,
   ListFilter,
+  Grid,
+  List,
+  Database,
+  TrendingUp,
 } from "lucide-react";
 import {
   fetchInstantLeagueResults,
@@ -26,7 +30,8 @@ import {
   MatchResultData,
   getTeamLogoUrl,
 } from "../services/sportyApi";
-import { SportyEntryPoint } from "../types";
+import { SportyEntryPoint, ExtractedMatchRecord } from "../types";
+import { convertRoundResultsToExtractedRecords } from "../utils/globalAnalysisEngine";
 
 interface MatchResultsViewProps {
   entryPoints: SportyEntryPoint[];
@@ -34,6 +39,7 @@ interface MatchResultsViewProps {
   onSelectCategory: (catId: number) => void;
   token?: string;
   database?: any[];
+  onAutoSaveResultsToDatabase?: (records: ExtractedMatchRecord[]) => void;
 }
 
 export const MatchResultsView: React.FC<MatchResultsViewProps> = ({
@@ -42,6 +48,7 @@ export const MatchResultsView: React.FC<MatchResultsViewProps> = ({
   onSelectCategory,
   token,
   database = [],
+  onAutoSaveResultsToDatabase,
 }) => {
   const [rounds, setRounds] = useState<InstantLeagueRoundResult[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -49,7 +56,8 @@ export const MatchResultsView: React.FC<MatchResultsViewProps> = ({
   const [hasMore, setHasMore] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Filters
+  // Layout mode & Filters
+  const [viewStyle, setViewStyle] = useState<"cards" | "table">("cards");
   const [selectedRoundFilter, setSelectedRoundFilter] = useState<number | "all">("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [outcomeFilter, setOutcomeFilter] = useState<"all" | "home" | "draw" | "away" | "over25">("all");
@@ -61,6 +69,20 @@ export const MatchResultsView: React.FC<MatchResultsViewProps> = ({
       : entryPoints[0]?.id || 8035;
 
   const currentEntryPoint = entryPoints.find((ep) => ep.id === activeCategoryId);
+
+  // Helper to notify parent and auto-save fetched results to central database
+  const autoSaveToDatabase = (fetchedRounds: InstantLeagueRoundResult[]) => {
+    if (onAutoSaveResultsToDatabase && fetchedRounds.length > 0) {
+      const records = convertRoundResultsToExtractedRecords(
+        fetchedRounds,
+        activeCategoryId,
+        currentEntryPoint?.name || "Ligue Virtuelle"
+      );
+      if (records.length > 0) {
+        onAutoSaveResultsToDatabase(records);
+      }
+    }
+  };
 
   // Fetch initial results (up to 50 rounds by default)
   const loadResults = async () => {
@@ -75,6 +97,7 @@ export const MatchResultsView: React.FC<MatchResultsViewProps> = ({
     if (res.data) {
       setRounds(res.data);
       setHasMore(res.hasMore ?? res.data.length >= 50);
+      autoSaveToDatabase(res.data);
     } else {
       setError(res.error || "Impossible de charger les résultats.");
     }
@@ -90,10 +113,11 @@ export const MatchResultsView: React.FC<MatchResultsViewProps> = ({
 
     if (res.data && res.data.length > 0) {
       setRounds((prev) => {
-        // Deduplicate rounds by roundNumber
         const existingNumbers = new Set(prev.map((r) => r.roundNumber));
         const newRounds = res.data!.filter((r) => !existingNumbers.has(r.roundNumber));
-        return [...prev, ...newRounds];
+        const updated = [...prev, ...newRounds];
+        autoSaveToDatabase(updated);
+        return updated;
       });
       setHasMore(res.hasMore ?? res.data.length >= 50);
     } else {
@@ -125,6 +149,7 @@ export const MatchResultsView: React.FC<MatchResultsViewProps> = ({
     }
 
     setRounds(accumulated);
+    autoSaveToDatabase(accumulated);
     setHasMore(false);
     setLoadingMore(false);
   };
@@ -458,6 +483,36 @@ export const MatchResultsView: React.FC<MatchResultsViewProps> = ({
           >
             Over 2.5
           </button>
+
+          <div className="h-4 w-[1px] bg-slate-800 mx-1 hidden sm:block" />
+
+          {/* View Style Toggle (Cards vs Table) */}
+          <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800">
+            <button
+              onClick={() => setViewStyle("cards")}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                viewStyle === "cards"
+                  ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                  : "text-slate-400 hover:text-white"
+              }`}
+              title="Affichage en Cartes"
+            >
+              <Grid className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Cartes</span>
+            </button>
+            <button
+              onClick={() => setViewStyle("table")}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                viewStyle === "table"
+                  ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                  : "text-slate-400 hover:text-white"
+              }`}
+              title="Affichage en Tableau Compact"
+            >
+              <List className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Tableau</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -544,9 +599,71 @@ export const MatchResultsView: React.FC<MatchResultsViewProps> = ({
                 </div>
               </div>
 
-              {/* Match Cards List */}
-              <div className="divide-y divide-slate-800/60">
-                {roundMatches.map((m, matchIdx) => {
+              {/* Match Cards List or Compact Table */}
+              {viewStyle === "table" ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-slate-950/80 text-[11px] font-black uppercase text-slate-400 border-b border-slate-800">
+                        <th className="py-2.5 px-4">Domicile</th>
+                        <th className="py-2.5 px-4 text-center">Score FT</th>
+                        <th className="py-2.5 px-4 text-center">Mi-Temps</th>
+                        <th className="py-2.5 px-4">Visiteur</th>
+                        <th className="py-2.5 px-4 text-center">Total Buts</th>
+                        <th className="py-2.5 px-4 text-right">Résultat 1X2</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/60 text-xs">
+                      {roundMatches.map((m, matchIdx) => {
+                        const homeName = m.homeTeam?.name || m.name?.split(" vs ")[0] || "Home";
+                        const awayName = m.awayTeam?.name || m.name?.split(" vs ")[1] || "Away";
+                        const ftScore = m.score || "0:0";
+                        const htScore = m.halfTimeScore || "0:0";
+                        const [hNum, aNum] = ftScore.split(":").map((s) => parseInt(s, 10) || 0);
+
+                        let outcomeBadge = "X (Nul)";
+                        let outcomeBg = "bg-amber-500/20 text-amber-300 border-amber-500/30";
+                        if (hNum > aNum) {
+                          outcomeBadge = "1 (Dom)";
+                          outcomeBg = "bg-emerald-500/20 text-emerald-300 border-emerald-500/30";
+                        } else if (aNum > hNum) {
+                          outcomeBadge = "2 (Ext)";
+                          outcomeBg = "bg-cyan-500/20 text-cyan-300 border-cyan-500/30";
+                        }
+
+                        return (
+                          <tr key={matchIdx} className="hover:bg-slate-800/40 transition-colors">
+                            <td className={`py-2.5 px-4 font-bold ${hNum > aNum ? "text-emerald-300 font-black" : "text-slate-200"}`}>
+                              {homeName}
+                            </td>
+                            <td className="py-2.5 px-4 text-center font-mono font-black text-emerald-400 bg-slate-950/40 text-sm">
+                              {ftScore}
+                            </td>
+                            <td className="py-2.5 px-4 text-center font-mono text-slate-400 text-[11px]">
+                              {htScore}
+                            </td>
+                            <td className={`py-2.5 px-4 font-bold ${aNum > hNum ? "text-emerald-300 font-black" : "text-slate-200"}`}>
+                              {awayName}
+                            </td>
+                            <td className="py-2.5 px-4 text-center font-mono font-bold text-amber-400">
+                              <span className={`px-2 py-0.5 rounded-md ${hNum + aNum > 2.5 ? "bg-amber-500/20 text-amber-300" : "bg-slate-800 text-slate-400"}`}>
+                                {hNum + aNum} buts
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-4 text-right">
+                              <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black border ${outcomeBg}`}>
+                                {outcomeBadge}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="divide-y divide-slate-800/60">
+                  {roundMatches.map((m, matchIdx) => {
                   const matchKey = `${roundObj.roundNumber}_${matchIdx}_${m.id || m.name}`;
                   const isExpanded = expandedMatchId === matchKey;
 
@@ -713,6 +830,7 @@ export const MatchResultsView: React.FC<MatchResultsViewProps> = ({
                   );
                 })}
               </div>
+              )}
             </div>
           );
         })}
