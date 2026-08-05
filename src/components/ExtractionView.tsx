@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
+import { GoogleDriveModal } from "./GoogleDriveModal";
 import {
   Download,
   Upload,
@@ -90,11 +91,17 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
     return localStorage.getItem("SPORTY_AUTO_AI_ANALYSIS") !== "false";
   });
   const [showGeminiConfigModal, setShowGeminiConfigModal] = useState<boolean>(false);
+  const [showGoogleDriveModal, setShowGoogleDriveModal] = useState<boolean>(false);
   const [driveUserEmail, setDriveUserEmail] = useState<string>("maelystia.rmj@gmail.com");
   const DEFAULT_DRIVE_FOLDER = "https://drive.google.com/drive/folders/1TPg14mpTyGvRSpHM2_VsFegSnk6Yu5YA?usp=sharing";
   const [driveFolderUrl, setDriveFolderUrl] = useState<string>(() => {
     return localStorage.getItem("SPORTY_DRIVE_FOLDER_URL") || DEFAULT_DRIVE_FOLDER;
   });
+
+  const handleImportFromDrive = (importedRecords: ExtractedMatchRecord[], sourceFileName: string) => {
+    onAddExtractedRecords(importedRecords);
+    addLog("SUCCESS", `[GOOGLE_DRIVE] 📥 Base de données synchronisée : ${importedRecords.length} enregistrements importés depuis "${sourceFileName}".`);
+  };
 
   // AI & Modal State
   const [dbAiInsights, setDbAiInsights] = useState<AIDatabaseRuleInsight[]>([]);
@@ -639,6 +646,15 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse ml-0.5" title="IA Toujours Active (Auto-scan activé)" />
               )}
             </button>
+
+            <button
+              onClick={() => setShowGoogleDriveModal(true)}
+              className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-bold transition-all bg-gradient-to-r from-blue-900/80 to-indigo-900/80 hover:from-blue-800 hover:to-indigo-800 text-cyan-200 border border-blue-500/50 cursor-pointer shadow-sm ml-1"
+              title="Gérer le stockage Cloud Google Drive (Exporter / Importer)"
+            >
+              <HardDrive className="w-4 h-4 text-blue-400 animate-pulse" />
+              <span>Google Drive Cloud</span>
+            </button>
           </div>
         </div>
 
@@ -879,12 +895,12 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
                     <span>CSV</span>
                   </button>
                   <button
-                    onClick={handleExportGoogleDrive}
-                    className="px-2.5 py-1 bg-blue-600/30 hover:bg-blue-600/50 text-blue-300 border border-blue-500/50 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer shadow-sm"
-                    title={`Google Drive Sync (${driveUserEmail})`}
+                    onClick={() => setShowGoogleDriveModal(true)}
+                    className="px-2.5 py-1 bg-gradient-to-r from-blue-600/40 to-indigo-600/40 hover:from-blue-600/60 hover:to-indigo-600/60 text-blue-200 border border-blue-500/50 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer shadow-sm"
+                    title="Gérer la synchronisation, importation et exportation Google Drive"
                   >
-                    <CloudUpload className="w-3 h-3 text-blue-400" />
-                    <span>Drive ({driveUserEmail.split("@")[0]})</span>
+                    <CloudUpload className="w-3 h-3 text-blue-400 animate-pulse" />
+                    <span>Google Drive Cloud</span>
                   </button>
                 </div>
               </div>
@@ -1500,6 +1516,16 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
           </div>
         </div>
       )}
+      {/* Google Drive Integration Modal */}
+      <GoogleDriveModal
+        isOpen={showGoogleDriveModal}
+        onClose={() => setShowGoogleDriveModal(false)}
+        extractedDatabase={extractedDatabase}
+        onImportRecords={handleImportFromDrive}
+        addLog={addLog}
+        driveFolderUrl={driveFolderUrl}
+        setDriveFolderUrl={setDriveFolderUrl}
+      />
     </div>
   );
 };
