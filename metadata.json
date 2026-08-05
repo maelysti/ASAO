@@ -1,0 +1,6 @@
+{
+  "name": "Live Sporty Collector",
+  "description": "Live sports match aggregator and competition data collector powered by Sporty-Tech API with configurable authorization, league ribbons, and live match tracking.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
