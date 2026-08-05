@@ -31,9 +31,12 @@ import { RulesView } from "./components/RulesView";
 
 import { ExtractionView } from "./components/ExtractionView";
 import { GlobalAnalysisView } from "./components/GlobalAnalysisView";
+import { SafeParlayBanner } from "./components/SafeParlayBanner";
+import { RuleStatsRibbon } from "./components/RuleStatsRibbon";
 
 import { RuleItem, AIRecapPrediction, ExtractedMatchRecord } from "./types";
 import { DEFAULT_RULES, processAllRules, runAIModeAnalysis } from "./utils/ruleEngine";
+import { getH2HAnalysisForMatch } from "./utils/globalAnalysisEngine";
 
 import { AlertTriangle, Key, RefreshCw, Trophy, Layers, Activity, Database, Download, ListOrdered, Sliders, Zap, BarChart3, PanelLeftClose, PanelLeftOpen, ChevronLeft, ChevronRight } from "lucide-react";
 
@@ -58,6 +61,8 @@ export default function App() {
   const [isRoundLoading, setIsRoundLoading] = useState<boolean>(false);
   const [currentTab, setCurrentTab] = useState<MatchTimeFilter>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
+  const [activeRuleFilter, setActiveRuleFilter] = useState<string | null>(null);
+  const [activeBetFilter, setActiveBetFilter] = useState<string | null>(null);
   const [activeMainView, setActiveMainView] = useState<"current" | "ranking" | "results" | "rules" | "extraction" | "database" | "global_analysis">("current");
 
   // Rules & AI State
@@ -525,6 +530,20 @@ export default function App() {
       }
     }
 
+    // Rule Filter
+    if (activeRuleFilter) {
+      const h2h = getH2HAnalysisForMatch(match, extractedDatabase);
+      if (h2h.applicableRule?.ruleId !== activeRuleFilter) return false;
+    }
+
+    // Bet Type Filter
+    if (activeBetFilter) {
+      const h2h = getH2HAnalysisForMatch(match, extractedDatabase);
+      const actionBet = h2h.applicableRule?.actionBet || "";
+      const pred = h2h.prediction || "";
+      if (!actionBet.includes(activeBetFilter) && pred !== activeBetFilter) return false;
+    }
+
     return true;
   });
 
@@ -890,6 +909,27 @@ export default function App() {
                     Récupération des matchs, cotes et classements du Round sélectionné.
                   </p>
                 </div>
+              )}
+
+              {/* Statistic Ribbon Recap for all Applied Rules */}
+              {activeRoundMatches.length > 0 && (
+                <RuleStatsRibbon
+                  matches={activeRoundMatches}
+                  database={extractedDatabase}
+                  activeRuleFilter={activeRuleFilter}
+                  onSelectRuleFilter={(ruleId) => setActiveRuleFilter(ruleId)}
+                  activeBetFilter={activeBetFilter}
+                  onSelectBetFilter={(bet) => setActiveBetFilter(bet)}
+                />
+              )}
+
+              {/* Safe Parlay Generator Banner */}
+              {activeRoundMatches.length > 0 && (
+                <SafeParlayBanner
+                  matches={activeRoundMatches}
+                  database={extractedDatabase}
+                  onSelectMatch={(e) => setSelectedEvent(e)}
+                />
               )}
 
               {/* Match Cards Grid */}

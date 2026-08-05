@@ -132,8 +132,69 @@ export const TeamFormTrajectory: React.FC<TeamFormTrajectoryProps> = ({
     }
   };
 
+  // Calculate streak & 5-match points momentum
+  const homeStatsCalc = useMemo(() => {
+    const last5 = homeForm.slice(0, 5);
+    let pts = 0, wins = 0, draws = 0, losses = 0;
+    last5.forEach((i) => {
+      if (i.result === "W") { pts += 3; wins++; }
+      else if (i.result === "D") { pts += 1; draws++; }
+      else { losses++; }
+    });
+    let streakType = homeForm[0]?.result;
+    let streakCount = 0;
+    for (const item of homeForm) {
+      if (item.result === streakType) streakCount++;
+      else break;
+    }
+    const streakLabel = streakType === "W" ? `${streakCount}V` : streakType === "D" ? `${streakCount}N` : `${streakCount}D`;
+    return { pts, wins, draws, losses, streakType, streakCount, streakLabel };
+  }, [homeForm]);
+
+  const awayStatsCalc = useMemo(() => {
+    const last5 = awayForm.slice(0, 5);
+    let pts = 0, wins = 0, draws = 0, losses = 0;
+    last5.forEach((i) => {
+      if (i.result === "W") { pts += 3; wins++; }
+      else if (i.result === "D") { pts += 1; draws++; }
+      else { losses++; }
+    });
+    let streakType = awayForm[0]?.result;
+    let streakCount = 0;
+    for (const item of awayForm) {
+      if (item.result === streakType) streakCount++;
+      else break;
+    }
+    const streakLabel = streakType === "W" ? `${streakCount}V` : streakType === "D" ? `${streakCount}N` : `${streakCount}D`;
+    return { pts, wins, draws, losses, streakType, streakCount, streakLabel };
+  }, [awayForm]);
+
   return (
     <div className="bg-[#090d14] border border-slate-800/90 rounded-xl p-3 space-y-3 shadow-inner my-1">
+      {/* MOMENTUM & STREAKS HEADER BAR */}
+      <div className="flex items-center justify-between bg-slate-950/80 border border-slate-800 px-3 py-1.5 rounded-lg text-[10px] font-mono text-slate-300">
+        <div className="flex items-center gap-1.5">
+          <span className="text-emerald-400 font-bold">{homeTeamName}:</span>
+          <span className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 px-1.5 py-0.5 rounded font-black">
+            {homeStatsCalc.pts}/15 pts (5 derniers)
+          </span>
+          <span className={`px-1.5 py-0.5 rounded font-bold ${homeStatsCalc.streakType === "W" ? "bg-emerald-500/20 text-emerald-300" : homeStatsCalc.streakType === "D" ? "bg-slate-700 text-slate-300" : "bg-rose-500/20 text-rose-300"}`}>
+            Série: {homeStatsCalc.streakLabel}
+          </span>
+        </div>
+
+        <div className="hidden sm:block text-slate-400">vs</div>
+
+        <div className="flex items-center gap-1.5">
+          <span className="text-cyan-400 font-bold">{awayTeamName}:</span>
+          <span className="bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 px-1.5 py-0.5 rounded font-black">
+            {awayStatsCalc.pts}/15 pts (5 derniers)
+          </span>
+          <span className={`px-1.5 py-0.5 rounded font-bold ${awayStatsCalc.streakType === "W" ? "bg-emerald-500/20 text-emerald-300" : awayStatsCalc.streakType === "D" ? "bg-slate-700 text-slate-300" : "bg-rose-500/20 text-rose-300"}`}>
+            Série: {awayStatsCalc.streakLabel}
+          </span>
+        </div>
+      </div>
       {/* LINE 1: HOME TEAM FORME TRAJECTORY */}
       <div className="space-y-1.5">
         <div className="flex items-center justify-between text-[11px] font-black uppercase tracking-wider text-slate-300">
