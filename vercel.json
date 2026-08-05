@@ -1,12 +1,7 @@
 {
+  "version": 2,
   "rewrites": [
-    {
-      "source": "/api/sporty/proxy",
-      "destination": "/api/proxy"
-    },
-    {
-      "source": "/(.*)",
-      "destination": "/index.html"
-    }
+    { "source": "/api/sporty/proxy", "destination": "/api/proxy" },
+    { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
