@@ -172,27 +172,33 @@ export const TeamFormTrajectory: React.FC<TeamFormTrajectoryProps> = ({
   return (
     <div className="bg-[#090d14] border border-slate-800/90 rounded-xl p-3 space-y-3 shadow-inner my-1">
       {/* MOMENTUM & STREAKS HEADER BAR */}
-      <div className="flex items-center justify-between bg-slate-950/80 border border-slate-800 px-3 py-1.5 rounded-lg text-[10px] font-mono text-slate-300">
-        <div className="flex items-center gap-1.5">
-          <span className="text-emerald-400 font-bold">{homeTeamName}:</span>
-          <span className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 px-1.5 py-0.5 rounded font-black">
-            {homeStatsCalc.pts}/15 pts (5 derniers)
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 bg-slate-950/80 border border-slate-800 p-2 rounded-lg text-[10px] font-mono text-slate-300">
+        <div className="flex items-center justify-between gap-1.5 bg-slate-900/60 p-1.5 rounded-md border border-slate-800/80 min-w-0">
+          <span className="text-emerald-400 font-bold truncate max-w-[110px] sm:max-w-[140px]" title={homeTeamName}>
+            {homeTeamName}:
           </span>
-          <span className={`px-1.5 py-0.5 rounded font-bold ${homeStatsCalc.streakType === "W" ? "bg-emerald-500/20 text-emerald-300" : homeStatsCalc.streakType === "D" ? "bg-slate-700 text-slate-300" : "bg-rose-500/20 text-rose-300"}`}>
-            Série: {homeStatsCalc.streakLabel}
-          </span>
+          <div className="flex items-center gap-1 shrink-0">
+            <span className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 px-1.5 py-0.5 rounded font-black whitespace-nowrap">
+              {homeStatsCalc.pts}/15 pts
+            </span>
+            <span className={`px-1.5 py-0.5 rounded font-bold whitespace-nowrap ${homeStatsCalc.streakType === "W" ? "bg-emerald-500/20 text-emerald-300" : homeStatsCalc.streakType === "D" ? "bg-slate-700 text-slate-300" : "bg-rose-500/20 text-rose-300"}`}>
+              {homeStatsCalc.streakLabel}
+            </span>
+          </div>
         </div>
 
-        <div className="hidden sm:block text-slate-400">vs</div>
-
-        <div className="flex items-center gap-1.5">
-          <span className="text-cyan-400 font-bold">{awayTeamName}:</span>
-          <span className="bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 px-1.5 py-0.5 rounded font-black">
-            {awayStatsCalc.pts}/15 pts (5 derniers)
+        <div className="flex items-center justify-between gap-1.5 bg-slate-900/60 p-1.5 rounded-md border border-slate-800/80 min-w-0">
+          <span className="text-cyan-400 font-bold truncate max-w-[110px] sm:max-w-[140px]" title={awayTeamName}>
+            {awayTeamName}:
           </span>
-          <span className={`px-1.5 py-0.5 rounded font-bold ${awayStatsCalc.streakType === "W" ? "bg-emerald-500/20 text-emerald-300" : awayStatsCalc.streakType === "D" ? "bg-slate-700 text-slate-300" : "bg-rose-500/20 text-rose-300"}`}>
-            Série: {awayStatsCalc.streakLabel}
-          </span>
+          <div className="flex items-center gap-1 shrink-0">
+            <span className="bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 px-1.5 py-0.5 rounded font-black whitespace-nowrap">
+              {awayStatsCalc.pts}/15 pts
+            </span>
+            <span className={`px-1.5 py-0.5 rounded font-bold whitespace-nowrap ${awayStatsCalc.streakType === "W" ? "bg-emerald-500/20 text-emerald-300" : awayStatsCalc.streakType === "D" ? "bg-slate-700 text-slate-300" : "bg-rose-500/20 text-rose-300"}`}>
+              {awayStatsCalc.streakLabel}
+            </span>
+          </div>
         </div>
       </div>
       {/* LINE 1: HOME TEAM FORME TRAJECTORY */}

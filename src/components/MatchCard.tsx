@@ -173,11 +173,14 @@ export const MatchCard: React.FC<MatchCardProps> = ({ event, matchIndex, databas
       <div className="flex items-center justify-between gap-2 pt-1">
         {/* Home Team Side */}
         <div className="flex flex-col items-start flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="font-extrabold text-base text-white truncate max-w-[120px] group-hover:text-emerald-300 transition-colors">
+          <div className="flex items-center gap-1.5 min-w-0 max-w-full">
+            <span
+              className="font-extrabold text-sm sm:text-base text-white truncate group-hover:text-emerald-300 transition-colors"
+              title={event.homeTeamName}
+            >
               {event.homeTeamName}
             </span>
-            <div className="relative w-8 h-8 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center shrink-0 overflow-hidden p-0.5 shadow-md">
+            <div className="relative w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center shrink-0 overflow-hidden p-0.5 shadow-md">
               <img
                 src={getTeamLogoUrl(event.homeTeamName)}
                 alt={event.homeTeamName}
@@ -190,22 +193,22 @@ export const MatchCard: React.FC<MatchCardProps> = ({ event, matchIndex, databas
                 }}
               />
               <Shield className="w-4 h-4 text-emerald-400 hidden" />
-              <span className="absolute bottom-0 right-0 bg-indigo-600 text-white text-[9px] font-black px-1 rounded-tl shadow">
+              <span className="absolute bottom-0 right-0 bg-indigo-600 text-white text-[8px] sm:text-[9px] font-black px-1 rounded-tl shadow">
                 R{homeRank}
               </span>
             </div>
           </div>
-          <div className="text-[11px] font-mono font-bold mt-1 text-slate-400">
+          <div className="text-[10px] sm:text-[11px] font-mono font-bold mt-1 text-slate-400 flex items-center gap-1 flex-wrap">
             {homeStats?.points !== undefined && (
-              <span className="text-amber-300 mr-1.5 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.2 rounded text-[10px]">
+              <span className="text-amber-300 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.2 rounded text-[9px] whitespace-nowrap">
                 #{homeRank} ({homeStats.points} pts)
               </span>
             )}
-            <span className="text-emerald-400">{homePct.win}% V</span>{" "}
-            <span className="text-slate-600">|</span>{" "}
-            <span className="text-slate-300">{homePct.draw}% N</span>{" "}
-            <span className="text-slate-600">|</span>{" "}
-            <span className="text-rose-400">{homePct.loss}% D</span>
+            <span className="text-emerald-400 whitespace-nowrap">{homePct.win}% V</span>
+            <span className="text-slate-600">|</span>
+            <span className="text-slate-300 whitespace-nowrap">{homePct.draw}% N</span>
+            <span className="text-slate-600">|</span>
+            <span className="text-rose-400 whitespace-nowrap">{homePct.loss}% D</span>
           </div>
 
           {/* Home Team Goal Badges */}
@@ -214,7 +217,7 @@ export const MatchCard: React.FC<MatchCardProps> = ({ event, matchIndex, databas
               {homeGoals.map((m, idx) => (
                 <span
                   key={idx}
-                  className="text-[9px] font-mono font-extrabold text-amber-300 bg-amber-950/90 border border-amber-800/80 px-1.5 py-0.5 rounded flex items-center gap-0.5 shadow-sm"
+                  className="text-[9px] font-mono font-extrabold text-amber-300 bg-amber-950/90 border border-amber-800/80 px-1.5 py-0.5 rounded flex items-center gap-0.5 shadow-sm whitespace-nowrap"
                   title={`But à la ${m} minute pour ${event.homeTeamName}`}
                 >
                   <span className="text-[10px]">⚽</span>
@@ -227,29 +230,29 @@ export const MatchCard: React.FC<MatchCardProps> = ({ event, matchIndex, databas
 
         {/* Center Badge: Score or VS */}
         {isEndedOrFinished || formattedFtScore ? (
-          <div className="flex flex-col items-center shrink-0 px-1 py-0.5 min-w-[95px]">
+          <div className="flex flex-col items-center shrink-0 px-1 py-0.5 min-w-[85px] sm:min-w-[95px]">
             {/* Main Score Badge */}
-            <div className="px-3.5 py-1 bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 font-black font-mono text-base rounded-xl shadow-md flex items-center justify-center tracking-wider">
+            <div className="px-2.5 sm:px-3.5 py-1 bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 font-black font-mono text-sm sm:text-base rounded-xl shadow-md flex items-center justify-center tracking-wider whitespace-nowrap">
               {formattedFtScore || "0 - 0"}
             </div>
 
             {/* HT Score */}
             {formattedHtScore ? (
-              <div className="text-[10px] font-mono font-bold text-slate-300 bg-slate-800/90 border border-slate-700/70 px-2 py-0.5 rounded-md mt-1">
+              <div className="text-[9px] sm:text-[10px] font-mono font-bold text-slate-300 bg-slate-800/90 border border-slate-700/70 px-2 py-0.5 rounded-md mt-1 whitespace-nowrap">
                 HT: {formattedHtScore}
               </div>
             ) : (
-              <div className="text-[10px] font-mono font-bold text-slate-400 bg-slate-800/80 border border-slate-700/50 px-2 py-0.5 rounded-md mt-1">
+              <div className="text-[9px] sm:text-[10px] font-mono font-bold text-slate-400 bg-slate-800/80 border border-slate-700/50 px-2 py-0.5 rounded-md mt-1 whitespace-nowrap">
                 FT
               </div>
             )}
           </div>
         ) : (
-          <div className="flex flex-col items-center shrink-0 px-2">
-            <div className="px-3 py-1 bg-[#1a202c] text-slate-300 font-black text-xs rounded-xl border border-slate-700/80 shadow-inner">
+          <div className="flex flex-col items-center shrink-0 px-1.5">
+            <div className="px-2.5 py-1 bg-[#1a202c] text-slate-300 font-black text-xs rounded-xl border border-slate-700/80 shadow-inner whitespace-nowrap">
               VS
             </div>
-            <span className="text-[10px] font-mono font-bold text-slate-400 mt-1">
+            <span className="text-[10px] font-mono font-bold text-slate-400 mt-1 whitespace-nowrap">
               {formatMatchTime(event.expectedStart)}
             </span>
           </div>
@@ -257,8 +260,8 @@ export const MatchCard: React.FC<MatchCardProps> = ({ event, matchIndex, databas
 
         {/* Away Team Side */}
         <div className="flex flex-col items-end flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <div className="relative w-8 h-8 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center shrink-0 overflow-hidden p-0.5 shadow-md">
+          <div className="flex items-center gap-1.5 min-w-0 max-w-full justify-end">
+            <div className="relative w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center shrink-0 overflow-hidden p-0.5 shadow-md">
               <img
                 src={getTeamLogoUrl(event.awayTeamName)}
                 alt={event.awayTeamName}
@@ -271,25 +274,28 @@ export const MatchCard: React.FC<MatchCardProps> = ({ event, matchIndex, databas
                 }}
               />
               <Shield className="w-4 h-4 text-teal-400 hidden" />
-              <span className="absolute bottom-0 right-0 bg-purple-600 text-white text-[9px] font-black px-1 rounded-tl shadow">
+              <span className="absolute bottom-0 right-0 bg-purple-600 text-white text-[8px] sm:text-[9px] font-black px-1 rounded-tl shadow">
                 R{awayRank}
               </span>
             </div>
-            <span className="font-extrabold text-base text-white truncate max-w-[120px] group-hover:text-emerald-300 transition-colors">
+            <span
+              className="font-extrabold text-sm sm:text-base text-white truncate group-hover:text-emerald-300 transition-colors"
+              title={event.awayTeamName}
+            >
               {event.awayTeamName}
             </span>
           </div>
-          <div className="text-[11px] font-mono font-bold mt-1 text-slate-400">
+          <div className="text-[10px] sm:text-[11px] font-mono font-bold mt-1 text-slate-400 flex items-center gap-1 flex-wrap justify-end">
             {awayStats?.points !== undefined && (
-              <span className="text-amber-300 mr-1.5 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.2 rounded text-[10px]">
+              <span className="text-amber-300 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.2 rounded text-[9px] whitespace-nowrap">
                 #{awayRank} ({awayStats.points} pts)
               </span>
             )}
-            <span className="text-emerald-400">{awayPct.win}% V</span>{" "}
-            <span className="text-slate-600">|</span>{" "}
-            <span className="text-slate-300">{awayPct.draw}% N</span>{" "}
-            <span className="text-slate-600">|</span>{" "}
-            <span className="text-rose-400">{awayPct.loss}% D</span>
+            <span className="text-emerald-400 whitespace-nowrap">{awayPct.win}% V</span>
+            <span className="text-slate-600">|</span>
+            <span className="text-slate-300 whitespace-nowrap">{awayPct.draw}% N</span>
+            <span className="text-slate-600">|</span>
+            <span className="text-rose-400 whitespace-nowrap">{awayPct.loss}% D</span>
           </div>
 
           {/* Away Team Goal Badges */}
@@ -298,7 +304,7 @@ export const MatchCard: React.FC<MatchCardProps> = ({ event, matchIndex, databas
               {awayGoals.map((m, idx) => (
                 <span
                   key={idx}
-                  className="text-[9px] font-mono font-extrabold text-amber-300 bg-amber-950/90 border border-amber-800/80 px-1.5 py-0.5 rounded flex items-center gap-0.5 shadow-sm"
+                  className="text-[9px] font-mono font-extrabold text-amber-300 bg-amber-950/90 border border-amber-800/80 px-1.5 py-0.5 rounded flex items-center gap-0.5 shadow-sm whitespace-nowrap"
                   title={`But à la ${m} minute pour ${event.awayTeamName}`}
                 >
                   <span className="text-[10px]">⚽</span>
@@ -370,17 +376,17 @@ export const MatchCard: React.FC<MatchCardProps> = ({ event, matchIndex, databas
       </div>
 
       {/* Dynamic Bottom H2H Database Banner */}
-      <div className="bg-slate-900/95 border border-emerald-500/30 rounded-xl p-2.5 flex items-center justify-between gap-2 shadow-inner">
-        <div className="flex items-center gap-1.5 text-[11px] font-extrabold text-slate-200">
+      <div className="bg-slate-900/95 border border-emerald-500/30 rounded-xl p-2.5 flex items-center justify-between gap-2 flex-wrap shadow-inner">
+        <div className="flex items-center gap-1.5 text-[11px] font-extrabold text-slate-200 min-w-0">
           <Database className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
           <span className="truncate">H2H Algo Database:</span>
         </div>
-        <div className="flex items-center gap-1.5 font-mono">
+        <div className="flex items-center gap-1.5 font-mono shrink-0">
           <span className="text-[10px] text-slate-400">Pronostic</span>
-          <span className="bg-emerald-400 text-slate-950 font-black text-xs px-2 py-0.5 rounded uppercase">
+          <span className="bg-emerald-400 text-slate-950 font-black text-xs px-2 py-0.5 rounded uppercase whitespace-nowrap">
             {h2h.prediction}
           </span>
-          <span className="text-[10px] font-bold text-amber-400">
+          <span className="text-[10px] font-bold text-amber-400 whitespace-nowrap">
             ({h2h.confidence}%)
           </span>
         </div>

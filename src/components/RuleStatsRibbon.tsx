@@ -114,15 +114,15 @@ export const RuleStatsRibbon: React.FC<RuleStatsRibbonProps> = ({
           </div>
 
           {/* Key Metrics Pill Badges */}
-          <div className="flex items-center gap-2 font-mono text-xs">
-            <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-800 px-2.5 py-1 rounded-lg">
-              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+          <div className="flex items-center gap-2 font-mono text-xs flex-wrap">
+            <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-800 px-2.5 py-1 rounded-lg whitespace-nowrap">
+              <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0" />
               <span className="text-slate-400 text-[10px]">CONFIANCE MOY.:</span>
               <span className="font-extrabold text-amber-300">{stats.avgConfidence}%</span>
             </div>
 
-            <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-800 px-2.5 py-1 rounded-lg">
-              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+            <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-800 px-2.5 py-1 rounded-lg whitespace-nowrap">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
               <span className="text-slate-400 text-[10px]">SÉCURITÉ RISQUE FAIBLE:</span>
               <span className="font-extrabold text-emerald-300">{stats.lowRiskPct}%</span>
             </div>
@@ -133,9 +133,9 @@ export const RuleStatsRibbon: React.FC<RuleStatsRibbonProps> = ({
                   onSelectRuleFilter(null);
                   onSelectBetFilter(null);
                 }}
-                className="flex items-center gap-1 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer"
+                className="flex items-center gap-1 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap shrink-0"
               >
-                <RefreshCw className="w-3 h-3" />
+                <RefreshCw className="w-3 h-3 shrink-0" />
                 <span>Réinitialiser filtre</span>
               </button>
             )}
@@ -156,15 +156,15 @@ export const RuleStatsRibbon: React.FC<RuleStatsRibbonProps> = ({
               <button
                 key={ruleId}
                 onClick={() => onSelectRuleFilter(isSelected ? null : ruleId)}
-                className={`shrink-0 flex items-center gap-1.5 px-3 py-1.2 rounded-xl text-xs font-bold transition-all border cursor-pointer ${
+                className={`shrink-0 flex items-center gap-1.5 px-3 py-1.2 rounded-xl text-xs font-bold transition-all border cursor-pointer whitespace-nowrap ${
                   isSelected
                     ? "bg-emerald-500 text-slate-950 border-emerald-400 shadow-lg shadow-emerald-500/20 scale-[1.03]"
                     : `${info.color} hover:border-slate-600`
                 }`}
               >
-                <span className="font-mono font-extrabold">{ruleId}</span>
-                <span className="hidden sm:inline text-[11px] font-normal opacity-90">{info.name}</span>
-                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black font-mono ${isSelected ? "bg-slate-950/20 text-slate-950" : "bg-slate-900 border border-slate-700/60"}`}>
+                <span className="font-mono font-extrabold whitespace-nowrap">{ruleId}</span>
+                <span className="hidden sm:inline text-[11px] font-normal opacity-90 whitespace-nowrap">{info.name}</span>
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black font-mono whitespace-nowrap ${isSelected ? "bg-slate-950/20 text-slate-950" : "bg-slate-900 border border-slate-700/60"}`}>
                   {info.count}
                 </span>
               </button>

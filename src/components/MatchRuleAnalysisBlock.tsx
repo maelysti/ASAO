@@ -40,22 +40,24 @@ export const MatchRuleAnalysisBlock: React.FC<MatchRuleAnalysisBlockProps> = ({
     <div className="bg-[#0b1019] border border-slate-800/90 rounded-xl p-3 space-y-2.5 shadow-md my-1.5 transition-all">
       {/* HEADER: RÈGLE & INDICE DE CONFIANCE */}
       <div className="flex items-center justify-between gap-2 flex-wrap">
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 px-2.5 py-0.5 rounded-lg text-xs font-black uppercase tracking-wider">
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 px-2.5 py-1 rounded-lg text-xs font-black uppercase tracking-wider whitespace-nowrap">
             <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-            <span>{rule?.ruleId || "RÉG-01"}: {rule?.ruleName || "Règle Maîtresse"}</span>
+            <span className="truncate max-w-[220px] sm:max-w-none">
+              {rule?.ruleId || "RÉG-01"}: {rule?.ruleName || "Règle Maîtresse"}
+            </span>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           {/* Risk Level Badge */}
-          <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md border ${getRiskColor(risk)}`}>
+          <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md border whitespace-nowrap ${getRiskColor(risk)}`}>
             {risk} RISQUE
           </span>
 
           {/* Confidence Badge */}
-          <span className="flex items-center gap-1 text-[11px] font-mono font-black text-amber-300 bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded-md">
-            <Sparkles className="w-3 h-3 text-amber-400 fill-amber-400/20" />
+          <span className="flex items-center gap-1 text-[11px] font-mono font-black text-amber-300 bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded-md whitespace-nowrap">
+            <Sparkles className="w-3 h-3 text-amber-400 fill-amber-400/20 shrink-0" />
             <span>{conf}% CONFIANCE</span>
           </span>
         </div>
@@ -63,19 +65,19 @@ export const MatchRuleAnalysisBlock: React.FC<MatchRuleAnalysisBlockProps> = ({
 
       {/* PRONOSTIC À APPLIQUER (ACTIONABLE BET) */}
       <div className="flex items-center justify-between bg-gradient-to-r from-emerald-950/80 via-slate-900 to-slate-950 border border-emerald-500/30 rounded-xl p-2.5 gap-2">
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2.5 min-w-0 flex-1">
           <div className="w-8 h-8 rounded-lg bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center shrink-0">
             <Target className="w-4 h-4 text-emerald-400" />
           </div>
-          <div>
-            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+          <div className="min-w-0 flex-1">
+            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider truncate">
               PRONOSTIC À APPLIQUER (RÈGLE EXACTE)
             </div>
-            <div className="text-sm font-black text-white font-mono flex items-center gap-2">
-              <span className="text-emerald-300 bg-emerald-500/20 px-2 py-0.5 rounded border border-emerald-500/40">
+            <div className="text-sm font-black text-white font-mono flex items-center gap-2 flex-wrap">
+              <span className="text-emerald-300 bg-emerald-500/20 px-2 py-0.5 rounded border border-emerald-500/40 whitespace-nowrap">
                 {rule?.actionBet || h2h.prediction}
               </span>
-              <span className="text-[11px] font-normal text-slate-300 hidden sm:inline">
+              <span className="text-[11px] font-normal text-slate-300 truncate hidden md:inline max-w-[280px]">
                 ({rule?.conditionSummary || "Analyse multicritère"})
               </span>
             </div>
@@ -84,7 +86,7 @@ export const MatchRuleAnalysisBlock: React.FC<MatchRuleAnalysisBlockProps> = ({
 
         <button
           onClick={() => setExpanded(!expanded)}
-          className="text-xs font-bold text-slate-400 hover:text-white flex items-center gap-1 bg-slate-800/80 hover:bg-slate-700/80 px-2.5 py-1 rounded-lg border border-slate-700/80 transition-all shrink-0 cursor-pointer"
+          className="text-xs font-bold text-slate-400 hover:text-white flex items-center gap-1 bg-slate-800/80 hover:bg-slate-700/80 px-2.5 py-1.5 rounded-lg border border-slate-700/80 transition-all shrink-0 cursor-pointer whitespace-nowrap"
         >
           <span>{expanded ? "Masquer" : "Détails Stats"}</span>
           {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
