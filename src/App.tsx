@@ -558,116 +558,135 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-emerald-500 selection:text-slate-950">
-      {/* Primary Top Header Navigation Ribbon */}
-      <header className="sticky top-0 z-40 bg-slate-900/95 backdrop-blur-md border-b border-slate-800/90 px-3 lg:px-6 py-2.5 shadow-2xl">
-        <div className="max-w-7xl mx-auto flex items-center justify-between gap-3 flex-wrap">
-          {/* Brand & Ribbon Navigation Container */}
-          <div className="flex items-center gap-2.5 flex-wrap">
-            {/* VIRTUAL SHOW Logo Badge */}
-            <div className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-emerald-500/20 via-teal-500/20 to-slate-900 border border-emerald-500/40 rounded-xl shadow-inner shrink-0">
-              <Trophy className="w-4 h-4 text-emerald-400" />
-              <span className="font-black text-xs uppercase tracking-widest text-emerald-300">
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col lg:flex-row font-sans selection:bg-emerald-500 selection:text-slate-950">
+      {/* LEFT NAVIGATION SIDEBAR / RUBAN DE NAVIGATION GAUCHE */}
+      <aside className="w-full lg:w-64 bg-slate-900/95 border-b lg:border-b-0 lg:border-r border-slate-800/90 p-4 shrink-0 flex flex-col justify-between lg:h-screen lg:sticky lg:top-0 z-40 backdrop-blur-md shadow-2xl overflow-y-auto scrollbar-none">
+        <div className="space-y-6">
+          {/* Brand Logo & Title */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-emerald-500/20 via-teal-500/20 to-slate-900 border border-emerald-500/40 rounded-xl shadow-inner">
+              <Trophy className="w-5 h-5 text-emerald-400" />
+              <span className="font-black text-sm uppercase tracking-widest text-emerald-300">
                 VIRTUAL SHOW
               </span>
             </div>
+            {apiState.status === "error" && (
+              <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping" title="Erreur API" />
+            )}
+          </div>
 
-            {/* Ruban de Navigation Des Pages */}
-            <nav className="flex items-center gap-1.5 bg-slate-950/90 p-1.5 rounded-2xl border border-slate-800/90 shadow-inner overflow-x-auto scrollbar-none max-w-full">
+          {/* Navigation Ruban Gauche */}
+          <div className="space-y-1.5">
+            <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 px-3 block">
+              Navigation Pages
+            </span>
+            <nav className="flex flex-col gap-1.5">
               <button
                 onClick={() => setActiveMainView("current")}
-                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-black transition-all cursor-pointer whitespace-nowrap ${
+                className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
                   activeMainView === "current"
                     ? "bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/25 ring-1 ring-emerald-400/50"
-                    : "text-slate-400 hover:text-white hover:bg-slate-900"
+                    : "text-slate-400 hover:text-white hover:bg-slate-800/60"
                 }`}
               >
-                <Activity className="w-3.5 h-3.5" />
+                <Activity className="w-4 h-4" />
                 <span>Matchs Actuels</span>
               </button>
 
               <button
                 onClick={() => setActiveMainView("ranking")}
-                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-black transition-all cursor-pointer whitespace-nowrap ${
+                className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
                   activeMainView === "ranking"
                     ? "bg-amber-500 text-slate-950 shadow-lg shadow-amber-500/25 ring-1 ring-amber-400/50"
-                    : "text-slate-400 hover:text-white hover:bg-slate-900"
+                    : "text-slate-400 hover:text-white hover:bg-slate-800/60"
                 }`}
               >
-                <Trophy className="w-3.5 h-3.5" />
+                <Trophy className="w-4 h-4" />
                 <span>Classement</span>
               </button>
 
               <button
                 onClick={() => setActiveMainView("results")}
-                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-black transition-all cursor-pointer whitespace-nowrap ${
+                className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
                   activeMainView === "results"
                     ? "bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/25 ring-1 ring-emerald-400/50"
-                    : "text-slate-400 hover:text-white hover:bg-slate-900"
+                    : "text-slate-400 hover:text-white hover:bg-slate-800/60"
                 }`}
               >
-                <Layers className="w-3.5 h-3.5" />
+                <Layers className="w-4 h-4" />
                 <span>Match | Résultat</span>
               </button>
 
-              <div className="w-[1px] h-5 bg-slate-800 mx-0.5" />
+              <div className="h-[1px] bg-slate-800 my-1" />
 
               <button
                 onClick={() => setActiveMainView("rules")}
-                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-black transition-all cursor-pointer whitespace-nowrap ${
+                className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
                   activeMainView === "rules"
                     ? "bg-gradient-to-r from-amber-500 to-emerald-500 text-slate-950 shadow-lg shadow-amber-500/25 ring-1 ring-amber-400/50"
-                    : "text-slate-400 hover:text-amber-300 hover:bg-slate-900"
+                    : "text-slate-400 hover:text-amber-300 hover:bg-slate-800/60"
                 }`}
               >
-                <Sliders className="w-3.5 h-3.5" />
-                <span>RULES</span>
+                <div className="flex items-center gap-3">
+                  <Sliders className="w-4 h-4" />
+                  <span>RULES</span>
+                </div>
+                <span className="text-[10px] px-2 py-0.5 rounded-md bg-slate-950/40 font-mono">
+                  {rules.length}
+                </span>
               </button>
 
               <button
                 onClick={() => setActiveMainView("extraction")}
-                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-black transition-all cursor-pointer whitespace-nowrap ${
+                className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
                   activeMainView === "extraction"
                     ? "bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-lg shadow-cyan-500/25 ring-1 ring-cyan-400/50"
-                    : "text-slate-400 hover:text-cyan-300 hover:bg-slate-900"
+                    : "text-slate-400 hover:text-cyan-300 hover:bg-slate-800/60"
                 }`}
               >
-                <Zap className="w-3.5 h-3.5 text-cyan-400" />
+                <Zap className="w-4 h-4 text-cyan-400" />
                 <span>EXTRACTION</span>
               </button>
 
               <button
                 onClick={() => setActiveMainView("database")}
-                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-black transition-all cursor-pointer whitespace-nowrap ${
+                className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
                   activeMainView === "database"
                     ? "bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 shadow-lg shadow-emerald-500/25 ring-1 ring-emerald-400/50"
-                    : "text-slate-400 hover:text-emerald-300 hover:bg-slate-900"
+                    : "text-slate-400 hover:text-emerald-300 hover:bg-slate-800/60"
                 }`}
               >
-                <Database className="w-3.5 h-3.5 text-emerald-400" />
-                <span>DATABASE ({extractedDatabase.length})</span>
+                <div className="flex items-center gap-3">
+                  <Database className="w-4 h-4 text-emerald-400" />
+                  <span>DATABASE</span>
+                </div>
+                <span className="text-[10px] px-2 py-0.5 rounded-md bg-slate-950/40 font-mono">
+                  {extractedDatabase.length}
+                </span>
               </button>
 
               <button
                 onClick={() => setActiveMainView("global_analysis")}
-                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-black transition-all cursor-pointer whitespace-nowrap ${
+                className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
                   activeMainView === "global_analysis"
                     ? "bg-gradient-to-r from-emerald-400 via-teal-400 to-amber-400 text-slate-950 shadow-lg shadow-emerald-500/25 ring-1 ring-emerald-300/50"
-                    : "text-slate-400 hover:text-amber-300 hover:bg-slate-900"
+                    : "text-slate-400 hover:text-amber-300 hover:bg-slate-800/60"
                 }`}
               >
-                <BarChart3 className="w-3.5 h-3.5" />
+                <BarChart3 className="w-4 h-4" />
                 <span>ANALYSER GLOBALE</span>
               </button>
             </nav>
           </div>
+        </div>
 
-          {/* Quick Controls & Status */}
-          <div className="flex items-center gap-2.5 flex-wrap">
-            {/* 20s Live Auto-Refresh */}
+        {/* Quick Controls & Status in Left Sidebar */}
+        <div className="space-y-3 pt-4 border-t border-slate-800/90 mt-4">
+          <div className="flex items-center justify-between gap-2">
+            {/* Live Auto-Refresh */}
             <button
               onClick={() => setAutoRefresh(!autoRefresh)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all active:scale-95 ${
+              className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-extrabold border transition-all active:scale-95 cursor-pointer ${
                 autoRefresh
                   ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-300"
                   : "bg-slate-800 border-slate-700 text-slate-400 hover:text-slate-200"
@@ -689,7 +708,7 @@ export default function App() {
                 loadData(token);
               }}
               disabled={apiState.status === "loading"}
-              className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700/80 border border-slate-700 text-slate-300 hover:text-white text-xs font-medium transition-all active:scale-95 disabled:opacity-50"
+              className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700/80 border border-slate-700 text-slate-300 hover:text-white text-xs font-medium transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
               title="Actualiser les données immédiatement"
             >
               <RefreshCw
@@ -698,176 +717,171 @@ export default function App() {
                 }`}
               />
             </button>
+          </div>
 
-            {/* Jeton Bearer Button */}
+          <div className="grid grid-cols-2 gap-2">
             <button
               onClick={() => setIsTokenModalOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700/80 border border-slate-700 text-slate-200 hover:text-white text-xs font-semibold transition-all shadow-sm active:scale-95"
-              title="Modifier le Jeton d'Autorisation Bearer"
+              className="flex items-center justify-center gap-1.5 p-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-bold transition-all cursor-pointer"
+              title="Modifier le Jeton Bearer"
             >
               <Key className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Jeton Bearer</span>
-              {apiState.status === "error" && (
-                <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping" />
-              )}
+              <span>Token</span>
             </button>
 
-            {/* Collector Raw Inspector */}
             <button
               onClick={() => setIsInspectorOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/40 text-indigo-300 hover:text-indigo-200 text-xs font-semibold transition-all active:scale-95"
-              title="Inspecter les données brutes JSON"
+              className="flex items-center justify-center gap-1.5 p-2 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/40 text-indigo-300 text-xs font-bold transition-all cursor-pointer"
+              title="Inspecter Raw JSON"
             >
               <Database className="w-3.5 h-3.5 text-indigo-400" />
-              <span className="hidden sm:inline">Raw JSON</span>
-            </button>
-
-            {/* Export */}
-            <button
-              onClick={handleExportData}
-              disabled={activeRoundMatches.length === 0}
-              className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700/80 border border-slate-700 text-slate-300 hover:text-white text-xs font-medium transition-all active:scale-95 disabled:opacity-50"
-              title="Exporter les données"
-            >
-              <Download className="w-3.5 h-3.5" />
+              <span>JSON</span>
             </button>
           </div>
+
+          <button
+            onClick={handleExportData}
+            disabled={activeRoundMatches.length === 0}
+            className="w-full py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>Exporter JSON</span>
+          </button>
         </div>
-      </header>
+      </aside>
 
-      {activeMainView === "current" ? (
-        <>
-          {/* Top Competition Scrollable Ribbon */}
+      {/* MAIN CONTENT WRAPPER */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Sticky Top Frozen Competition Ribbon */}
+        {validEntryPoints.length > 0 && (
           <CompetitionRibbon
             entryPoints={validEntryPoints}
             selectedCategoryId={activeCategoryId}
             onSelectCategory={handleSelectCategory}
           />
+        )}
 
-          {/* Match Time Status Tabs & Round Page Navigation & Search */}
-          <MatchTabs
-            currentRoundNumber={selectedRoundNumber}
-            roundStartTime={roundStartTime}
-            roundIndex={currentRoundIndex >= 0 ? currentRoundIndex : 0}
-            totalRounds={availableRoundsList.length}
-            availableRoundsList={availableRoundsList}
-            onSelectRoundIndex={(idx) => {
-              const r = availableRoundsList[idx];
-              if (r) setSelectedRoundNumber(Number(r.roundNumber));
-            }}
-            onPrevRound={handlePrevRound}
-            onNextRound={handleNextRound}
-            currentTab={currentTab}
-            onTabChange={(tab) => setCurrentTab(tab)}
-            counts={{
-              all: activeRoundMatches.length,
-              live: liveCount,
-              upcoming: upcomingCount,
-              finished: finishedCount,
-            }}
-            searchQuery={searchQuery}
-            onSearchChange={(q) => setSearchQuery(q)}
-          />
+        {activeMainView === "current" ? (
+          <div>
+            {/* Match Time Status Tabs & Round Page Navigation & Search */}
+            <MatchTabs
+              currentRoundNumber={selectedRoundNumber}
+              roundStartTime={roundStartTime}
+              roundIndex={currentRoundIndex >= 0 ? currentRoundIndex : 0}
+              totalRounds={availableRoundsList.length}
+              availableRoundsList={availableRoundsList}
+              onSelectRoundIndex={(idx) => {
+                const r = availableRoundsList[idx];
+                if (r) setSelectedRoundNumber(Number(r.roundNumber));
+              }}
+              onPrevRound={handlePrevRound}
+              onNextRound={handleNextRound}
+              currentTab={currentTab}
+              onTabChange={(tab) => setCurrentTab(tab)}
+              counts={{
+                all: activeRoundMatches.length,
+                live: liveCount,
+                upcoming: upcomingCount,
+                finished: finishedCount,
+              }}
+              searchQuery={searchQuery}
+              onSearchChange={(q) => setSearchQuery(q)}
+            />
 
-          {/* Main Content Area */}
-          <main className="flex-1 max-w-7xl w-full mx-auto px-4 lg:px-8 py-6">
-            {/* Token Error Banner */}
-            {apiState.status === "error" && (
-              <div className="mb-6 p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex flex-col sm:flex-row items-center justify-between gap-4 animate-fadeIn">
-                <div className="flex items-center gap-3">
-                  <div className="p-2.5 rounded-xl bg-rose-500/20 text-rose-400 shrink-0">
-                    <AlertTriangle className="w-5 h-5" />
+            {/* Main Content Area */}
+            <main className="flex-1 max-w-7xl w-full mx-auto px-4 lg:px-8 py-6">
+              {/* Token Error Banner */}
+              {apiState.status === "error" && (
+                <div className="mb-6 p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex flex-col sm:flex-row items-center justify-between gap-4 animate-fadeIn">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 rounded-xl bg-rose-500/20 text-rose-400 shrink-0">
+                      <AlertTriangle className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-sm text-rose-200">
+                        Jeton Bearer Expiré ou Non Autorisé
+                      </h3>
+                      <p className="text-xs text-rose-300/80">
+                        L&apos;API Sporty-Tech a retourné un code d&apos;erreur. Cliquez ci-contre pour mettre à jour votre jeton Bearer.
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="font-bold text-sm text-rose-200">
-                      Jeton Bearer Expiré ou Non Autorisé
-                    </h3>
-                    <p className="text-xs text-rose-300/80">
-                      L&apos;API Sporty-Tech a retourné un code d&apos;erreur. Cliquez ci-contre pour mettre à jour votre jeton Bearer.
-                    </p>
-                  </div>
+                  <button
+                    onClick={() => setIsTokenModalOpen(true)}
+                    className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-extrabold text-xs shadow-lg shadow-rose-600/30 transition-all shrink-0 flex items-center gap-2"
+                  >
+                    <Key className="w-4 h-4" />
+                    <span>Modifier le Jeton Bearer</span>
+                  </button>
                 </div>
-                <button
-                  onClick={() => setIsTokenModalOpen(true)}
-                  className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-extrabold text-xs shadow-lg shadow-rose-600/30 transition-all shrink-0 flex items-center gap-2"
-                >
-                  <Key className="w-4 h-4" />
-                  <span>Modifier le Jeton Bearer</span>
-                </button>
-              </div>
-            )}
+              )}
 
-            {/* Loading State */}
-            {(apiState.status === "loading" || isRoundLoading) && activeRoundMatches.length === 0 && (
-              <div className="py-20 text-center space-y-4">
-                <div className="inline-block p-4 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl">
-                  <RefreshCw className="w-8 h-8 text-emerald-400 animate-spin mx-auto" />
-                </div>
-                <h3 className="text-base font-bold text-slate-200">
-                  Collecte des données du Round depuis Sporty-Tech...
-                </h3>
-                <p className="text-xs text-slate-500 max-w-md mx-auto">
-                  Récupération des matchs, cotes et classements du Round sélectionné.
-                </p>
-              </div>
-            )}
-
-            {/* Match Cards Grid */}
-            {filteredMatches.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {filteredMatches.map((ev, idx) => (
-                  <MatchCard
-                    key={ev.id || idx}
-                    event={ev}
-                    matchIndex={idx + 1}
-                    database={extractedDatabase}
-                    onSelectEvent={(e) => setSelectedEvent(e)}
-                  />
-                ))}
-              </div>
-            ) : (
-              !isRoundLoading && apiState.status !== "loading" && (
-                <div className="py-16 text-center bg-slate-900/50 border border-slate-800 rounded-2xl p-8 space-y-3">
-                  <div className="w-12 h-12 rounded-2xl bg-slate-800 border border-slate-700 flex items-center justify-center mx-auto text-slate-500">
-                    <Trophy className="w-6 h-6" />
+              {/* Loading State */}
+              {(apiState.status === "loading" || isRoundLoading) && activeRoundMatches.length === 0 && (
+                <div className="py-20 text-center space-y-4">
+                  <div className="inline-block p-4 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl">
+                    <RefreshCw className="w-8 h-8 text-emerald-400 animate-spin mx-auto" />
                   </div>
-                  <h3 className="text-sm font-bold text-slate-300">Aucun match trouvé</h3>
-                  <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                    Aucun match ne correspond aux filtres sélectionnés (compétition, plage horaire ou recherche).
+                  <h3 className="text-base font-bold text-slate-200">
+                    Collecte des données du Round depuis Sporty-Tech...
+                  </h3>
+                  <p className="text-xs text-slate-500 max-w-md mx-auto">
+                    Récupération des matchs, cotes et classements du Round sélectionné.
                   </p>
-                  {searchQuery && (
-                    <button
-                      onClick={() => {
-                        setSearchQuery("");
-                        setCurrentTab("all");
-                      }}
-                      className="mt-2 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-emerald-400 transition-colors"
-                    >
-                      Réinitialiser les filtres
-                    </button>
-                  )}
                 </div>
-              )
-            )}
+              )}
+
+              {/* Match Cards Grid */}
+              {filteredMatches.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {filteredMatches.map((ev, idx) => (
+                    <MatchCard
+                      key={ev.id || idx}
+                      event={ev}
+                      matchIndex={idx + 1}
+                      database={extractedDatabase}
+                      onSelectEvent={(e) => setSelectedEvent(e)}
+                    />
+                  ))}
+                </div>
+              ) : (
+                !isRoundLoading && apiState.status !== "loading" && (
+                  <div className="py-16 text-center bg-slate-900/50 border border-slate-800 rounded-2xl p-8 space-y-3">
+                    <div className="w-12 h-12 rounded-2xl bg-slate-800 border border-slate-700 flex items-center justify-center mx-auto text-slate-500">
+                      <Trophy className="w-6 h-6" />
+                    </div>
+                    <h3 className="text-sm font-bold text-slate-300">Aucun match trouvé</h3>
+                    <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                      Aucun match ne correspond aux filtres sélectionnés (compétition, plage horaire ou recherche).
+                    </p>
+                    {searchQuery && (
+                      <button
+                        onClick={() => {
+                          setSearchQuery("");
+                          setCurrentTab("all");
+                        }}
+                        className="mt-2 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-emerald-400 transition-colors"
+                      >
+                        Réinitialiser les filtres
+                      </button>
+                    )}
+                  </div>
+                )
+              )}
+            </main>
+          </div>
+        ) : activeMainView === "ranking" ? (
+          <main className="flex-1 max-w-7xl w-full mx-auto px-4 lg:px-8 py-6 space-y-6">
+            <RankingView
+              teams={rankingTeams}
+              categoryName={currentEntryPoint?.name || "Ligue Virtuelle"}
+              isLoading={apiState.status === "loading"}
+              onRefresh={() => loadData(token)}
+              lastUpdated={apiState.lastUpdated}
+              resultsRounds={competitionResults[activeCategoryId] || []}
+              rawRoundsData={activeRawData?.rounds || []}
+            />
           </main>
-        </>
-      ) : activeMainView === "ranking" ? (
-        <main className="flex-1 max-w-7xl w-full mx-auto px-4 lg:px-8 py-6 space-y-6">
-          <CompetitionRibbon
-            entryPoints={validEntryPoints}
-            selectedCategoryId={activeCategoryId}
-            onSelectCategory={handleSelectCategory}
-          />
-          <RankingView
-            teams={rankingTeams}
-            categoryName={currentEntryPoint?.name || "Ligue Virtuelle"}
-            isLoading={apiState.status === "loading"}
-            onRefresh={() => loadData(token)}
-            lastUpdated={apiState.lastUpdated}
-            resultsRounds={competitionResults[activeCategoryId] || []}
-            rawRoundsData={activeRawData?.rounds || []}
-          />
-        </main>
       ) : activeMainView === "results" ? (
         <main className="flex-1 max-w-7xl w-full mx-auto px-4 lg:px-8 py-6">
           <MatchResultsView
@@ -931,6 +945,7 @@ export default function App() {
           </span>
         </div>
       </footer>
+      </div>
 
       {/* Modals & Drawers */}
       <TokenSettingsModal
