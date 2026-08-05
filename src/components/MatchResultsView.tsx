@@ -33,6 +33,7 @@ import {
 import { SportyEntryPoint, ExtractedMatchRecord } from "../types";
 import { convertRoundResultsToExtractedRecords } from "../utils/globalAnalysisEngine";
 import { TeamFormTrajectory } from "./TeamFormTrajectory";
+import { MatchRuleAnalysisBlock } from "./MatchRuleAnalysisBlock";
 
 interface MatchResultsViewProps {
   entryPoints: SportyEntryPoint[];
@@ -765,11 +766,22 @@ export const MatchResultsView: React.FC<MatchResultsViewProps> = ({
                       </div>
 
                       {/* Team Form Trajectory Section (Parcours des deux équipes) */}
-                      <div className="mt-2.5">
+                      <div className="mt-2.5 space-y-2">
                         <TeamFormTrajectory
                           homeTeamName={homeName}
                           awayTeamName={awayName}
                           database={database}
+                        />
+                        <MatchRuleAnalysisBlock
+                          event={{
+                            id: m.id || 0,
+                            homeTeamName: homeName,
+                            awayTeamName: awayName,
+                            homeStats: m.homeTeam ? { position: m.homeTeam.position, points: m.homeTeam.points } : undefined,
+                            awayStats: m.awayTeam ? { position: m.awayTeam.position, points: m.awayTeam.points } : undefined,
+                          } as any}
+                          database={database}
+                          compact={true}
                         />
                       </div>
 

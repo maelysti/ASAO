@@ -3,6 +3,8 @@ import { X, Shield, Clock, Trophy, Code, Copy, Check, Activity, Sparkles, Layers
 import { SportyEvent, ExtractedMatchRecord } from "../types";
 import { classifyMatchStatus, CombinedMatchData, getTeamLogoUrl } from "../services/sportyApi";
 import { getH2HAnalysisForMatch } from "../utils/globalAnalysisEngine";
+import { MatchRuleAnalysisBlock } from "./MatchRuleAnalysisBlock";
+import { TeamFormTrajectory } from "./TeamFormTrajectory";
 
 interface MatchDetailModalProps {
   event: SportyEvent | CombinedMatchData | null;
@@ -198,6 +200,18 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({ event, datab
                   </div>
                 </div>
               </div>
+
+              {/* Team Form Trajectory (Parcours des deux équipes) */}
+              <TeamFormTrajectory
+                homeTeamName={event.homeTeamName}
+                awayTeamName={event.awayTeamName}
+                database={database}
+                homeStats={homeStats}
+                awayStats={awayStats}
+              />
+
+              {/* Master Rule Analysis & Probabilities Block */}
+              <MatchRuleAnalysisBlock event={event} database={database} />
 
               {/* Analyse H2H & Algo Database Injected */}
               <div className="bg-slate-950/90 border border-emerald-500/30 rounded-2xl p-4 shadow-xl space-y-3">

@@ -4,6 +4,7 @@ import { SportyEvent, ExtractedMatchRecord } from "../types";
 import { classifyMatchStatus, CombinedMatchData, getTeamLogoUrl } from "../services/sportyApi";
 import { getH2HAnalysisForMatch } from "../utils/globalAnalysisEngine";
 import { TeamFormTrajectory } from "./TeamFormTrajectory";
+import { MatchRuleAnalysisBlock } from "./MatchRuleAnalysisBlock";
 
 interface MatchCardProps {
   event: SportyEvent | CombinedMatchData;
@@ -340,30 +341,8 @@ export const MatchCard: React.FC<MatchCardProps> = ({ event, matchIndex, databas
         </div>
       </div>
 
-      {/* Confrontation Alert Box */}
-      <div className="bg-[#0f1826] border border-blue-900/60 rounded-xl p-3 space-y-2">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="px-1.5 py-0.5 bg-rose-950/80 text-rose-300 border border-rose-800/60 rounded text-[10px] font-black">
-              1X
-            </span>
-            <span className="text-[11px] font-bold text-slate-300 uppercase tracking-wider">
-              CONFRONTATION
-            </span>
-          </div>
-          <div className="flex items-center gap-1 text-[10px] font-bold text-amber-400 bg-amber-950/70 border border-amber-800/50 px-2.5 py-0.5 rounded-full">
-            <AlertCircle className="w-3 h-3 text-amber-400" />
-            <span>EN ATTENTE</span>
-          </div>
-        </div>
-
-        <div className="text-xs text-slate-300 flex items-center gap-2 bg-[#080d14] p-2 rounded-lg border border-slate-800/80">
-          <Lightbulb className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-          <span className="truncate text-[11px] text-slate-300">
-            Confrontation entre plusieurs règles : [R5: 1], [R2: 2]
-          </span>
-        </div>
-      </div>
+      {/* Rule & High Precision Analysis Block */}
+      <MatchRuleAnalysisBlock event={event} database={database} />
 
       {/* Action Buttons: STATS H2H & MARCHÉS */}
       <div className="grid grid-cols-2 gap-2.5 pt-1">
