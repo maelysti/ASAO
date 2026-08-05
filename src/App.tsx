@@ -559,27 +559,27 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-emerald-500 selection:text-slate-950">
-      {/* Primary VIRTUAL SHOW Top Header Ribbon */}
-      <header className="sticky top-0 z-40 bg-slate-900/95 backdrop-blur-md border-b border-slate-800 px-4 lg:px-8 py-3 shadow-xl">
-        <div className="max-w-7xl mx-auto flex items-center justify-between gap-4 flex-wrap">
-          {/* VIRTUAL SHOW Brand Badge & Main View Navigation */}
-          <div className="flex items-center gap-3">
-            {/* VIRTUAL SHOW Badge */}
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-emerald-500/20 to-teal-500/20 border border-emerald-500/40 rounded-xl shadow-inner">
+      {/* Primary Top Header Navigation Ribbon */}
+      <header className="sticky top-0 z-40 bg-slate-900/95 backdrop-blur-md border-b border-slate-800/90 px-3 lg:px-6 py-2.5 shadow-2xl">
+        <div className="max-w-7xl mx-auto flex items-center justify-between gap-3 flex-wrap">
+          {/* Brand & Ribbon Navigation Container */}
+          <div className="flex items-center gap-2.5 flex-wrap">
+            {/* VIRTUAL SHOW Logo Badge */}
+            <div className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-emerald-500/20 via-teal-500/20 to-slate-900 border border-emerald-500/40 rounded-xl shadow-inner shrink-0">
               <Trophy className="w-4 h-4 text-emerald-400" />
               <span className="font-black text-xs uppercase tracking-widest text-emerald-300">
                 VIRTUAL SHOW
               </span>
             </div>
 
-            {/* Virtual Pages Navigation */}
-            <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800">
+            {/* Ruban de Navigation Des Pages */}
+            <nav className="flex items-center gap-1.5 bg-slate-950/90 p-1.5 rounded-2xl border border-slate-800/90 shadow-inner overflow-x-auto scrollbar-none max-w-full">
               <button
                 onClick={() => setActiveMainView("current")}
-                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-black transition-all cursor-pointer whitespace-nowrap ${
                   activeMainView === "current"
-                    ? "bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20"
-                    : "text-slate-400 hover:text-white hover:bg-slate-800/60"
+                    ? "bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/25 ring-1 ring-emerald-400/50"
+                    : "text-slate-400 hover:text-white hover:bg-slate-900"
                 }`}
               >
                 <Activity className="w-3.5 h-3.5" />
@@ -588,58 +588,60 @@ export default function App() {
 
               <button
                 onClick={() => setActiveMainView("ranking")}
-                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-black transition-all cursor-pointer whitespace-nowrap ${
                   activeMainView === "ranking"
-                    ? "bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20"
-                    : "text-slate-400 hover:text-white hover:bg-slate-800/60"
+                    ? "bg-amber-500 text-slate-950 shadow-lg shadow-amber-500/25 ring-1 ring-amber-400/50"
+                    : "text-slate-400 hover:text-white hover:bg-slate-900"
                 }`}
               >
-                <Trophy className="w-3.5 h-3.5 text-amber-400" />
+                <Trophy className="w-3.5 h-3.5" />
                 <span>Classement</span>
               </button>
 
               <button
                 onClick={() => setActiveMainView("results")}
-                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-black transition-all cursor-pointer whitespace-nowrap ${
                   activeMainView === "results"
-                    ? "bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20"
-                    : "text-slate-400 hover:text-white hover:bg-slate-800/60"
+                    ? "bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/25 ring-1 ring-emerald-400/50"
+                    : "text-slate-400 hover:text-white hover:bg-slate-900"
                 }`}
               >
                 <Layers className="w-3.5 h-3.5" />
                 <span>Match | Résultat</span>
               </button>
 
+              <div className="w-[1px] h-5 bg-slate-800 mx-0.5" />
+
               <button
                 onClick={() => setActiveMainView("rules")}
-                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-black transition-all cursor-pointer whitespace-nowrap ${
                   activeMainView === "rules"
-                    ? "bg-gradient-to-r from-amber-500 to-emerald-500 text-slate-950 shadow-md shadow-amber-500/20 font-black"
-                    : "text-slate-400 hover:text-white hover:bg-slate-800/60"
+                    ? "bg-gradient-to-r from-amber-500 to-emerald-500 text-slate-950 shadow-lg shadow-amber-500/25 ring-1 ring-amber-400/50"
+                    : "text-slate-400 hover:text-amber-300 hover:bg-slate-900"
                 }`}
               >
-                <Sliders className="w-3.5 h-3.5 text-amber-300" />
+                <Sliders className="w-3.5 h-3.5" />
                 <span>RULES</span>
               </button>
 
               <button
                 onClick={() => setActiveMainView("extraction")}
-                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-black transition-all cursor-pointer whitespace-nowrap ${
                   activeMainView === "extraction"
-                    ? "bg-gradient-to-r from-cyan-500 to-blue-500 text-white shadow-md shadow-cyan-500/20 font-black"
-                    : "text-slate-400 hover:text-white hover:bg-slate-800/60"
+                    ? "bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-lg shadow-cyan-500/25 ring-1 ring-cyan-400/50"
+                    : "text-slate-400 hover:text-cyan-300 hover:bg-slate-900"
                 }`}
               >
-                <Zap className="w-3.5 h-3.5 text-cyan-300" />
+                <Zap className="w-3.5 h-3.5 text-cyan-400" />
                 <span>EXTRACTION</span>
               </button>
 
               <button
                 onClick={() => setActiveMainView("database")}
-                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-black transition-all cursor-pointer whitespace-nowrap ${
                   activeMainView === "database"
-                    ? "bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 shadow-md shadow-emerald-500/20 font-black"
-                    : "text-slate-400 hover:text-white hover:bg-slate-800/60"
+                    ? "bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 shadow-lg shadow-emerald-500/25 ring-1 ring-emerald-400/50"
+                    : "text-slate-400 hover:text-emerald-300 hover:bg-slate-900"
                 }`}
               >
                 <Database className="w-3.5 h-3.5 text-emerald-400" />
@@ -648,16 +650,16 @@ export default function App() {
 
               <button
                 onClick={() => setActiveMainView("global_analysis")}
-                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-black transition-all cursor-pointer whitespace-nowrap ${
                   activeMainView === "global_analysis"
-                    ? "bg-gradient-to-r from-emerald-400 to-amber-400 text-slate-950 shadow-md shadow-emerald-500/20 font-black"
-                    : "text-slate-400 hover:text-white hover:bg-slate-800/60"
+                    ? "bg-gradient-to-r from-emerald-400 via-teal-400 to-amber-400 text-slate-950 shadow-lg shadow-emerald-500/25 ring-1 ring-emerald-300/50"
+                    : "text-slate-400 hover:text-amber-300 hover:bg-slate-900"
                 }`}
               >
-                <BarChart3 className="w-3.5 h-3.5 text-amber-300" />
+                <BarChart3 className="w-3.5 h-3.5" />
                 <span>ANALYSER GLOBALE</span>
               </button>
-            </div>
+            </nav>
           </div>
 
           {/* Quick Controls & Status */}

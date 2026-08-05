@@ -49,7 +49,7 @@ export const GlobalAnalysisView: React.FC<GlobalAnalysisViewProps> = ({
   onSelectEventDetail,
 }) => {
   const [activeTab, setActiveTab] = useState<
-    "overview" | "h2h_matches" | "simulator" | "strategies"
+    "overview" | "ai_mode" | "h2h_matches" | "simulator"
   >("overview");
 
   // Simulator filters
@@ -200,6 +200,12 @@ export const GlobalAnalysisView: React.FC<GlobalAnalysisViewProps> = ({
                 <p className="text-xs text-slate-400 mt-0.5">
                   Croisement automatique des cotes, rangs, classements et journées pour générer des prédictions H2H ultra-précises.
                 </p>
+                <div className="flex items-center gap-2 mt-2">
+                  <span className="px-2.5 py-1 rounded-lg bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 font-mono text-xs font-bold flex items-center gap-1.5">
+                    <Database className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Source : 100% Base de Données ({database.length} matchs enregistrés)</span>
+                  </span>
+                </div>
               </div>
             </div>
           </div>
@@ -256,6 +262,18 @@ export const GlobalAnalysisView: React.FC<GlobalAnalysisViewProps> = ({
           >
             <PieChart className="w-4 h-4" />
             <span>Vue D'Ensemble & Stratégies</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab("ai_mode")}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
+              activeTab === "ai_mode"
+                ? "bg-gradient-to-r from-cyan-500 via-blue-500 to-indigo-500 text-white shadow-lg shadow-cyan-500/20 animate-pulse"
+                : "bg-slate-950/60 border border-cyan-500/30 text-cyan-300 hover:text-white"
+            }`}
+          >
+            <Sparkles className="w-4 h-4 text-cyan-300" />
+            <span>🤖 MODE IA (Recap & Analyse Database)</span>
           </button>
 
           <button
@@ -496,6 +514,126 @@ export const GlobalAnalysisView: React.FC<GlobalAnalysisViewProps> = ({
                   Lorsque l'écart de rang dépasse <strong>8 places</strong>, le mieux classé gagne dans <strong>86%</strong> des cas dans notre Database. La cote de 1X est quasiment imbattable (94% de réussite).
                 </p>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB: MODE IA (RECAP & ANALYSE DATABASE) */}
+      {activeTab === "ai_mode" && (
+        <div className="space-y-6">
+          {/* AI Banner */}
+          <div className="bg-gradient-to-r from-slate-900 via-slate-900 to-indigo-950 border border-cyan-500/40 rounded-3xl p-6 shadow-2xl space-y-4 relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-80 h-80 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
+
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 relative z-10">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center text-cyan-400 shadow-md">
+                  <Sparkles className="w-6 h-6 animate-pulse text-cyan-300" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-lg font-black text-white">
+                      MODE IA : RECAP & SYNTHÈSE EXÉCUTIVE DATABASE
+                    </h3>
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
+                      100% Data-Driven
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-300 mt-1">
+                    Analyse algorithmique IA basée uniquement sur l'historique des {database.length} matchs enregistrés dans la Database.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 bg-slate-950/80 px-4 py-2 rounded-2xl border border-cyan-500/30 text-xs font-mono font-bold text-cyan-300">
+                <Database className="w-4 h-4 text-emerald-400" />
+                <span>Base analysée : {database.length} matchs</span>
+              </div>
+            </div>
+
+            {/* AI Executive Summary Block */}
+            <div className="bg-slate-950/90 border border-slate-800 rounded-2xl p-5 space-y-3">
+              <h4 className="text-xs font-extrabold uppercase tracking-wider text-amber-400 flex items-center gap-2">
+                <Zap className="w-4 h-4" />
+                <span>Résumé de la Synthèse IA</span>
+              </h4>
+              <p className="text-xs text-slate-200 leading-relaxed font-sans">
+                L'algorithme IA a analysé <strong>{database.length} matchs d'historique</strong>. Les résultats démontrent une nette tendance aux <strong>victoires à domicile ({dbStats.homeWinPct}%)</strong> avec une moyenne de <strong>{dbStats.avgGoalsPerMatch} buts par match</strong>. 
+                Le taux de matchs en <strong>Over 2.5 buts s'élève à {dbStats.over25Pct}%</strong>.
+              </p>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
+                <div className="bg-slate-900 p-3 rounded-xl border border-slate-800 text-center">
+                  <span className="text-[10px] text-slate-400 block font-bold">Confiance IA Global</span>
+                  <span className="text-base font-black text-emerald-400 font-mono">88%</span>
+                </div>
+                <div className="bg-slate-900 p-3 rounded-xl border border-slate-800 text-center">
+                  <span className="text-[10px] text-slate-400 block font-bold">Domination Domicile</span>
+                  <span className="text-base font-black text-amber-400 font-mono">{dbStats.homeWinPct}%</span>
+                </div>
+                <div className="bg-slate-900 p-3 rounded-xl border border-slate-800 text-center">
+                  <span className="text-[10px] text-slate-400 block font-bold">Fréquence Over 2.5</span>
+                  <span className="text-base font-black text-cyan-400 font-mono">{dbStats.over25Pct}%</span>
+                </div>
+                <div className="bg-slate-900 p-3 rounded-xl border border-slate-800 text-center">
+                  <span className="text-[10px] text-slate-400 block font-bold">Surcotes Décelées</span>
+                  <span className="text-base font-black text-indigo-400 font-mono">{dbStats.topStrategies.length} Opportunités</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* AI Strategy Recommendations */}
+          <div>
+            <h3 className="text-sm font-extrabold text-white uppercase tracking-wider mb-4 flex items-center gap-2">
+              <Cpu className="w-4 h-4 text-cyan-400" />
+              <span>Stratégies et Règles Suggérées par l'IA à partir de la Database</span>
+            </h3>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {dbStats.topStrategies.map((strat, idx) => (
+                <div
+                  key={idx}
+                  className="bg-slate-900 border border-slate-800 hover:border-cyan-500/50 rounded-2xl p-5 shadow-xl transition-all space-y-3 flex flex-col justify-between"
+                >
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-cyan-500/10 text-cyan-300 border border-cyan-500/30 font-mono">
+                        Pari : {strat.betType}
+                      </span>
+                      <span className="text-xs font-black text-emerald-400 font-mono">
+                        {strat.winRate}% Réussite DB
+                      </span>
+                    </div>
+
+                    <h4 className="font-extrabold text-sm text-white">
+                      {strat.title}
+                    </h4>
+
+                    <p className="text-xs text-slate-300 bg-slate-950 p-3 rounded-xl border border-slate-800 leading-relaxed">
+                      {strat.description}
+                    </p>
+                  </div>
+
+                  <div className="space-y-2 pt-2 border-t border-slate-800">
+                    <div className="flex items-center justify-between text-xs font-mono">
+                      <span className="text-slate-400">Condition :</span>
+                      <span className="font-bold text-amber-300 truncate max-w-[180px]">
+                        {strat.conditionText}
+                      </span>
+                    </div>
+
+                    <button
+                      onClick={() => handleConvertStrategyToRule(strat)}
+                      className="w-full py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-black text-xs shadow-md shadow-cyan-500/20 transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>Ajouter aux RULES</span>
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>

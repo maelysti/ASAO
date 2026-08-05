@@ -28,7 +28,7 @@ export const CompetitionRibbon: React.FC<CompetitionRibbonProps> = ({
   };
 
   return (
-    <div className="relative bg-slate-900/90 border-b border-slate-800/80 py-2.5 px-2 sm:px-4 shadow-inner">
+    <div className="sticky top-[58px] z-30 bg-slate-900/95 backdrop-blur-md border-b border-slate-800/90 py-2.5 px-2 sm:px-4 shadow-xl">
       <div className="max-w-7xl mx-auto flex items-center gap-2">
         {/* Label & Icon */}
         <div className="hidden md:flex items-center gap-2 pr-3 border-r border-slate-800 text-slate-400 shrink-0 text-xs font-semibold uppercase tracking-wider">
