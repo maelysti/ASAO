@@ -889,6 +889,7 @@ export default function App() {
             selectedCategoryId={selectedCategoryId}
             onSelectCategory={handleSelectCategory}
             token={token}
+            database={extractedDatabase}
           />
         </main>
       ) : activeMainView === "rules" ? (
