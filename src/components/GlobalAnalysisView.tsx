@@ -31,6 +31,7 @@ import {
   Award,
   Hash,
   Info,
+  Cpu,
 } from "lucide-react";
 
 interface GlobalAnalysisViewProps {
@@ -74,7 +75,8 @@ export const GlobalAnalysisView: React.FC<GlobalAnalysisViewProps> = ({
   // Gather all current active/upcoming matches across all competitions
   const currentMatchesList = useMemo(() => {
     const list: { match: CombinedMatchData; categoryName: string }[] = [];
-    Object.entries(allMatchesByComp).forEach(([compId, data]) => {
+    Object.entries(allMatchesByComp).forEach(([compId, rawData]) => {
+      const data = rawData as { matches: CombinedMatchData[]; categoryName: string };
       const cId = parseInt(compId, 10);
       if (selectedCompFilter !== "ALL" && selectedCompFilter !== cId) return;
 

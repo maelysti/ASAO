@@ -35,7 +35,7 @@ import { GlobalAnalysisView } from "./components/GlobalAnalysisView";
 import { RuleItem, AIRecapPrediction, ExtractedMatchRecord } from "./types";
 import { DEFAULT_RULES, processAllRules, runAIModeAnalysis } from "./utils/ruleEngine";
 
-import { AlertTriangle, Key, RefreshCw, Trophy, Layers, Activity, Database, Download, ListOrdered, Sliders, Zap, BarChart3 } from "lucide-react";
+import { AlertTriangle, Key, RefreshCw, Trophy, Layers, Activity, Database, Download, ListOrdered, Sliders, Zap, BarChart3, PanelLeftClose, PanelLeftOpen, ChevronLeft, ChevronRight } from "lucide-react";
 
 export default function App() {
   const [token, setToken] = useState<string>(getStoredToken());
@@ -44,6 +44,7 @@ export default function App() {
   const [instantMatches, setInstantMatches] = useState<CombinedMatchData[]>([]);
   const [rawInstantResponses, setRawInstantResponses] = useState<Record<number, any>>({});
   const [rankingTeams, setRankingTeams] = useState<RankingTeam[]>([]);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
 
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(8035);
   const [selectedRoundIndex, setSelectedRoundIndex] = useState<number>(0);
@@ -560,121 +561,172 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col lg:flex-row font-sans selection:bg-emerald-500 selection:text-slate-950">
       {/* LEFT NAVIGATION SIDEBAR / RUBAN DE NAVIGATION GAUCHE */}
-      <aside className="w-full lg:w-64 bg-slate-900/95 border-b lg:border-b-0 lg:border-r border-slate-800/90 p-4 shrink-0 flex flex-col justify-between lg:h-screen lg:sticky lg:top-0 z-40 backdrop-blur-md shadow-2xl overflow-y-auto scrollbar-none">
+      <aside
+        className={`w-full ${
+          isSidebarCollapsed ? "lg:w-20 p-2.5" : "lg:w-64 p-4"
+        } bg-slate-900/95 border-b lg:border-b-0 lg:border-r border-slate-800/90 shrink-0 flex flex-col justify-between lg:h-screen lg:sticky lg:top-0 z-40 backdrop-blur-md shadow-2xl overflow-y-auto scrollbar-none transition-all duration-300`}
+      >
         <div className="space-y-6">
-          {/* Brand Logo & Title */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-emerald-500/20 via-teal-500/20 to-slate-900 border border-emerald-500/40 rounded-xl shadow-inner">
-              <Trophy className="w-5 h-5 text-emerald-400" />
-              <span className="font-black text-sm uppercase tracking-widest text-emerald-300">
-                VIRTUAL SHOW
-              </span>
-            </div>
-            {apiState.status === "error" && (
-              <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping" title="Erreur API" />
+          {/* Brand Logo & Title with Toggle Button */}
+          <div className="flex items-center justify-between gap-2">
+            {!isSidebarCollapsed ? (
+              <div className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-emerald-500/20 via-teal-500/20 to-slate-900 border border-emerald-500/40 rounded-xl shadow-inner flex-1">
+                <Trophy className="w-5 h-5 text-emerald-400 shrink-0" />
+                <span className="font-black text-sm uppercase tracking-widest text-emerald-300 truncate">
+                  VIRTUAL SHOW
+                </span>
+              </div>
+            ) : (
+              <div
+                className="flex items-center justify-center w-10 h-10 bg-gradient-to-r from-emerald-500/20 via-teal-500/20 to-slate-900 border border-emerald-500/40 rounded-xl shadow-inner mx-auto cursor-pointer"
+                title="VIRTUAL SHOW"
+                onClick={() => setIsSidebarCollapsed(false)}
+              >
+                <Trophy className="w-5 h-5 text-emerald-400 shrink-0" />
+              </div>
             )}
+
+            {/* Collapse / Expand Toggle Button */}
+            <button
+              onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+              className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white border border-slate-700 transition-colors cursor-pointer hidden lg:flex items-center justify-center shrink-0"
+              title={isSidebarCollapsed ? "Agrandir le ruban de navigation" : "Réduire le ruban de navigation"}
+            >
+              {isSidebarCollapsed ? (
+                <PanelLeftOpen className="w-4 h-4 text-emerald-400" />
+              ) : (
+                <PanelLeftClose className="w-4 h-4" />
+              )}
+            </button>
           </div>
 
           {/* Navigation Ruban Gauche */}
           <div className="space-y-1.5">
-            <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 px-3 block">
-              Navigation Pages
-            </span>
+            {!isSidebarCollapsed && (
+              <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 px-3 block">
+                Navigation Pages
+              </span>
+            )}
             <nav className="flex flex-col gap-1.5">
               <button
                 onClick={() => setActiveMainView("current")}
-                className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                title="Matchs Actuels"
+                className={`flex items-center ${
+                  isSidebarCollapsed ? "justify-center px-0 py-3" : "gap-3 px-3.5 py-2.5"
+                } rounded-xl text-xs font-black transition-all cursor-pointer ${
                   activeMainView === "current"
                     ? "bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/25 ring-1 ring-emerald-400/50"
                     : "text-slate-400 hover:text-white hover:bg-slate-800/60"
                 }`}
               >
-                <Activity className="w-4 h-4" />
-                <span>Matchs Actuels</span>
+                <Activity className="w-4 h-4 shrink-0" />
+                {!isSidebarCollapsed && <span className="truncate">Matchs Actuels</span>}
               </button>
 
               <button
                 onClick={() => setActiveMainView("ranking")}
-                className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                title="Classement"
+                className={`flex items-center ${
+                  isSidebarCollapsed ? "justify-center px-0 py-3" : "gap-3 px-3.5 py-2.5"
+                } rounded-xl text-xs font-black transition-all cursor-pointer ${
                   activeMainView === "ranking"
                     ? "bg-amber-500 text-slate-950 shadow-lg shadow-amber-500/25 ring-1 ring-amber-400/50"
                     : "text-slate-400 hover:text-white hover:bg-slate-800/60"
                 }`}
               >
-                <Trophy className="w-4 h-4" />
-                <span>Classement</span>
+                <Trophy className="w-4 h-4 shrink-0" />
+                {!isSidebarCollapsed && <span className="truncate">Classement</span>}
               </button>
 
               <button
                 onClick={() => setActiveMainView("results")}
-                className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                title="Match | Résultat"
+                className={`flex items-center ${
+                  isSidebarCollapsed ? "justify-center px-0 py-3" : "gap-3 px-3.5 py-2.5"
+                } rounded-xl text-xs font-black transition-all cursor-pointer ${
                   activeMainView === "results"
                     ? "bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/25 ring-1 ring-emerald-400/50"
                     : "text-slate-400 hover:text-white hover:bg-slate-800/60"
                 }`}
               >
-                <Layers className="w-4 h-4" />
-                <span>Match | Résultat</span>
+                <Layers className="w-4 h-4 shrink-0" />
+                {!isSidebarCollapsed && <span className="truncate">Match | Résultat</span>}
               </button>
 
               <div className="h-[1px] bg-slate-800 my-1" />
 
               <button
                 onClick={() => setActiveMainView("rules")}
-                className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                title="RULES"
+                className={`flex items-center ${
+                  isSidebarCollapsed ? "justify-center px-0 py-3" : "justify-between px-3.5 py-2.5"
+                } rounded-xl text-xs font-black transition-all cursor-pointer ${
                   activeMainView === "rules"
                     ? "bg-gradient-to-r from-amber-500 to-emerald-500 text-slate-950 shadow-lg shadow-amber-500/25 ring-1 ring-amber-400/50"
                     : "text-slate-400 hover:text-amber-300 hover:bg-slate-800/60"
                 }`}
               >
                 <div className="flex items-center gap-3">
-                  <Sliders className="w-4 h-4" />
-                  <span>RULES</span>
+                  <Sliders className="w-4 h-4 shrink-0" />
+                  {!isSidebarCollapsed && <span>RULES</span>}
                 </div>
-                <span className="text-[10px] px-2 py-0.5 rounded-md bg-slate-950/40 font-mono">
-                  {rules.length}
-                </span>
+                {!isSidebarCollapsed && (
+                  <span className="text-[10px] px-2 py-0.5 rounded-md bg-slate-950/40 font-mono">
+                    {rules.length}
+                  </span>
+                )}
               </button>
 
               <button
                 onClick={() => setActiveMainView("extraction")}
-                className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                title="EXTRACTION"
+                className={`flex items-center ${
+                  isSidebarCollapsed ? "justify-center px-0 py-3" : "gap-3 px-3.5 py-2.5"
+                } rounded-xl text-xs font-black transition-all cursor-pointer ${
                   activeMainView === "extraction"
                     ? "bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-lg shadow-cyan-500/25 ring-1 ring-cyan-400/50"
                     : "text-slate-400 hover:text-cyan-300 hover:bg-slate-800/60"
                 }`}
               >
-                <Zap className="w-4 h-4 text-cyan-400" />
-                <span>EXTRACTION</span>
+                <Zap className="w-4 h-4 text-cyan-400 shrink-0" />
+                {!isSidebarCollapsed && <span className="truncate">EXTRACTION</span>}
               </button>
 
               <button
                 onClick={() => setActiveMainView("database")}
-                className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                title="DATABASE"
+                className={`flex items-center ${
+                  isSidebarCollapsed ? "justify-center px-0 py-3" : "justify-between px-3.5 py-2.5"
+                } rounded-xl text-xs font-black transition-all cursor-pointer ${
                   activeMainView === "database"
                     ? "bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 shadow-lg shadow-emerald-500/25 ring-1 ring-emerald-400/50"
                     : "text-slate-400 hover:text-emerald-300 hover:bg-slate-800/60"
                 }`}
               >
                 <div className="flex items-center gap-3">
-                  <Database className="w-4 h-4 text-emerald-400" />
-                  <span>DATABASE</span>
+                  <Database className="w-4 h-4 text-emerald-400 shrink-0" />
+                  {!isSidebarCollapsed && <span>DATABASE</span>}
                 </div>
-                <span className="text-[10px] px-2 py-0.5 rounded-md bg-slate-950/40 font-mono">
-                  {extractedDatabase.length}
-                </span>
+                {!isSidebarCollapsed && (
+                  <span className="text-[10px] px-2 py-0.5 rounded-md bg-slate-950/40 font-mono">
+                    {extractedDatabase.length}
+                  </span>
+                )}
               </button>
 
               <button
                 onClick={() => setActiveMainView("global_analysis")}
-                className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                title="ANALYSER GLOBALE"
+                className={`flex items-center ${
+                  isSidebarCollapsed ? "justify-center px-0 py-3" : "gap-3 px-3.5 py-2.5"
+                } rounded-xl text-xs font-black transition-all cursor-pointer ${
                   activeMainView === "global_analysis"
                     ? "bg-gradient-to-r from-emerald-400 via-teal-400 to-amber-400 text-slate-950 shadow-lg shadow-emerald-500/25 ring-1 ring-emerald-300/50"
                     : "text-slate-400 hover:text-amber-300 hover:bg-slate-800/60"
                 }`}
               >
-                <BarChart3 className="w-4 h-4" />
-                <span>ANALYSER GLOBALE</span>
+                <BarChart3 className="w-4 h-4 shrink-0" />
+                {!isSidebarCollapsed && <span className="truncate">ANALYSER GLOBALE</span>}
               </button>
             </nav>
           </div>
@@ -686,7 +738,9 @@ export default function App() {
             {/* Live Auto-Refresh */}
             <button
               onClick={() => setAutoRefresh(!autoRefresh)}
-              className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-extrabold border transition-all active:scale-95 cursor-pointer ${
+              className={`flex-1 flex items-center justify-center gap-1.5 ${
+                isSidebarCollapsed ? "p-2" : "px-3 py-2"
+              } rounded-xl text-xs font-extrabold border transition-all active:scale-95 cursor-pointer ${
                 autoRefresh
                   ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-300"
                   : "bg-slate-800 border-slate-700 text-slate-400 hover:text-slate-200"
@@ -694,11 +748,11 @@ export default function App() {
               title="Activer/Désactiver l'actualisation automatique de 20s"
             >
               <RefreshCw
-                className={`w-3.5 h-3.5 ${
+                className={`w-3.5 h-3.5 shrink-0 ${
                   autoRefresh && apiState.status === "loading" ? "animate-spin text-emerald-400" : ""
                 }`}
               />
-              <span>Live {autoRefresh ? `(${countdown}s)` : "Off"}</span>
+              {!isSidebarCollapsed && <span>Live {autoRefresh ? `(${countdown}s)` : "Off"}</span>}
             </button>
 
             {/* Refresh Manual */}
@@ -708,7 +762,7 @@ export default function App() {
                 loadData(token);
               }}
               disabled={apiState.status === "loading"}
-              className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700/80 border border-slate-700 text-slate-300 hover:text-white text-xs font-medium transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
+              className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700/80 border border-slate-700 text-slate-300 hover:text-white text-xs font-medium transition-all active:scale-95 disabled:opacity-50 cursor-pointer shrink-0"
               title="Actualiser les données immédiatement"
             >
               <RefreshCw
@@ -719,14 +773,14 @@ export default function App() {
             </button>
           </div>
 
-          <div className="grid grid-cols-2 gap-2">
+          <div className={`grid ${isSidebarCollapsed ? "grid-cols-1" : "grid-cols-2"} gap-2`}>
             <button
               onClick={() => setIsTokenModalOpen(true)}
               className="flex items-center justify-center gap-1.5 p-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-bold transition-all cursor-pointer"
               title="Modifier le Jeton Bearer"
             >
-              <Key className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Token</span>
+              <Key className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              {!isSidebarCollapsed && <span>Token</span>}
             </button>
 
             <button
@@ -734,8 +788,8 @@ export default function App() {
               className="flex items-center justify-center gap-1.5 p-2 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/40 text-indigo-300 text-xs font-bold transition-all cursor-pointer"
               title="Inspecter Raw JSON"
             >
-              <Database className="w-3.5 h-3.5 text-indigo-400" />
-              <span>JSON</span>
+              <Database className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+              {!isSidebarCollapsed && <span>JSON</span>}
             </button>
           </div>
 
@@ -743,9 +797,10 @@ export default function App() {
             onClick={handleExportData}
             disabled={activeRoundMatches.length === 0}
             className="w-full py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50"
+            title="Exporter JSON"
           >
-            <Download className="w-3.5 h-3.5" />
-            <span>Exporter JSON</span>
+            <Download className="w-3.5 h-3.5 shrink-0" />
+            {!isSidebarCollapsed && <span>Exporter JSON</span>}
           </button>
         </div>
       </aside>

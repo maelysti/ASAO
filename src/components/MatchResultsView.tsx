@@ -62,30 +62,30 @@ export const MatchResultsView: React.FC<MatchResultsViewProps> = ({
 
   const currentEntryPoint = entryPoints.find((ep) => ep.id === activeCategoryId);
 
-  // Fetch initial results (20 rounds)
+  // Fetch initial results (up to 50 rounds by default)
   const loadResults = async () => {
     setLoading(true);
     setError(null);
     setSelectedRoundFilter("all");
 
-    // Fetch initial 20 rounds
-    const res = await fetchInstantLeagueResults(activeCategoryId, 0, 20, token);
+    // Fetch initial 50 rounds to cover full season
+    const res = await fetchInstantLeagueResults(activeCategoryId, 0, 50, token);
     setLoading(false);
 
     if (res.data) {
       setRounds(res.data);
-      setHasMore(res.hasMore ?? res.data.length >= 20);
+      setHasMore(res.hasMore ?? res.data.length >= 50);
     } else {
       setError(res.error || "Impossible de charger les résultats.");
     }
   };
 
-  // Load more rounds (pagination)
+  // Load more rounds (pagination batch of 50)
   const handleLoadMore = async () => {
     if (loadingMore) return;
     setLoadingMore(true);
     const skip = rounds.length;
-    const res = await fetchInstantLeagueResults(activeCategoryId, skip, 20, token);
+    const res = await fetchInstantLeagueResults(activeCategoryId, skip, 50, token);
     setLoadingMore(false);
 
     if (res.data && res.data.length > 0) {
@@ -95,10 +95,38 @@ export const MatchResultsView: React.FC<MatchResultsViewProps> = ({
         const newRounds = res.data!.filter((r) => !existingNumbers.has(r.roundNumber));
         return [...prev, ...newRounds];
       });
-      setHasMore(res.hasMore ?? res.data.length >= 20);
+      setHasMore(res.hasMore ?? res.data.length >= 50);
     } else {
       setHasMore(false);
     }
+  };
+
+  // Automated fetch ALL remaining rounds until completion
+  const handleLoadAllRounds = async () => {
+    if (loadingMore) return;
+    setLoadingMore(true);
+    let currentSkip = rounds.length;
+    let keepGoing = true;
+    let accumulated = [...rounds];
+
+    while (keepGoing) {
+      const res = await fetchInstantLeagueResults(activeCategoryId, currentSkip, 50, token);
+      if (res.data && res.data.length > 0) {
+        const existingNumbers = new Set(accumulated.map((r) => r.roundNumber));
+        const newRounds = res.data.filter((r) => !existingNumbers.has(r.roundNumber));
+        accumulated = [...accumulated, ...newRounds];
+        currentSkip += res.data.length;
+        if (res.data.length < 50 || res.hasMore === false) {
+          keepGoing = false;
+        }
+      } else {
+        keepGoing = false;
+      }
+    }
+
+    setRounds(accumulated);
+    setHasMore(false);
+    setLoadingMore(false);
   };
 
   useEffect(() => {
@@ -134,9 +162,9 @@ export const MatchResultsView: React.FC<MatchResultsViewProps> = ({
   };
 
   // Extract list of all round numbers available in fetched data
-  const availableRoundNumbers = Array.from(
-    new Set(rounds.map((r) => r.roundNumber).filter(Boolean))
-  ).sort((a, b) => b - a); // Descending order (newest first)
+  const availableRoundNumbers = (
+    Array.from(new Set(rounds.map((r) => r.roundNumber).filter(Boolean))) as number[]
+  ).sort((a: number, b: number) => b - a); // Descending order (newest first)
 
   // Filter rounds based on selected round filter
   const displayedRounds = rounds.filter((r) => {
@@ -692,17 +720,28 @@ export const MatchResultsView: React.FC<MatchResultsViewProps> = ({
 
       {/* 6. CHARGER PLUS DE JOURNÉES (PAGINATION / LOAD ALL) */}
       {hasMore && !loading && (
-        <div className="text-center pt-2">
+        <div className="flex items-center justify-center gap-3 pt-4 flex-wrap">
           <button
             onClick={handleLoadMore}
             disabled={loadingMore}
-            className="px-6 py-3 rounded-2xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-emerald-400 hover:text-emerald-300 font-black text-xs shadow-xl transition-all cursor-pointer flex items-center gap-2 mx-auto disabled:opacity-50"
+            className="px-5 py-2.5 rounded-2xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-emerald-400 hover:text-emerald-300 font-extrabold text-xs shadow-xl transition-all cursor-pointer flex items-center gap-2 disabled:opacity-50"
           >
-            <RefreshCw className={`w-4 h-4 ${loadingMore ? "animate-spin" : ""}`} />
+            <RefreshCw className={`w-3.5 h-3.5 ${loadingMore ? "animate-spin" : ""}`} />
             <span>
               {loadingMore
-                ? "Chargement des journées suivantes..."
-                : `Charger Plus de Journées (Historique ${rounds.length}+)`}
+                ? "Chargement..."
+                : `+50 Journées Suivantes (${rounds.length} déjà chargées)`}
+            </span>
+          </button>
+
+          <button
+            onClick={handleLoadAllRounds}
+            disabled={loadingMore}
+            className="px-5 py-2.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs shadow-lg shadow-emerald-500/20 transition-all cursor-pointer flex items-center gap-2 disabled:opacity-50"
+          >
+            <Zap className={`w-3.5 h-3.5 ${loadingMore ? "animate-spin" : ""}`} />
+            <span>
+              {loadingMore ? "Récupération intégrale en cours..." : "Tout Charger (Toutes les Journées)"}
             </span>
           </button>
         </div>
