@@ -32,6 +32,7 @@ import {
 } from "../services/sportyApi";
 import { SportyEntryPoint, ExtractedMatchRecord } from "../types";
 import { convertRoundResultsToExtractedRecords } from "../utils/globalAnalysisEngine";
+import { TeamFormTrajectory } from "./TeamFormTrajectory";
 
 interface MatchResultsViewProps {
   entryPoints: SportyEntryPoint[];
@@ -761,6 +762,15 @@ export const MatchResultsView: React.FC<MatchResultsViewProps> = ({
                             <ChevronDown className="w-4 h-4" />
                           )}
                         </button>
+                      </div>
+
+                      {/* Team Form Trajectory Section (Parcours des deux équipes) */}
+                      <div className="mt-2.5">
+                        <TeamFormTrajectory
+                          homeTeamName={homeName}
+                          awayTeamName={awayName}
+                          database={database}
+                        />
                       </div>
 
                       {/* Expandable Goals & Timeline */}

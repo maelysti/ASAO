@@ -3,6 +3,7 @@ import { Clock, Shield, Activity, Layers, Database, Lightbulb, AlertCircle, Spar
 import { SportyEvent, ExtractedMatchRecord } from "../types";
 import { classifyMatchStatus, CombinedMatchData, getTeamLogoUrl } from "../services/sportyApi";
 import { getH2HAnalysisForMatch } from "../utils/globalAnalysisEngine";
+import { TeamFormTrajectory } from "./TeamFormTrajectory";
 
 interface MatchCardProps {
   event: SportyEvent | CombinedMatchData;
@@ -307,6 +308,15 @@ export const MatchCard: React.FC<MatchCardProps> = ({ event, matchIndex, databas
           )}
         </div>
       </div>
+
+      {/* Team Form Trajectory Section (Parcours des deux équipes) */}
+      <TeamFormTrajectory
+        homeTeamName={event.homeTeamName}
+        awayTeamName={event.awayTeamName}
+        database={database}
+        homeStats={homeStats}
+        awayStats={awayStats}
+      />
 
       {/* 1X2 Odds Section */}
       <div className="grid grid-cols-3 bg-[#161c26] border border-slate-800/90 rounded-xl p-2.5 text-center shadow-inner gap-1">
