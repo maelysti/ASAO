@@ -25,6 +25,13 @@ import {
   Check,
   Activity,
   Award,
+  Key,
+  Settings,
+  CloudUpload,
+  HardDrive,
+  ShieldCheck,
+  ExternalLink,
+  Folder,
 } from "lucide-react";
 import {
   ExtractedMatchRecord,
@@ -74,6 +81,20 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>("ALL");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [strictScoreOnly, setStrictScoreOnly] = useState<boolean>(true);
+
+  // Gemini API Key & Auto AI Analysis Settings
+  const [geminiApiKey, setGeminiApiKey] = useState<string>(() => {
+    return localStorage.getItem("SPORTY_GEMINI_API_KEY") || "";
+  });
+  const [autoAiAnalysis, setAutoAiAnalysis] = useState<boolean>(() => {
+    return localStorage.getItem("SPORTY_AUTO_AI_ANALYSIS") !== "false";
+  });
+  const [showGeminiConfigModal, setShowGeminiConfigModal] = useState<boolean>(false);
+  const [driveUserEmail, setDriveUserEmail] = useState<string>("maelystia.rmj@gmail.com");
+  const DEFAULT_DRIVE_FOLDER = "https://drive.google.com/drive/folders/1TPg14mpTyGvRSpHM2_VsFegSnk6Yu5YA?usp=sharing";
+  const [driveFolderUrl, setDriveFolderUrl] = useState<string>(() => {
+    return localStorage.getItem("SPORTY_DRIVE_FOLDER_URL") || DEFAULT_DRIVE_FOLDER;
+  });
 
   // AI & Modal State
   const [dbAiInsights, setDbAiInsights] = useState<AIDatabaseRuleInsight[]>([]);
@@ -297,6 +318,10 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
         "SUCCESS",
         `[EXTRACTION ${extractionPhase === "PAST_ARCHIVE" ? "PHASE 1 (ROUND 1➔PAST)" : "PHASE 2 (LIVE)"}] +${newExtracted.length} match(s) ajouté(s). ${dupCount} doublons évités.`
       );
+      if (autoAiAnalysis) {
+        // Trigger auto AI database analysis seamlessly
+        setTimeout(() => handleAnalyzeDatabaseWithAI(), 300);
+      }
     } else {
       addLog(
         "INFO",
@@ -462,6 +487,44 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
     addLog("SUCCESS", `[EXPORT] ${extractedDatabase.length} enregistrements exportés en CSV.`);
   };
 
+  // Open Google Drive folder directly
+  const handleOpenDriveFolder = () => {
+    if (driveFolderUrl) {
+      window.open(driveFolderUrl, "_blank", "noopener,noreferrer");
+      addLog("INFO", `[GOOGLE_DRIVE] 📂 Ouverture du dossier Google Drive : ${driveFolderUrl}`);
+    } else {
+      alert("Veuillez renseigner le lien du dossier Google Drive dans les paramètres.");
+    }
+  };
+
+  // Export formatted JSON directly for Google Drive sync
+  const handleExportGoogleDrive = () => {
+    if (extractedDatabase.length === 0) {
+      addLog("WARN", "[GOOGLE_DRIVE] Aucune donnée à exporter. La base de données est vide.");
+      alert("Base de données vide. Veuillez d'abord lancer l'extraction.");
+      return;
+    }
+    const drivePayload = {
+      targetAccount: driveUserEmail,
+      driveFolderUrl: driveFolderUrl,
+      exportedAt: new Date().toISOString(),
+      totalRecords: extractedDatabase.length,
+      sourceApp: "Sporty Virtual Archive Engine",
+      geminiApiKeyProvided: !!geminiApiKey,
+      records: extractedDatabase,
+    };
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(drivePayload, null, 2));
+    const downloadAnchor = document.createElement("a");
+    downloadAnchor.setAttribute("href", dataStr);
+    downloadAnchor.setAttribute("download", `google_drive_sync_${driveUserEmail.replace(/[@.]/g, "_")}_${new Date().toISOString().slice(0, 10)}.json`);
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
+
+    addLog("SUCCESS", `[GOOGLE_DRIVE] 📁 Exportation synchronisée pour ${driveUserEmail} (${extractedDatabase.length} matchs prêts pour emplacement Drive : ${driveFolderUrl}).`);
+    alert(`Exportation Google Drive générée pour ${driveUserEmail} !\nLe fichier JSON est téléchargé et prêt à être déposé dans votre emplacement Google Drive :\n${driveFolderUrl}`);
+  };
+
   const handleImportJSON = (e: React.ChangeEvent<HTMLInputElement>) => {
     const fileReader = new FileReader();
     if (e.target.files && e.target.files[0]) {
@@ -563,6 +626,18 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
             >
               <Sparkles className="w-4 h-4 text-amber-300 animate-pulse" />
               <span>3. ANALYSER IA</span>
+            </button>
+
+            <button
+              onClick={() => setShowGeminiConfigModal(true)}
+              className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-bold transition-all bg-slate-900 hover:bg-slate-800 text-amber-300 border border-amber-500/40 cursor-pointer shadow-sm ml-1"
+              title="Configurer la clef Gemini API & l'analyseur IA continu"
+            >
+              <Settings className="w-4 h-4 text-amber-400" />
+              <span>Clef Gemini & Settings IA</span>
+              {autoAiAnalysis && (
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse ml-0.5" title="IA Toujours Active (Auto-scan activé)" />
+              )}
             </button>
           </div>
         </div>
@@ -803,6 +878,14 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
                     <FileSpreadsheet className="w-3 h-3" />
                     <span>CSV</span>
                   </button>
+                  <button
+                    onClick={handleExportGoogleDrive}
+                    className="px-2.5 py-1 bg-blue-600/30 hover:bg-blue-600/50 text-blue-300 border border-blue-500/50 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer shadow-sm"
+                    title={`Google Drive Sync (${driveUserEmail})`}
+                  >
+                    <CloudUpload className="w-3 h-3 text-blue-400" />
+                    <span>Drive ({driveUserEmail.split("@")[0]})</span>
+                  </button>
                 </div>
               </div>
               <FileCode className="w-6 h-6 text-amber-400" />
@@ -936,6 +1019,15 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
                 >
                   <FileSpreadsheet className="w-3.5 h-3.5" />
                   <span>Exporter CSV</span>
+                </button>
+
+                <button
+                  onClick={handleExportGoogleDrive}
+                  className="px-3 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md shadow-blue-500/20 transition-all cursor-pointer"
+                  title={`Google Drive Sync (${driveUserEmail})`}
+                >
+                  <CloudUpload className="w-3.5 h-3.5 text-blue-200" />
+                  <span>Google Drive ({driveUserEmail.split("@")[0]})</span>
                 </button>
 
                 <button
@@ -1257,6 +1349,152 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
                 className="px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs cursor-pointer"
               >
                 Fermer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Gemini API Key & Google Drive Settings Modal */}
+      {showGeminiConfigModal && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-lg w-full space-y-6 shadow-2xl relative">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                  <Key className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-white">
+                    Paramètres Gemini API & Google Drive
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Configuration IA toujours active & Synchronisation Google Drive
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowGeminiConfigModal(false)}
+                className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Section 1: Gemini API Key */}
+            <div className="space-y-3">
+              <label className="text-xs font-extrabold text-slate-300 flex items-center gap-1.5">
+                <Sparkles className="w-4 h-4 text-amber-400" />
+                <span>Clé Gemini API (Personal Key / Modifier) :</span>
+              </label>
+              <input
+                type="password"
+                value={geminiApiKey}
+                onChange={(e) => setGeminiApiKey(e.target.value)}
+                placeholder="Ex: AIzaSyD..."
+                className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs font-mono text-amber-300 focus:outline-none focus:border-amber-500"
+              />
+              <p className="text-[11px] text-slate-500 leading-relaxed">
+                Entrez votre clé Gemini API pour garantir que l'Analyseur IA reste toujours opérationnel lors du déploiement vers GitHub / Cloud Run.
+              </p>
+            </div>
+
+            {/* Section 2: Toggle Auto AI Analysis */}
+            <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 flex items-center justify-between gap-4">
+              <div className="space-y-1">
+                <span className="text-xs font-extrabold text-white block flex items-center gap-1.5">
+                  <Zap className="w-4 h-4 text-emerald-400" />
+                  Mode IA Toujours Actif (Auto-Scan)
+                </span>
+                <p className="text-[11px] text-slate-400">
+                  Analyse et recalcule automatiquement les règles IA dès qu'un nouveau match est extrait en BDD.
+                </p>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={autoAiAnalysis}
+                  onChange={(e) => {
+                    const val = e.target.checked;
+                    setAutoAiAnalysis(val);
+                    localStorage.setItem("SPORTY_AUTO_AI_ANALYSIS", val ? "true" : "false");
+                    addLog("INFO", `[CONFIG] Analyse IA Toujours Active : ${val ? "ACTIVÉE" : "DÉSACTIVÉE"}`);
+                  }}
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
+              </label>
+            </div>
+
+            {/* Section 3: Google Drive Location & Account Target */}
+            <div className="space-y-4 pt-3 border-t border-slate-800">
+              <div className="space-y-2">
+                <label className="text-xs font-extrabold text-slate-300 flex items-center gap-1.5">
+                  <CloudUpload className="w-4 h-4 text-blue-400" />
+                  <span>Compte Google Drive Cible :</span>
+                </label>
+                <input
+                  type="email"
+                  value={driveUserEmail}
+                  onChange={(e) => setDriveUserEmail(e.target.value)}
+                  placeholder="maelystia.rmj@gmail.com"
+                  className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs font-mono text-cyan-300 focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-extrabold text-slate-300 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <Folder className="w-4 h-4 text-amber-400" />
+                    <span>Lien ou ID Emplacement Dossier Google Drive :</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleOpenDriveFolder}
+                    className="text-[11px] text-blue-400 hover:text-blue-300 underline flex items-center gap-1 cursor-pointer"
+                  >
+                    <ExternalLink className="w-3 h-3" />
+                    <span>Ouvrir dans Drive</span>
+                  </button>
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={driveFolderUrl}
+                    onChange={(e) => setDriveFolderUrl(e.target.value)}
+                    placeholder="Ex: https://drive.google.com/drive/folders/1abc... ou ID de dossier"
+                    className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs font-mono text-amber-300 focus:outline-none focus:border-amber-500"
+                  />
+                  <button
+                    onClick={handleExportGoogleDrive}
+                    className="px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold shrink-0 flex items-center gap-1.5 cursor-pointer shadow-md"
+                    title="Tester l'export vers ce dossier"
+                  >
+                    <CloudUpload className="w-3.5 h-3.5" />
+                    <span>Exporter</span>
+                  </button>
+                </div>
+              </div>
+
+              <p className="text-[11px] text-slate-500 leading-relaxed flex items-center gap-1">
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <span>Emplacement configuré pour l'import/export direct des données d'extraction JSON & CSV.</span>
+              </p>
+            </div>
+
+            {/* Save Button */}
+            <div className="pt-2 flex items-center justify-end gap-3">
+              <button
+                onClick={() => {
+                  localStorage.setItem("SPORTY_GEMINI_API_KEY", geminiApiKey);
+                  localStorage.setItem("SPORTY_AUTO_AI_ANALYSIS", autoAiAnalysis ? "true" : "false");
+                  localStorage.setItem("SPORTY_DRIVE_FOLDER_URL", driveFolderUrl);
+                  setShowGeminiConfigModal(false);
+                  addLog("SUCCESS", `[CONFIG] Paramètres enregistrés : Gemini API Key, Auto-AI ${autoAiAnalysis ? 'ON' : 'OFF'}, Emplacement Drive (${driveFolderUrl}).`);
+                }}
+                className="w-full py-3 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs shadow-lg shadow-emerald-500/20 transition-all cursor-pointer"
+              >
+                Sauvegarder et Appliquer
               </button>
             </div>
           </div>
