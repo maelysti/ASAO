@@ -187,10 +187,16 @@ export interface MatchResultData {
   halfTimeScore?: string; // e.g. "0:0"
   goals?: GoalEvent[];
   expectedStart?: string;
+  seasonNumber?: number | string;
+  seasonName?: string;
+  seasonId?: number | string;
 }
 
 export interface InstantLeagueRoundResult {
   roundNumber: number;
+  seasonNumber?: number | string;
+  seasonName?: string;
+  seasonId?: number | string;
   expectedStart?: string;
   matches: MatchResultData[];
 }
@@ -314,6 +320,9 @@ export interface CombinedMatchData {
   eventCategoryId?: number;
   categoryName: string;
   roundNumber?: number | string;
+  seasonNumber?: number | string;
+  seasonName?: string;
+  seasonId?: number | string;
   homeTeamName: string;
   awayTeamName: string;
   homeStats?: {
@@ -398,12 +407,28 @@ export async function fetchAllDataForCompetitions(
                 ? m.expectedStart
                 : round.expectedStart;
 
+            const sNum =
+              (round as any).seasonNumber ||
+              (round as any).season ||
+              (m as any).seasonNumber ||
+              (m as any).season ||
+              (round as any).seasonId ||
+              1;
+            const sName =
+              (round as any).seasonName ||
+              (m as any).seasonName ||
+              `Saison ${sNum}`;
+            const sId = (round as any).seasonId || (m as any).seasonId || sNum;
+
             combinedList.push({
               id: m.id,
               entryPointId: entryPoint.id,
               eventCategoryId: round.eventCategoryId,
               categoryName: entryPoint.name,
               roundNumber: round.roundNumber || m.round,
+              seasonNumber: sNum,
+              seasonName: sName,
+              seasonId: sId,
               homeTeamName: m.homeTeam?.name || m.name.split(" vs ")[0] || "Équipe 1",
               awayTeamName: m.awayTeam?.name || m.name.split(" vs ")[1] || "Équipe 2",
               homeStats: m.homeTeam

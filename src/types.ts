@@ -89,11 +89,17 @@ export interface InstantLeagueMatch {
   halfTimeScore?: string;
   goals?: any[];
   scores?: any[];
+  seasonNumber?: number | string;
+  seasonName?: string;
+  seasonId?: number | string;
 }
 
 export interface InstantLeagueRound {
   id?: number | string;
   roundNumber: number;
+  seasonNumber?: number | string;
+  seasonName?: string;
+  seasonId?: number | string;
   expectedStart: string;
   expectedEnd: string;
   eventCategoryId?: number;
@@ -183,6 +189,9 @@ export interface ExtractedMatchRecord {
   competitionId: number;
   competitionName: string;
   roundNumber: number | string;
+  seasonNumber?: number | string;
+  seasonName?: string;
+  seasonId?: number | string;
   status: string; // Live, PreEvent, Ended, Finished
   expectedStart?: string;
   score?: string;

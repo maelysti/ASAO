@@ -22,6 +22,17 @@ export function convertRoundResultsToExtractedRecords(
 
       const goalMins = (m.goals || []).map((g) => `${g.minute}'`).join(", ");
 
+      const sNum =
+        (r as any).seasonNumber ||
+        (r as any).season ||
+        (m as any).seasonNumber ||
+        (m as any).season ||
+        1;
+      const sName =
+        (r as any).seasonName ||
+        (m as any).seasonName ||
+        `Saison ${sNum}`;
+
       records.push({
         id: matchId,
         matchName: `${homeName} vs ${awayName}`,
@@ -34,6 +45,9 @@ export function convertRoundResultsToExtractedRecords(
         competitionId: competitionId,
         competitionName: categoryName,
         roundNumber: r.roundNumber || 0,
+        seasonNumber: sNum,
+        seasonName: sName,
+        seasonId: (r as any).seasonId || sNum,
         status: "Finished",
         expectedStart: r.expectedStart,
         score: m.score,

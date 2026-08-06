@@ -11,6 +11,10 @@ import {
   getH2HAnalysisForMatch,
   GlobalStrategyInsight,
 } from "../utils/globalAnalysisEngine";
+import { OddsAnomaliesView } from "./OddsAnomaliesView";
+import { HomeAwayStabilityView } from "./HomeAwayStabilityView";
+import { SmartComboBuilderView } from "./SmartComboBuilderView";
+import { ExactScoreMatrixView } from "./ExactScoreMatrixView";
 import {
   BarChart3,
   TrendingUp,
@@ -32,6 +36,8 @@ import {
   Hash,
   Info,
   Cpu,
+  Home,
+  Grid,
 } from "lucide-react";
 
 interface GlobalAnalysisViewProps {
@@ -50,8 +56,34 @@ export const GlobalAnalysisView: React.FC<GlobalAnalysisViewProps> = ({
   onSelectEventDetail,
 }) => {
   const [activeTab, setActiveTab] = useState<
-    "overview" | "ai_mode" | "h2h_matches" | "simulator"
+    | "overview"
+    | "ai_mode"
+    | "odds_anomalies"
+    | "home_away_split"
+    | "combo_builder"
+    | "score_matrix"
+    | "h2h_matches"
+    | "simulator"
   >("overview");
+
+  // Season filter state
+  const [selectedSeason, setSelectedSeason] = useState<string | number>("ALL");
+
+  // Available seasons list from BDD
+  const availableSeasons = useMemo(() => {
+    const set = new Set<string | number>();
+    database.forEach((m) => {
+      if (m.seasonNumber) set.add(m.seasonNumber);
+    });
+    const arr = Array.from(set).sort((a, b) => Number(b) - Number(a));
+    return arr.length > 0 ? arr : [1];
+  }, [database]);
+
+  // Filtered database by season
+  const filteredDatabase = useMemo(() => {
+    if (selectedSeason === "ALL") return database;
+    return database.filter((m) => String(m.seasonNumber || 1) === String(selectedSeason));
+  }, [database, selectedSeason]);
 
   // Simulator filters
   const [simMinOdds, setSimMinOdds] = useState<number>(1.3);
@@ -67,10 +99,10 @@ export const GlobalAnalysisView: React.FC<GlobalAnalysisViewProps> = ({
     "ALL"
   );
 
-  // Calculate global database statistics
+  // Calculate global database statistics based on season filter
   const dbStats = useMemo(() => {
-    return calculateGlobalDatabaseStats(database);
-  }, [database]);
+    return calculateGlobalDatabaseStats(filteredDatabase);
+  }, [filteredDatabase]);
 
   // Gather all current active/upcoming matches across all competitions
   const currentMatchesList = useMemo(() => {
@@ -200,13 +232,31 @@ export const GlobalAnalysisView: React.FC<GlobalAnalysisViewProps> = ({
                   </span>
                 </div>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  Croisement automatique des cotes, rangs, classements et journées pour générer des prédictions H2H ultra-précises.
+                  Croisement automatique des cotes, rangs, classements, journées et numéros de saison pour générer des prédictions H2H ultra-précises.
                 </p>
-                <div className="flex items-center gap-2 mt-2">
+                <div className="flex flex-wrap items-center gap-2 mt-2">
                   <span className="px-2.5 py-1 rounded-lg bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 font-mono text-xs font-bold flex items-center gap-1.5">
                     <Database className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Source : 100% Base de Données ({database.length} matchs enregistrés)</span>
+                    <span>Source : 100% Base de Données ({filteredDatabase.length} matchs)</span>
                   </span>
+
+                  {/* Season Selector */}
+                  <div className="flex items-center gap-1.5 bg-slate-950/90 border border-slate-800 rounded-lg px-2.5 py-1 text-xs">
+                    <Filter className="w-3.5 h-3.5 text-amber-400" />
+                    <span className="text-slate-400 font-bold">Suivi Saison :</span>
+                    <select
+                      value={selectedSeason}
+                      onChange={(e) => setSelectedSeason(e.target.value === "ALL" ? "ALL" : Number(e.target.value))}
+                      className="bg-slate-900 text-amber-400 font-mono font-bold text-xs rounded border border-slate-700 px-2 py-0.5 focus:outline-none cursor-pointer"
+                    >
+                      <option value="ALL">Toutes les Saisons ({availableSeasons.length})</option>
+                      {availableSeasons.map((s) => (
+                        <option key={s} value={s}>
+                          Saison {s}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               </div>
             </div>
@@ -243,10 +293,10 @@ export const GlobalAnalysisView: React.FC<GlobalAnalysisViewProps> = ({
 
             <div className="bg-slate-950/80 border border-slate-800 rounded-2xl px-4 py-2.5 text-center">
               <span className="text-[10px] font-extrabold text-slate-400 uppercase block">
-                Stratégies Actives
+                Saisons Suivies
               </span>
               <span className="text-lg font-black text-indigo-400 font-mono">
-                {dbStats.topStrategies.length}
+                {availableSeasons.length}
               </span>
             </div>
           </div>
@@ -256,50 +306,98 @@ export const GlobalAnalysisView: React.FC<GlobalAnalysisViewProps> = ({
         <div className="flex flex-wrap items-center gap-2 mt-6 pt-6 border-t border-slate-800/80">
           <button
             onClick={() => setActiveTab("overview")}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
               activeTab === "overview"
                 ? "bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/20"
                 : "bg-slate-950/60 border border-slate-800 text-slate-400 hover:text-white"
             }`}
           >
             <PieChart className="w-4 h-4" />
-            <span>Vue D'Ensemble & Stratégies</span>
+            <span>Vue D'Ensemble</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab("odds_anomalies")}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
+              activeTab === "odds_anomalies"
+                ? "bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 shadow-lg shadow-emerald-500/20"
+                : "bg-slate-950/60 border border-emerald-500/30 text-emerald-400 hover:text-white"
+            }`}
+          >
+            <Zap className="w-4 h-4 text-amber-400 fill-amber-400" />
+            <span>1. Anomalies de Cotes</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab("home_away_split")}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
+              activeTab === "home_away_split"
+                ? "bg-gradient-to-r from-indigo-500 to-blue-600 text-white shadow-lg shadow-indigo-500/20"
+                : "bg-slate-950/60 border border-slate-800 text-slate-400 hover:text-white"
+            }`}
+          >
+            <Home className="w-4 h-4 text-indigo-400" />
+            <span>2. Forme Dom/Ext & Stabilité</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab("combo_builder")}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
+              activeTab === "combo_builder"
+                ? "bg-gradient-to-r from-teal-500 to-cyan-500 text-slate-950 shadow-lg shadow-teal-500/20"
+                : "bg-slate-950/60 border border-slate-800 text-slate-400 hover:text-white"
+            }`}
+          >
+            <Layers className="w-4 h-4 text-teal-300" />
+            <span>3. Combinés Intelligents</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab("score_matrix")}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
+              activeTab === "score_matrix"
+                ? "bg-gradient-to-r from-purple-500 to-indigo-500 text-white shadow-lg shadow-purple-500/20"
+                : "bg-slate-950/60 border border-slate-800 text-slate-400 hover:text-white"
+            }`}
+          >
+            <Hash className="w-4 h-4 text-purple-400" />
+            <span>4. Matrice Scores Exacts</span>
           </button>
 
           <button
             onClick={() => setActiveTab("ai_mode")}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
               activeTab === "ai_mode"
                 ? "bg-gradient-to-r from-cyan-500 via-blue-500 to-indigo-500 text-white shadow-lg shadow-cyan-500/20 animate-pulse"
                 : "bg-slate-950/60 border border-cyan-500/30 text-cyan-300 hover:text-white"
             }`}
           >
             <Sparkles className="w-4 h-4 text-cyan-300" />
-            <span>🤖 MODE IA (Recap & Analyse Database)</span>
+            <span>🤖 Mode IA</span>
           </button>
 
           <button
             onClick={() => setActiveTab("h2h_matches")}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
               activeTab === "h2h_matches"
                 ? "bg-gradient-to-r from-amber-500 to-emerald-500 text-slate-950 shadow-lg shadow-amber-500/20"
                 : "bg-slate-950/60 border border-slate-800 text-slate-400 hover:text-white"
             }`}
           >
             <Activity className="w-4 h-4" />
-            <span>Analyse H2H Automatique ({currentMatchesList.length} Matchs)</span>
+            <span>Analyse H2H ({currentMatchesList.length})</span>
           </button>
 
           <button
             onClick={() => setActiveTab("simulator")}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
               activeTab === "simulator"
                 ? "bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-lg shadow-cyan-500/20"
                 : "bg-slate-950/60 border border-slate-800 text-slate-400 hover:text-white"
             }`}
           >
             <Sliders className="w-4 h-4" />
-            <span>Simulateur & Filtres (Cotes / Rangs / Journées)</span>
+            <span>Simulateur BDD</span>
           </button>
         </div>
       </div>
@@ -950,6 +1048,42 @@ export const GlobalAnalysisView: React.FC<GlobalAnalysisViewProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* TAB: ODDS ANOMALIES */}
+      {activeTab === "odds_anomalies" && (
+        <OddsAnomaliesView
+          database={filteredDatabase}
+          activeMatches={currentMatchesList}
+          onCreateRuleFromDb={onCreateRuleFromDb}
+          selectedSeason={selectedSeason}
+        />
+      )}
+
+      {/* TAB: HOME / AWAY STABILITY SPLIT */}
+      {activeTab === "home_away_split" && (
+        <HomeAwayStabilityView
+          database={filteredDatabase}
+          selectedSeason={selectedSeason}
+        />
+      )}
+
+      {/* TAB: SMART COMBO BUILDER */}
+      {activeTab === "combo_builder" && (
+        <SmartComboBuilderView
+          database={filteredDatabase}
+          activeMatches={currentMatchesList}
+          onCreateRuleFromDb={onCreateRuleFromDb}
+          selectedSeason={selectedSeason}
+        />
+      )}
+
+      {/* TAB: EXACT SCORE MATRIX */}
+      {activeTab === "score_matrix" && (
+        <ExactScoreMatrixView
+          database={filteredDatabase}
+          selectedSeason={selectedSeason}
+        />
       )}
     </div>
   );
