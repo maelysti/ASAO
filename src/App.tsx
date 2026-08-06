@@ -31,6 +31,7 @@ import { RulesView } from "./components/RulesView";
 
 import { ExtractionView } from "./components/ExtractionView";
 import { GlobalAnalysisView } from "./components/GlobalAnalysisView";
+import { ToolStrategyView } from "./components/ToolStrategyView";
 import { SafeParlayBanner } from "./components/SafeParlayBanner";
 import { RuleStatsRibbon } from "./components/RuleStatsRibbon";
 
@@ -38,7 +39,7 @@ import { RuleItem, AIRecapPrediction, ExtractedMatchRecord } from "./types";
 import { DEFAULT_RULES, processAllRules, runAIModeAnalysis } from "./utils/ruleEngine";
 import { getH2HAnalysisForMatch } from "./utils/globalAnalysisEngine";
 
-import { AlertTriangle, Key, RefreshCw, Trophy, Layers, Activity, Database, Download, ListOrdered, Sliders, Zap, BarChart3, PanelLeftClose, PanelLeftOpen, ChevronLeft, ChevronRight } from "lucide-react";
+import { AlertTriangle, Key, RefreshCw, Trophy, Layers, Activity, Database, Download, ListOrdered, Sliders, Zap, BarChart3, PanelLeftClose, PanelLeftOpen, ChevronLeft, ChevronRight, Wrench } from "lucide-react";
 
 export default function App() {
   const [token, setToken] = useState<string>(getStoredToken());
@@ -63,7 +64,7 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [activeRuleFilter, setActiveRuleFilter] = useState<string | null>(null);
   const [activeBetFilter, setActiveBetFilter] = useState<string | null>(null);
-  const [activeMainView, setActiveMainView] = useState<"current" | "ranking" | "results" | "rules" | "extraction" | "database" | "global_analysis">("current");
+  const [activeMainView, setActiveMainView] = useState<"current" | "ranking" | "results" | "rules" | "extraction" | "database" | "global_analysis" | "tool">("current");
 
   // Rules & AI State
   const [rules, setRules] = useState<RuleItem[]>(DEFAULT_RULES);
@@ -753,6 +754,28 @@ export default function App() {
                 <BarChart3 className="w-4 h-4 shrink-0" />
                 {!isSidebarCollapsed && <span className="truncate">ANALYSER GLOBALE</span>}
               </button>
+
+              <button
+                onClick={() => setActiveMainView("tool")}
+                title="TOOL (Stratégies)"
+                className={`flex items-center ${
+                  isSidebarCollapsed ? "justify-center px-0 py-3" : "justify-between px-3.5 py-2.5"
+                } rounded-xl text-xs font-black transition-all cursor-pointer ${
+                  activeMainView === "tool"
+                    ? "bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 text-slate-950 shadow-lg shadow-emerald-500/30 ring-1 ring-emerald-300/60"
+                    : "text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 border border-emerald-500/20"
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <Zap className="w-4 h-4 text-amber-400 fill-amber-400 shrink-0 animate-pulse" />
+                  {!isSidebarCollapsed && <span className="font-extrabold uppercase tracking-wider">TOOL</span>}
+                </div>
+                {!isSidebarCollapsed && (
+                  <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-slate-950/60 text-emerald-300 border border-emerald-500/30 font-bold">
+                    ALGO
+                  </span>
+                )}
+              </button>
             </nav>
           </div>
         </div>
@@ -1016,6 +1039,15 @@ export default function App() {
             entryPoints={validEntryPoints}
             allMatchesByComp={allMatchesByComp}
             onCreateRuleFromDb={handleCreateRule}
+          />
+        </main>
+      ) : activeMainView === "tool" ? (
+        <main className="flex-1 max-w-7xl w-full mx-auto px-4 lg:px-8 py-6">
+          <ToolStrategyView
+            database={extractedDatabase}
+            entryPoints={validEntryPoints}
+            onCreateRuleFromDb={handleCreateRule}
+            onNavigateToView={(view) => setActiveMainView(view)}
           />
         </main>
       ) : (

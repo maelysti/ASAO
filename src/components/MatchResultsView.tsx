@@ -34,6 +34,7 @@ import { SportyEntryPoint, ExtractedMatchRecord } from "../types";
 import { convertRoundResultsToExtractedRecords } from "../utils/globalAnalysisEngine";
 import { TeamFormTrajectory } from "./TeamFormTrajectory";
 import { MatchRuleAnalysisBlock } from "./MatchRuleAnalysisBlock";
+import { InteractiveMatchAnalyzerModal } from "./InteractiveMatchAnalyzerModal";
 
 interface MatchResultsViewProps {
   entryPoints: SportyEntryPoint[];
@@ -64,6 +65,7 @@ export const MatchResultsView: React.FC<MatchResultsViewProps> = ({
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [outcomeFilter, setOutcomeFilter] = useState<"all" | "home" | "draw" | "away" | "over25">("all");
   const [expandedMatchId, setExpandedMatchId] = useState<string | null>(null);
+  const [selectedAnalyzerMatch, setSelectedAnalyzerMatch] = useState<any | null>(null);
 
   const activeCategoryId =
     selectedCategoryId && entryPoints.some((ep) => ep.id === selectedCategoryId)
@@ -751,18 +753,36 @@ export const MatchResultsView: React.FC<MatchResultsViewProps> = ({
                           </span>
                         </div>
 
-                        {/* Toggle Expand Details */}
-                        <button
-                          onClick={() => toggleExpand(matchKey)}
-                          className="p-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-white border border-slate-700/60 transition-colors shrink-0 cursor-pointer"
-                          title="Détails du match et déroulement des buts"
-                        >
-                          {isExpanded ? (
-                            <ChevronUp className="w-4 h-4 text-emerald-400" />
-                          ) : (
-                            <ChevronDown className="w-4 h-4" />
-                          )}
-                        </button>
+                        {/* Action Buttons: Analyser & Toggle Expand Details */}
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            onClick={() => {
+                              setSelectedAnalyzerMatch({
+                                id: m.id || matchKey,
+                                homeTeamName: homeName,
+                                awayTeamName: awayName,
+                                homeStats: m.homeTeam ? { position: m.homeTeam.position, points: m.homeTeam.points } : undefined,
+                                awayStats: m.awayTeam ? { position: m.awayTeam.position, points: m.awayTeam.points } : undefined,
+                              });
+                            }}
+                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-[11px] uppercase tracking-wider transition-all shadow-md cursor-pointer border border-emerald-300/40"
+                          >
+                            <Zap className="w-3 h-3 fill-slate-950 animate-pulse" />
+                            <span>ANALYSER</span>
+                          </button>
+
+                          <button
+                            onClick={() => toggleExpand(matchKey)}
+                            className="p-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-white border border-slate-700/60 transition-colors shrink-0 cursor-pointer"
+                            title="Détails du match et déroulement des buts"
+                          >
+                            {isExpanded ? (
+                              <ChevronUp className="w-4 h-4 text-emerald-400" />
+                            ) : (
+                              <ChevronDown className="w-4 h-4" />
+                            )}
+                          </button>
+                        </div>
                       </div>
 
                       {/* Team Form Trajectory Section (Parcours des deux équipes) */}
@@ -885,6 +905,15 @@ export const MatchResultsView: React.FC<MatchResultsViewProps> = ({
             </span>
           </button>
         </div>
+      )}
+
+      {/* Interactive Match Analyzer Modal */}
+      {selectedAnalyzerMatch && (
+        <InteractiveMatchAnalyzerModal
+          event={selectedAnalyzerMatch}
+          database={database}
+          onClose={() => setSelectedAnalyzerMatch(null)}
+        />
       )}
     </div>
   );

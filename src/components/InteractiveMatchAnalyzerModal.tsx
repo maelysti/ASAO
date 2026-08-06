@@ -74,13 +74,13 @@ export const InteractiveMatchAnalyzerModal: React.FC<InteractiveMatchAnalyzerMod
     setIsSimulating(true);
     setAnalysisStep(1);
 
-    const timer1 = setTimeout(() => setAnalysisStep(2), 600);
-    const timer2 = setTimeout(() => setAnalysisStep(3), 1200);
-    const timer3 = setTimeout(() => setAnalysisStep(4), 1800);
+    const timer1 = setTimeout(() => setAnalysisStep(2), 250);
+    const timer2 = setTimeout(() => setAnalysisStep(3), 500);
+    const timer3 = setTimeout(() => setAnalysisStep(4), 750);
     const timer4 = setTimeout(() => {
       setAnalysisStep(5);
       setIsSimulating(false);
-    }, 2400);
+    }, 1000);
 
     return () => {
       clearTimeout(timer1);
@@ -472,23 +472,38 @@ export const InteractiveMatchAnalyzerModal: React.FC<InteractiveMatchAnalyzerMod
 
         {/* MODAL FOOTER ACTIONS */}
         <div className="p-4 border-t border-slate-800 bg-[#0d1422] flex items-center justify-between gap-3 shrink-0">
-          <button
-            onClick={() => {
-              setAnalysisStep(1);
-              setIsSimulating(true);
-              setTimeout(() => setAnalysisStep(2), 500);
-              setTimeout(() => setAnalysisStep(3), 1000);
-              setTimeout(() => setAnalysisStep(4), 1500);
-              setTimeout(() => {
-                setAnalysisStep(5);
-                setIsSimulating(false);
-              }, 2000);
-            }}
-            className="flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-xl transition-all border border-slate-700 cursor-pointer"
-          >
-            <RotateCcw className="w-3.5 h-3.5 text-amber-400" />
-            <span>Relancer Simulation</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                setAnalysisStep(1);
+                setIsSimulating(true);
+                setTimeout(() => setAnalysisStep(2), 200);
+                setTimeout(() => setAnalysisStep(3), 400);
+                setTimeout(() => setAnalysisStep(4), 600);
+                setTimeout(() => {
+                  setAnalysisStep(5);
+                  setIsSimulating(false);
+                }, 800);
+              }}
+              className="flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-xl transition-all border border-slate-700 cursor-pointer"
+            >
+              <RotateCcw className="w-3.5 h-3.5 text-amber-400" />
+              <span>Relancer Simulation</span>
+            </button>
+
+            {analysisStep < 5 && (
+              <button
+                onClick={() => {
+                  setAnalysisStep(5);
+                  setIsSimulating(false);
+                }}
+                className="flex items-center gap-1.5 px-3 py-2 bg-indigo-600/80 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl transition-all border border-indigo-400/40 cursor-pointer"
+              >
+                <Zap className="w-3.5 h-3.5 text-amber-300" />
+                <span>Passer et afficher les résultats</span>
+              </button>
+            )}
+          </div>
 
           <button
             onClick={onClose}

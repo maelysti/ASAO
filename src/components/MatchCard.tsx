@@ -1,10 +1,11 @@
-import React from "react";
-import { Clock, Shield, Activity, Layers, Database, Lightbulb, AlertCircle, Sparkles } from "lucide-react";
+import React, { useState } from "react";
+import { Clock, Shield, Activity, Layers, Database, Lightbulb, AlertCircle, Sparkles, Zap } from "lucide-react";
 import { SportyEvent, ExtractedMatchRecord } from "../types";
 import { classifyMatchStatus, CombinedMatchData, getTeamLogoUrl } from "../services/sportyApi";
 import { getH2HAnalysisForMatch } from "../utils/globalAnalysisEngine";
 import { TeamFormTrajectory } from "./TeamFormTrajectory";
 import { MatchRuleAnalysisBlock } from "./MatchRuleAnalysisBlock";
+import { InteractiveMatchAnalyzerModal } from "./InteractiveMatchAnalyzerModal";
 
 interface MatchCardProps {
   event: SportyEvent | CombinedMatchData;
@@ -14,6 +15,7 @@ interface MatchCardProps {
 }
 
 export const MatchCard: React.FC<MatchCardProps> = ({ event, matchIndex, database = [], onSelectEvent }) => {
+  const [showAnalyzerModal, setShowAnalyzerModal] = useState<boolean>(false);
   const isCombined = "categoryName" in event;
   const statusCategory = classifyMatchStatus(event as any);
 
@@ -350,17 +352,28 @@ export const MatchCard: React.FC<MatchCardProps> = ({ event, matchIndex, databas
       {/* Rule & High Precision Analysis Block */}
       <MatchRuleAnalysisBlock event={event} database={database} />
 
-      {/* Action Buttons: STATS H2H & MARCHÉS */}
-      <div className="grid grid-cols-2 gap-2.5 pt-1">
+      {/* Action Buttons: STATS H2H, ANALYSER, MARCHÉS */}
+      <div className="grid grid-cols-3 gap-2 pt-1">
         <button
           onClick={(e) => {
             e.stopPropagation();
             onSelectEvent(event);
           }}
-          className="flex items-center justify-center gap-2 py-2.5 px-3 bg-[#161c26] hover:bg-[#1f2837] border border-slate-800 rounded-xl text-xs font-black text-slate-200 uppercase tracking-wider transition-colors shadow-sm"
+          className="flex items-center justify-center gap-1.5 py-2.5 px-2 bg-[#161c26] hover:bg-[#1f2837] border border-slate-800 rounded-xl text-[11px] font-black text-slate-200 uppercase tracking-wider transition-colors shadow-sm cursor-pointer"
         >
-          <Activity className="w-3.5 h-3.5 text-emerald-400" />
-          <span>STATS H2H</span>
+          <Activity className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+          <span className="truncate">STATS</span>
+        </button>
+
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            setShowAnalyzerModal(true);
+          }}
+          className="flex items-center justify-center gap-1.5 py-2.5 px-2 bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 hover:from-emerald-400 hover:to-teal-400 text-slate-950 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all shadow-lg shadow-emerald-500/20 hover:scale-[1.02] active:scale-[0.98] cursor-pointer border border-emerald-300/40"
+        >
+          <Zap className="w-3.5 h-3.5 fill-slate-950 shrink-0 animate-pulse" />
+          <span className="truncate">ANALYSER</span>
         </button>
 
         <button
@@ -368,12 +381,21 @@ export const MatchCard: React.FC<MatchCardProps> = ({ event, matchIndex, databas
             e.stopPropagation();
             onSelectEvent(event);
           }}
-          className="flex items-center justify-center gap-2 py-2.5 px-3 bg-[#161c26] hover:bg-[#1f2837] border border-slate-800 rounded-xl text-xs font-black text-slate-200 uppercase tracking-wider transition-colors shadow-sm"
+          className="flex items-center justify-center gap-1.5 py-2.5 px-2 bg-[#161c26] hover:bg-[#1f2837] border border-slate-800 rounded-xl text-[11px] font-black text-slate-200 uppercase tracking-wider transition-colors shadow-sm cursor-pointer"
         >
-          <Layers className="w-3.5 h-3.5 text-indigo-400" />
-          <span>MARCHÉS</span>
+          <Layers className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+          <span className="truncate">MARCHÉS</span>
         </button>
       </div>
+
+      {/* Interactive Match Analyzer Modal */}
+      {showAnalyzerModal && (
+        <InteractiveMatchAnalyzerModal
+          event={event}
+          database={database}
+          onClose={() => setShowAnalyzerModal(false)}
+        />
+      )}
 
       {/* Dynamic Bottom H2H Database Banner */}
       <div className="bg-slate-900/95 border border-emerald-500/30 rounded-xl p-2.5 flex items-center justify-between gap-2 flex-wrap shadow-inner">
