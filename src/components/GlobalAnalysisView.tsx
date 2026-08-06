@@ -15,6 +15,12 @@ import { OddsAnomaliesView } from "./OddsAnomaliesView";
 import { HomeAwayStabilityView } from "./HomeAwayStabilityView";
 import { SmartComboBuilderView } from "./SmartComboBuilderView";
 import { ExactScoreMatrixView } from "./ExactScoreMatrixView";
+import { ToolStrategyView } from "./ToolStrategyView";
+import {
+  analyzeSiteDataProcessing,
+  detectSequencePatterns,
+  generateProducedMatchesWithRationale,
+} from "../utils/sequenceEngine";
 import {
   BarChart3,
   TrendingUp,
@@ -57,11 +63,14 @@ export const GlobalAnalysisView: React.FC<GlobalAnalysisViewProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<
     | "overview"
-    | "ai_mode"
+    | "produced_matches"
+    | "sequence_site"
+    | "tool_strategies"
     | "odds_anomalies"
     | "home_away_split"
     | "combo_builder"
     | "score_matrix"
+    | "ai_mode"
     | "h2h_matches"
     | "simulator"
   >("overview");
@@ -99,11 +108,6 @@ export const GlobalAnalysisView: React.FC<GlobalAnalysisViewProps> = ({
     "ALL"
   );
 
-  // Calculate global database statistics based on season filter
-  const dbStats = useMemo(() => {
-    return calculateGlobalDatabaseStats(filteredDatabase);
-  }, [filteredDatabase]);
-
   // Gather all current active/upcoming matches across all competitions
   const currentMatchesList = useMemo(() => {
     const list: { match: CombinedMatchData; categoryName: string }[] = [];
@@ -121,6 +125,25 @@ export const GlobalAnalysisView: React.FC<GlobalAnalysisViewProps> = ({
     });
     return list;
   }, [allMatchesByComp, selectedCompFilter]);
+
+  // Calculate global database statistics based on season filter
+  const dbStats = useMemo(() => {
+    return calculateGlobalDatabaseStats(filteredDatabase);
+  }, [filteredDatabase]);
+
+  // Site Data Processing Analytics & Sequence Engine
+  const siteAnalytics = useMemo(() => {
+    return analyzeSiteDataProcessing(filteredDatabase);
+  }, [filteredDatabase]);
+
+  const sequencePatterns = useMemo(() => {
+    return detectSequencePatterns(filteredDatabase);
+  }, [filteredDatabase]);
+
+  const producedMatches = useMemo(() => {
+    const rawMatches = currentMatchesList.map((item) => item.match);
+    return generateProducedMatchesWithRationale(rawMatches, filteredDatabase);
+  }, [currentMatchesList, filteredDatabase]);
 
   // Filter H2H matches list by search
   const filteredCurrentMatches = useMemo(() => {
@@ -317,15 +340,51 @@ export const GlobalAnalysisView: React.FC<GlobalAnalysisViewProps> = ({
           </button>
 
           <button
+            onClick={() => setActiveTab("produced_matches")}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
+              activeTab === "produced_matches"
+                ? "bg-gradient-to-r from-emerald-400 via-teal-400 to-amber-400 text-slate-950 shadow-lg shadow-emerald-500/20 font-black"
+                : "bg-slate-950/60 border border-emerald-500/40 text-emerald-300 hover:text-white"
+            }`}
+          >
+            <Target className="w-4 h-4 text-emerald-950 fill-emerald-950" />
+            <span>🎯 Producteur de Matchs (Raison Exacte)</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab("sequence_site")}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
+              activeTab === "sequence_site"
+                ? "bg-gradient-to-r from-amber-500 to-emerald-500 text-slate-950 shadow-lg shadow-amber-500/20"
+                : "bg-slate-950/60 border border-amber-500/30 text-amber-300 hover:text-white"
+            }`}
+          >
+            <Cpu className="w-4 h-4 text-amber-950" />
+            <span>🔮 Séquences & Traitement Site</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab("tool_strategies")}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
+              activeTab === "tool_strategies"
+                ? "bg-gradient-to-r from-teal-500 to-cyan-500 text-slate-950 shadow-lg shadow-teal-500/20"
+                : "bg-slate-950/60 border border-teal-500/30 text-teal-300 hover:text-white"
+            }`}
+          >
+            <Zap className="w-4 h-4 text-amber-400 fill-amber-400 animate-pulse" />
+            <span>⚡ Mines de Stratégies (Tool)</span>
+          </button>
+
+          <button
             onClick={() => setActiveTab("odds_anomalies")}
             className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
               activeTab === "odds_anomalies"
                 ? "bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 shadow-lg shadow-emerald-500/20"
-                : "bg-slate-950/60 border border-emerald-500/30 text-emerald-400 hover:text-white"
+                : "bg-slate-950/60 border border-slate-800 text-slate-400 hover:text-white"
             }`}
           >
-            <Zap className="w-4 h-4 text-amber-400 fill-amber-400" />
-            <span>1. Anomalies de Cotes</span>
+            <Zap className="w-4 h-4 text-emerald-400" />
+            <span>Anomalies Cotes</span>
           </button>
 
           <button
@@ -337,7 +396,7 @@ export const GlobalAnalysisView: React.FC<GlobalAnalysisViewProps> = ({
             }`}
           >
             <Home className="w-4 h-4 text-indigo-400" />
-            <span>2. Forme Dom/Ext & Stabilité</span>
+            <span>Forme Dom/Ext</span>
           </button>
 
           <button
@@ -349,7 +408,7 @@ export const GlobalAnalysisView: React.FC<GlobalAnalysisViewProps> = ({
             }`}
           >
             <Layers className="w-4 h-4 text-teal-300" />
-            <span>3. Combinés Intelligents</span>
+            <span>Combinés ROI</span>
           </button>
 
           <button
@@ -361,7 +420,7 @@ export const GlobalAnalysisView: React.FC<GlobalAnalysisViewProps> = ({
             }`}
           >
             <Hash className="w-4 h-4 text-purple-400" />
-            <span>4. Matrice Scores Exacts</span>
+            <span>Scores Exacts</span>
           </button>
 
           <button
@@ -397,7 +456,7 @@ export const GlobalAnalysisView: React.FC<GlobalAnalysisViewProps> = ({
             }`}
           >
             <Sliders className="w-4 h-4" />
-            <span>Simulateur BDD</span>
+            <span>Simulateur</span>
           </button>
         </div>
       </div>
@@ -619,7 +678,248 @@ export const GlobalAnalysisView: React.FC<GlobalAnalysisViewProps> = ({
         </div>
       )}
 
-      {/* TAB: MODE IA (RECAP & ANALYSE DATABASE) */}
+      {/* TAB: PRODUCTEUR DE MATCHS (RAISON EXACTE) */}
+      {activeTab === "produced_matches" && (
+        <div className="space-y-6">
+          <div className="bg-gradient-to-r from-emerald-950/80 via-slate-900 to-teal-950 border border-emerald-500/40 rounded-3xl p-6 shadow-2xl relative overflow-hidden">
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="p-2 rounded-xl bg-emerald-500/20 text-emerald-400 font-extrabold text-xs border border-emerald-500/30">
+                    <Target className="w-5 h-5 text-emerald-400" />
+                  </span>
+                  <h3 className="text-lg font-black text-white">
+                    PRODUCTEUR INTELLIGENT DE MATCHS ({producedMatches.length} PRONOSTICS)
+                  </h3>
+                </div>
+                <p className="text-xs text-slate-300 mt-1">
+                  Tous les matchs du Round actuel évalués avec la <strong>raison exacte</strong> basée sur les séquences, écarts de classement, cotes BDD et règles algorithmiques du site.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="px-3 py-1.5 rounded-xl bg-emerald-500/20 text-emerald-300 font-mono text-xs font-bold border border-emerald-500/40">
+                  {producedMatches.filter((p) => p.confidence >= 90).length} Pronostics Ultra-Sûrs (&gt;=90%)
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* List of Produced Matches with Explicit Rationale */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {producedMatches.map((pm, idx) => (
+              <div
+                key={idx}
+                className="bg-slate-900 border border-slate-800 hover:border-emerald-500/60 rounded-3xl p-5 shadow-xl transition-all space-y-4"
+              >
+                {/* Match Header */}
+                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                  <div>
+                    <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-slate-950 text-emerald-400 border border-slate-800 font-mono">
+                      {pm.categoryName} • Round {pm.roundNumber}
+                    </span>
+                    <h4 className="text-base font-black text-white mt-1">
+                      {pm.match.homeTeamName} <span className="text-slate-500 font-normal">vs</span> {pm.match.awayTeamName}
+                    </h4>
+                  </div>
+
+                  <div className="text-right">
+                    <span className="text-xs font-extrabold px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                      {pm.confidence}% Confiance
+                    </span>
+                  </div>
+                </div>
+
+                {/* Predicted Bet & Odds */}
+                <div className="flex items-center justify-between bg-slate-950 p-3 rounded-2xl border border-slate-800/80">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block">Pronostic Produit</span>
+                      <span className="text-sm font-black text-amber-400">{pm.predictedBet}</span>
+                    </div>
+                  </div>
+
+                  <div className="text-right">
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Cote Sélectionnée</span>
+                    <span className="text-base font-black text-emerald-400 font-mono">@{pm.recommendedOdds.toFixed(2)}</span>
+                  </div>
+                </div>
+
+                {/* EXPLICIT EXACT RATIONALE BOX */}
+                <div className="bg-gradient-to-b from-slate-950 to-slate-900/90 border border-amber-500/30 rounded-2xl p-4 space-y-2.5">
+                  <div className="flex items-center gap-2 text-amber-400 font-extrabold text-xs uppercase tracking-wider border-b border-slate-800/80 pb-2">
+                    <Info className="w-4 h-4 text-amber-400" />
+                    <span>RAISON EXACTE DU MATCH PRODUIT :</span>
+                  </div>
+
+                  <div className="space-y-2 text-xs text-slate-300 font-sans leading-relaxed">
+                    <p className="flex items-start gap-2">
+                      <span className="text-emerald-400 font-bold shrink-0">1. Contextuel :</span>
+                      <span>{pm.exactRationale.mainReason}</span>
+                    </p>
+
+                    <p className="flex items-start gap-2">
+                      <span className="text-teal-400 font-bold shrink-0">2. Cotes BDD :</span>
+                      <span>{pm.exactRationale.oddsCriteriaReason}</span>
+                    </p>
+
+                    <p className="flex items-start gap-2">
+                      <span className="text-cyan-400 font-bold shrink-0">3. Écart Rang :</span>
+                      <span>{pm.exactRationale.rankGapReason}</span>
+                    </p>
+
+                    <p className="flex items-start gap-2">
+                      <span className="text-indigo-400 font-bold shrink-0">4. Séquence :</span>
+                      <span>{pm.exactRationale.sequenceReason}</span>
+                    </p>
+
+                    <p className="flex items-start gap-2">
+                      <span className="text-amber-400 font-bold shrink-0">5. Algo Site :</span>
+                      <span>{pm.exactRationale.siteProcessingReason}</span>
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* TAB: SÉQUENCES & TRAITEMENT DU SITE */}
+      {activeTab === "sequence_site" && (
+        <div className="space-y-6">
+          <div className="bg-gradient-to-r from-slate-900 via-amber-950/40 to-slate-950 border border-amber-500/40 rounded-3xl p-6 shadow-2xl relative overflow-hidden">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Cpu className="w-6 h-6 text-amber-400" />
+                  <h3 className="text-lg font-black text-white">
+                    SÉQUENCES & RÈGLES DE TRAITEMENT DU SITE
+                  </h3>
+                </div>
+                <p className="text-xs text-slate-300 mt-1">
+                  Analyse profonde du générateur virtuel du site Bet261 / Sporty-Tech : Biais domicile, comportement des cotes, impact du classement et fréquences des scores.
+                </p>
+              </div>
+
+              <div className="bg-slate-950/80 px-4 py-2.5 rounded-2xl border border-amber-500/30 text-xs font-mono font-bold text-amber-400">
+                <span>{siteAnalytics.totalMatchesAnalyzed} Matchs Analysés</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Key Analytics Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-1 text-center">
+              <span className="text-[10px] font-extrabold text-slate-400 uppercase block">
+                Biais Avantage Domicile
+              </span>
+              <span className="text-2xl font-black text-emerald-400 font-mono">
+                +{siteAnalytics.homeAdvantageBias}%
+              </span>
+              <p className="text-[10px] text-slate-500">
+                {siteAnalytics.homeWinPct}% Dom vs {siteAnalytics.awayWinPct}% Ext
+              </p>
+            </div>
+
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-1 text-center">
+              <span className="text-[10px] font-extrabold text-slate-400 uppercase block">
+                Favori de Rang (&gt;=4 Écart)
+              </span>
+              <span className="text-2xl font-black text-amber-400 font-mono">
+                {siteAnalytics.rankGapFavorablePct}% Victoire
+              </span>
+              <p className="text-[10px] text-slate-500">
+                Succès de l'équipe mieux classée
+              </p>
+            </div>
+
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-1 text-center">
+              <span className="text-[10px] font-extrabold text-slate-400 uppercase block">
+                Taux Inviolabilité 1X (Dom)
+              </span>
+              <span className="text-2xl font-black text-cyan-400 font-mono">
+                {siteAnalytics.homeWinPct + siteAnalytics.drawPct}%
+              </span>
+              <p className="text-[10px] text-slate-500">
+                Non-défaite à domicile sur le site
+              </p>
+            </div>
+
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-1 text-center">
+              <span className="text-[10px] font-extrabold text-slate-400 uppercase block">
+                Séquences Détectées
+              </span>
+              <span className="text-2xl font-black text-indigo-400 font-mono">
+                {sequencePatterns.length} Formules
+              </span>
+              <p className="text-[10px] text-slate-500">
+                Patterns algorithmiques actifs
+              </p>
+            </div>
+          </div>
+
+          {/* Sequence Patterns Detected */}
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-4">
+            <h4 className="text-sm font-black text-white uppercase tracking-wider flex items-center gap-2">
+              <Zap className="w-5 h-5 text-amber-400" />
+              <span>Séquences Algorithmiques Repérées dans la Database</span>
+            </h4>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {sequencePatterns.map((seq, idx) => (
+                <div key={idx} className="bg-slate-950 border border-slate-800/80 rounded-2xl p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                      {seq.impactLevel}
+                    </span>
+                    <span className="text-base font-black text-amber-400 font-mono">
+                      {seq.successRate}%
+                    </span>
+                  </div>
+
+                  <div>
+                    <h5 className="font-extrabold text-sm text-white">{seq.title}</h5>
+                    <p className="text-xs text-slate-400 mt-1">{seq.description}</p>
+                  </div>
+
+                  <div className="bg-slate-900 p-2.5 rounded-xl border border-slate-800 font-mono text-[11px] text-emerald-300 font-bold">
+                    {seq.formula}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Score Frequency Distribution on Site */}
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-4">
+            <h4 className="text-sm font-black text-white uppercase tracking-wider flex items-center gap-2">
+              <Hash className="w-5 h-5 text-purple-400" />
+              <span>Scores les plus fréquents générés par le site</span>
+            </h4>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-8 gap-3">
+              {siteAnalytics.scoreFrequencies.map((sf, idx) => (
+                <div key={idx} className="bg-slate-950 border border-slate-800 p-3 rounded-2xl text-center space-y-1">
+                  <span className="text-base font-black text-amber-400 font-mono block">{sf.score}</span>
+                  <span className="text-xs font-bold text-white block">{sf.pct}%</span>
+                  <span className="text-[9px] text-slate-500 block">{sf.count} fois</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB: MINES DE STRATÉGIES (TOOL) */}
+      {activeTab === "tool_strategies" && (
+        <ToolStrategyView
+          database={filteredDatabase}
+          entryPoints={entryPoints}
+          onCreateRuleFromDb={onCreateRuleFromDb}
+        />
+      )}
       {activeTab === "ai_mode" && (
         <div className="space-y-6">
           {/* AI Banner */}

@@ -742,37 +742,22 @@ export default function App() {
 
               <button
                 onClick={() => setActiveMainView("global_analysis")}
-                title="ANALYSER GLOBALE"
+                title="ANALYSE & TOOL INTEL"
                 className={`flex items-center ${
-                  isSidebarCollapsed ? "justify-center px-0 py-3" : "gap-3 px-3.5 py-2.5"
+                  isSidebarCollapsed ? "justify-center px-0 py-3" : "justify-between px-3.5 py-2.5"
                 } rounded-xl text-xs font-black transition-all cursor-pointer ${
-                  activeMainView === "global_analysis"
+                  activeMainView === "global_analysis" || activeMainView === "tool"
                     ? "bg-gradient-to-r from-emerald-400 via-teal-400 to-amber-400 text-slate-950 shadow-lg shadow-emerald-500/25 ring-1 ring-emerald-300/50"
                     : "text-slate-400 hover:text-amber-300 hover:bg-slate-800/60"
                 }`}
               >
-                <BarChart3 className="w-4 h-4 shrink-0" />
-                {!isSidebarCollapsed && <span className="truncate">ANALYSER GLOBALE</span>}
-              </button>
-
-              <button
-                onClick={() => setActiveMainView("tool")}
-                title="TOOL (Stratégies)"
-                className={`flex items-center ${
-                  isSidebarCollapsed ? "justify-center px-0 py-3" : "justify-between px-3.5 py-2.5"
-                } rounded-xl text-xs font-black transition-all cursor-pointer ${
-                  activeMainView === "tool"
-                    ? "bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 text-slate-950 shadow-lg shadow-emerald-500/30 ring-1 ring-emerald-300/60"
-                    : "text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 border border-emerald-500/20"
-                }`}
-              >
                 <div className="flex items-center gap-2.5">
-                  <Zap className="w-4 h-4 text-amber-400 fill-amber-400 shrink-0 animate-pulse" />
-                  {!isSidebarCollapsed && <span className="font-extrabold uppercase tracking-wider">TOOL</span>}
+                  <BarChart3 className="w-4 h-4 shrink-0" />
+                  {!isSidebarCollapsed && <span className="truncate">ANALYSE & TOOL INTEL</span>}
                 </div>
                 {!isSidebarCollapsed && (
-                  <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-slate-950/60 text-emerald-300 border border-emerald-500/30 font-bold">
-                    ALGO
+                  <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-slate-950/60 text-emerald-950 font-black border border-slate-950/20">
+                    ALGO +
                   </span>
                 )}
               </button>

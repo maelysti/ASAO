@@ -16,6 +16,7 @@ interface MatchCardProps {
 
 export const MatchCard: React.FC<MatchCardProps> = ({ event, matchIndex, database = [], onSelectEvent }) => {
   const [showAnalyzerModal, setShowAnalyzerModal] = useState<boolean>(false);
+  const [showStatsDetails, setShowStatsDetails] = useState<boolean>(false);
   const isCombined = "categoryName" in event;
   const statusCategory = classifyMatchStatus(event as any);
 
@@ -318,15 +319,6 @@ export const MatchCard: React.FC<MatchCardProps> = ({ event, matchIndex, databas
         </div>
       </div>
 
-      {/* Team Form Trajectory Section (Parcours des deux équipes) */}
-      <TeamFormTrajectory
-        homeTeamName={event.homeTeamName}
-        awayTeamName={event.awayTeamName}
-        database={database}
-        homeStats={homeStats}
-        awayStats={awayStats}
-      />
-
       {/* 1X2 Odds Section */}
       <div className="grid grid-cols-3 bg-[#161c26] border border-slate-800/90 rounded-xl p-2.5 text-center shadow-inner gap-1">
         <div>
@@ -349,8 +341,41 @@ export const MatchCard: React.FC<MatchCardProps> = ({ event, matchIndex, databas
         </div>
       </div>
 
-      {/* Rule & High Precision Analysis Block */}
-      <MatchRuleAnalysisBlock event={event} database={database} />
+      {/* Auto-Hide Stats Details Toggle Bar */}
+      <div className="flex items-center justify-between px-1">
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            setShowStatsDetails(!showStatsDetails);
+          }}
+          className="w-full py-1.5 px-3 bg-slate-900/90 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 rounded-xl text-[10px] font-extrabold text-slate-400 hover:text-slate-200 transition-all flex items-center justify-between cursor-pointer group/btn"
+        >
+          <div className="flex items-center gap-1.5">
+            <Activity className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Détails & Trajectoire Forme</span>
+          </div>
+          <span className="px-2 py-0.5 rounded bg-slate-800 group-hover/btn:bg-slate-700 text-emerald-400 font-mono font-black text-[9px]">
+            {showStatsDetails ? "Masquer ▲" : "Afficher ▼"}
+          </span>
+        </button>
+      </div>
+
+      {/* Collapsible Heavy Stats Details Block */}
+      {showStatsDetails && (
+        <div className="space-y-3 pt-1 animate-fadeIn">
+          {/* Team Form Trajectory Section (Parcours des deux équipes) */}
+          <TeamFormTrajectory
+            homeTeamName={event.homeTeamName}
+            awayTeamName={event.awayTeamName}
+            database={database}
+            homeStats={homeStats}
+            awayStats={awayStats}
+          />
+
+          {/* Rule & High Precision Analysis Block */}
+          <MatchRuleAnalysisBlock event={event} database={database} />
+        </div>
+      )}
 
       {/* Action Buttons: STATS H2H, ANALYSER, MARCHÉS */}
       <div className="grid grid-cols-3 gap-2 pt-1">
