@@ -328,3 +328,46 @@ export function generateProducedMatchesWithRationale(
 
   return produced.sort((a, b) => b.confidence - a.confidence);
 }
+
+/**
+ * Calculates optimal Kelly Criterion bankroll percentage for a bet recommendation.
+ */
+export function calculateKellyCriterion(confidencePct: number, odds: number): { stakePct: number; edgePct: number } {
+  const p = Math.min(0.98, Math.max(0.01, confidencePct / 100));
+  const b = odds - 1;
+  if (b <= 0) return { stakePct: 0, edgePct: 0 };
+
+  const q = 1 - p;
+  const fStar = (b * p - q) / b;
+  const edgePct = Math.round((p * odds - 1) * 100);
+
+  // Fractional Kelly (1/4 Kelly for safety)
+  const fractionalKelly = Math.max(0, fStar * 0.25 * 100);
+  const stakePct = Math.min(10, Math.round(fractionalKelly * 10) / 10);
+
+  return { stakePct, edgePct };
+}
+
+/**
+ * Generates downloadable CSV content from produced match predictions.
+ */
+export function exportPredictionsToCSV(predictions: ProducedMatchPrediction[]): string {
+  const headers = ["Championnat", "Round", "Domicile", "Exterieur", "Pronostic", "Cote", "Confiance (%)", "Fractions Kelly (%)", "Raison Principale"];
+  const rows = predictions.map((p) => {
+    const kelly = calculateKellyCriterion(p.confidence, p.recommendedOdds);
+    return [
+      `"${p.categoryName}"`,
+      p.roundNumber,
+      `"${p.match.homeTeamName}"`,
+      `"${p.match.awayTeamName}"`,
+      `"${p.predictedBet}"`,
+      p.recommendedOdds.toFixed(2),
+      p.confidence,
+      `${kelly.stakePct}%`,
+      `"${p.exactRationale.mainReason.replace(/"/g, '""')}"`,
+    ].join(",");
+  });
+
+  return [headers.join(","), ...rows].join("\n");
+}
+

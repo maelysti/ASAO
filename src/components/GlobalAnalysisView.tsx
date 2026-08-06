@@ -20,6 +20,8 @@ import {
   analyzeSiteDataProcessing,
   detectSequencePatterns,
   generateProducedMatchesWithRationale,
+  calculateKellyCriterion,
+  exportPredictionsToCSV,
 } from "../utils/sequenceEngine";
 import {
   BarChart3,
@@ -44,6 +46,8 @@ import {
   Cpu,
   Home,
   Grid,
+  Download,
+  DollarSign,
 } from "lucide-react";
 
 interface GlobalAnalysisViewProps {
@@ -697,38 +701,61 @@ export const GlobalAnalysisView: React.FC<GlobalAnalysisViewProps> = ({
                 </p>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <span className="px-3 py-1.5 rounded-xl bg-emerald-500/20 text-emerald-300 font-mono text-xs font-bold border border-emerald-500/40">
                   {producedMatches.filter((p) => p.confidence >= 90).length} Pronostics Ultra-Sûrs (&gt;=90%)
                 </span>
+                <button
+                  onClick={() => {
+                    const csvContent = exportPredictionsToCSV(producedMatches);
+                    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+                    const url = URL.createObjectURL(blob);
+                    const link = document.createElement("a");
+                    link.setAttribute("href", url);
+                    link.setAttribute("download", `Pronostics_Produits_Round.csv`);
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs rounded-xl transition-all cursor-pointer shadow-md"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Exporter CSV</span>
+                </button>
               </div>
             </div>
           </div>
 
           {/* List of Produced Matches with Explicit Rationale */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {producedMatches.map((pm, idx) => (
-              <div
-                key={idx}
-                className="bg-slate-900 border border-slate-800 hover:border-emerald-500/60 rounded-3xl p-5 shadow-xl transition-all space-y-4"
-              >
-                {/* Match Header */}
-                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                  <div>
-                    <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-slate-950 text-emerald-400 border border-slate-800 font-mono">
-                      {pm.categoryName} • Round {pm.roundNumber}
-                    </span>
-                    <h4 className="text-base font-black text-white mt-1">
-                      {pm.match.homeTeamName} <span className="text-slate-500 font-normal">vs</span> {pm.match.awayTeamName}
-                    </h4>
-                  </div>
+            {producedMatches.map((pm, idx) => {
+              const kelly = calculateKellyCriterion(pm.confidence, pm.recommendedOdds);
+              return (
+                <div
+                  key={idx}
+                  className="bg-slate-900 border border-slate-800 hover:border-emerald-500/60 rounded-3xl p-5 shadow-xl transition-all space-y-4"
+                >
+                  {/* Match Header */}
+                  <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                    <div>
+                      <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-slate-950 text-emerald-400 border border-slate-800 font-mono">
+                        {pm.categoryName} • Round {pm.roundNumber}
+                      </span>
+                      <h4 className="text-base font-black text-white mt-1">
+                        {pm.match.homeTeamName} <span className="text-slate-500 font-normal">vs</span> {pm.match.awayTeamName}
+                      </h4>
+                    </div>
 
-                  <div className="text-right">
-                    <span className="text-xs font-extrabold px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
-                      {pm.confidence}% Confiance
-                    </span>
+                    <div className="text-right flex flex-col items-end gap-1">
+                      <span className="text-xs font-extrabold px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                        {pm.confidence}% Confiance
+                      </span>
+                      <span className="text-[10px] font-mono font-bold text-amber-300 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20 flex items-center gap-1">
+                        <DollarSign className="w-3 h-3 text-amber-400" />
+                        Mise Kelly : {kelly.stakePct}%
+                      </span>
+                    </div>
                   </div>
-                </div>
 
                 {/* Predicted Bet & Odds */}
                 <div className="flex items-center justify-between bg-slate-950 p-3 rounded-2xl border border-slate-800/80">
@@ -781,7 +808,8 @@ export const GlobalAnalysisView: React.FC<GlobalAnalysisViewProps> = ({
                   </div>
                 </div>
               </div>
-            ))}
+            );
+          })}
           </div>
         </div>
       )}
