@@ -339,6 +339,54 @@ export default function App() {
     });
   }, [activeRawData, competitionResults, activeCategoryId, fetchedRoundMatches]);
 
+  // Redirect handler to jump straight to the closest active or upcoming round (journée)
+  const handleGoToClosestMatch = useCallback(() => {
+    const now = Date.now();
+    let bestRoundNumber: number | null = null;
+    let minDiff = Infinity;
+
+    // 1. Check all available rounds for the one with expectedStart closest to current time
+    if (availableRoundsList.length > 0) {
+      for (const r of availableRoundsList) {
+        if (r.expectedStart) {
+          const startMs = new Date(r.expectedStart).getTime();
+          if (!isNaN(startMs)) {
+            const diff = Math.abs(startMs - now);
+            if (diff < minDiff) {
+              minDiff = diff;
+              bestRoundNumber = Number(r.roundNumber);
+            }
+          }
+        }
+      }
+    }
+
+    // 2. Fall back to activeRawData.rounds[0] if no timestamp matched or if minDiff is large
+    if ((bestRoundNumber === null || minDiff > 12 * 3600 * 1000) && activeRawData?.rounds?.[0]?.roundNumber) {
+      const rawNum = Number(activeRawData.rounds[0].roundNumber);
+      if (!isNaN(rawNum) && rawNum > 0) {
+        bestRoundNumber = rawNum;
+      }
+    }
+
+    // 3. Fall back to first round in availableRoundsList
+    if (bestRoundNumber === null && availableRoundsList.length > 0) {
+      bestRoundNumber = Number(availableRoundsList[0].roundNumber);
+    }
+
+    if (bestRoundNumber !== null) {
+      setSelectedRoundNumber(bestRoundNumber);
+      setCurrentTab("all");
+    }
+
+    setTimeout(() => {
+      const gridEl = document.getElementById("match-grid-container");
+      if (gridEl) {
+        gridEl.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }, 100);
+  }, [availableRoundsList, activeRawData]);
+
   // Auto-sync selected round to first available round in raw response when competition changes, or if silentUpdates is false
   useEffect(() => {
     const isCategoryChanged = prevCategoryRef.current !== activeCategoryId;
@@ -347,19 +395,9 @@ export default function App() {
     }
 
     if (isCategoryChanged || !silentUpdates) {
-      if (activeRawData?.rounds?.[0]?.roundNumber) {
-        const firstNum = Number(activeRawData.rounds[0].roundNumber);
-        if (firstNum && firstNum > 0) {
-          setSelectedRoundNumber(firstNum);
-          return;
-        }
-      }
-      if (availableRoundsList.length > 0) {
-        const firstRound = availableRoundsList[0]?.roundNumber;
-        if (firstRound) setSelectedRoundNumber(firstRound);
-      }
+      handleGoToClosestMatch();
     }
-  }, [activeCategoryId, activeRawData, silentUpdates, availableRoundsList]);
+  }, [activeCategoryId, silentUpdates, handleGoToClosestMatch]);
 
   // Fetch results & live ranking for the active competition to get finished scores and live standings
   useEffect(() => {
@@ -635,46 +673,6 @@ export default function App() {
     const nextIdx = currentRoundIndex < availableRoundsList.length - 1 ? currentRoundIndex + 1 : 0;
     setSelectedRoundNumber(availableRoundsList[nextIdx].roundNumber);
   };
-
-  // Redirect handler to jump straight to the closest active or upcoming round (journée)
-  const handleGoToClosestMatch = useCallback(() => {
-    // 1. Search in current activeRoundMatches for UPCOMING or LIVE match
-    const hasUpcomingOrLive = activeRoundMatches.some((m) => {
-      const status = classifyMatchStatus(m);
-      return status === "upcoming" || status === "live";
-    });
-
-    if (hasUpcomingOrLive) {
-      if (currentTab === "finished") {
-        setCurrentTab("all");
-      }
-      setTimeout(() => {
-        const gridEl = document.getElementById("match-grid-container");
-        if (gridEl) {
-          gridEl.scrollIntoView({ behavior: "smooth", block: "start" });
-        }
-      }, 100);
-      return;
-    }
-
-    // 2. If no upcoming/live in current active round, search for the closest round in availableRoundsList
-    if (availableRoundsList.length > 0) {
-      const curIdx = availableRoundsList.findIndex((r) => Number(r.roundNumber) === Number(selectedRoundNumber));
-      const nextIdx = curIdx >= 0 && curIdx < availableRoundsList.length - 1 ? curIdx + 1 : 0;
-      const targetRound = availableRoundsList[nextIdx];
-      if (targetRound) {
-        setSelectedRoundNumber(Number(targetRound.roundNumber));
-        setCurrentTab("all");
-      }
-    }
-
-    setTimeout(() => {
-      const gridEl = document.getElementById("match-grid-container");
-      if (gridEl) {
-        gridEl.scrollIntoView({ behavior: "smooth", block: "start" });
-      }
-    }, 150);
-  }, [activeRoundMatches, availableRoundsList, selectedRoundNumber, currentTab]);
 
   const handleSelectCategory = (catId: number) => {
     setSelectedCategoryId(catId);
