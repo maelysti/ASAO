@@ -22,16 +22,16 @@ export const MatchCard: React.FC<MatchCardProps> = ({ event, matchIndex, databas
 
   const h2h = getH2HAnalysisForMatch(event, database);
 
-  // Format date cleanly in 12h AM/PM format matching screenshot (e.g. 07:54 AM)
+  // Format date cleanly in 24h format (e.g. 07:54 or 14:30)
   const formatMatchTime = (isoString?: string) => {
     if (!isoString || isoString === "0001-01-01T00:00:00Z") {
-      return "07:54 AM";
+      return "";
     }
     try {
       const d = new Date(isoString);
-      return d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
+      return d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", hour12: false });
     } catch {
-      return "07:54 AM";
+      return "";
     }
   };
 
@@ -234,6 +234,14 @@ export const MatchCard: React.FC<MatchCardProps> = ({ event, matchIndex, databas
         {/* Center Badge: Score or VS */}
         {isEndedOrFinished || formattedFtScore ? (
           <div className="flex flex-col items-center shrink-0 px-1 py-0.5 min-w-[85px] sm:min-w-[95px]">
+            {/* Match Game Time (Heure de jeu) displayed above the score */}
+            {event.expectedStart && formatMatchTime(event.expectedStart) ? (
+              <div className="text-[10px] sm:text-[11px] font-mono font-extrabold text-amber-300 bg-slate-900 border border-slate-700/80 px-2 py-0.5 rounded-md mb-1 flex items-center gap-1 shadow-sm whitespace-nowrap">
+                <Clock className="w-3 h-3 text-amber-400 shrink-0" />
+                <span>{formatMatchTime(event.expectedStart)}</span>
+              </div>
+            ) : null}
+
             {/* Main Score Badge */}
             <div className="px-2.5 sm:px-3.5 py-1 bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 font-black font-mono text-sm sm:text-base rounded-xl shadow-md flex items-center justify-center tracking-wider whitespace-nowrap">
               {formattedFtScore || "0 - 0"}
@@ -255,9 +263,12 @@ export const MatchCard: React.FC<MatchCardProps> = ({ event, matchIndex, databas
             <div className="px-2.5 py-1 bg-[#1a202c] text-slate-300 font-black text-xs rounded-xl border border-slate-700/80 shadow-inner whitespace-nowrap">
               VS
             </div>
-            <span className="text-[10px] font-mono font-bold text-slate-400 mt-1 whitespace-nowrap">
-              {formatMatchTime(event.expectedStart)}
-            </span>
+            {event.expectedStart && formatMatchTime(event.expectedStart) ? (
+              <span className="text-[10px] font-mono font-bold text-amber-300 mt-1 whitespace-nowrap flex items-center gap-1">
+                <Clock className="w-3 h-3 text-amber-400 shrink-0" />
+                {formatMatchTime(event.expectedStart)}
+              </span>
+            ) : null}
           </div>
         )}
 

@@ -50,7 +50,7 @@ export const MatchTabs: React.FC<MatchTabsProps> = ({
     if (!isoString || isoString === "0001-01-01T00:00:00Z") return "";
     try {
       const d = new Date(isoString);
-      return d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+      return d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", hour12: false });
     } catch {
       return "";
     }
