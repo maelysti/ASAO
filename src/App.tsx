@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   SportyEntryPoint,
   SportyEvent,
@@ -39,7 +39,7 @@ import { RuleItem, AIRecapPrediction, ExtractedMatchRecord } from "./types";
 import { DEFAULT_RULES, processAllRules, runAIModeAnalysis } from "./utils/ruleEngine";
 import { getH2HAnalysisForMatch } from "./utils/globalAnalysisEngine";
 
-import { AlertTriangle, Key, RefreshCw, Trophy, Layers, Activity, Database, Download, ListOrdered, Sliders, Zap, BarChart3, PanelLeftClose, PanelLeftOpen, ChevronLeft, ChevronRight, Wrench } from "lucide-react";
+import { AlertTriangle, Key, RefreshCw, Trophy, Layers, Activity, Database, Download, ListOrdered, Sliders, Zap, BarChart3, PanelLeftClose, PanelLeftOpen, ChevronLeft, ChevronRight, Wrench, Clock } from "lucide-react";
 
 export default function App() {
   const [token, setToken] = useState<string>(getStoredToken());
@@ -51,6 +51,25 @@ export default function App() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
     return localStorage.getItem("virtual_show_sidebar_collapsed") === "true";
   });
+
+  // Live real-time clock with seconds
+  const [clockTime, setClockTime] = useState<string>("");
+
+  useEffect(() => {
+    const updateClock = () => {
+      const now = new Date();
+      setClockTime(
+        now.toLocaleTimeString("fr-FR", {
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+        })
+      );
+    };
+    updateClock();
+    const timer = setInterval(updateClock, 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     localStorage.setItem("virtual_show_sidebar_collapsed", isSidebarCollapsed ? "true" : "false");
@@ -78,7 +97,7 @@ export default function App() {
   const [autoExtractInterval, setAutoExtractInterval] = useState<number>(2);
 
   const [autoRefresh, setAutoRefresh] = useState<boolean>(true);
-  const [countdown, setCountdown] = useState<number>(20);
+  const [countdown, setCountdown] = useState<number>(10);
 
   const [apiState, setApiState] = useState<ApiConnectionState>({
     status: "loading",
@@ -129,7 +148,7 @@ export default function App() {
     loadData(token);
   }, [token, loadData]);
 
-  // Auto Refresh countdown timer
+  // Auto Refresh countdown timer (10s)
   useEffect(() => {
     if (!autoRefresh) return;
 
@@ -137,7 +156,7 @@ export default function App() {
       setCountdown((prev) => {
         if (prev <= 1) {
           loadData(token);
-          return 20;
+          return 10;
         }
         return prev - 1;
       });
@@ -150,7 +169,7 @@ export default function App() {
   const handleSaveToken = (newToken: string) => {
     saveStoredToken(newToken);
     setToken(newToken);
-    setCountdown(20);
+    setCountdown(10);
     loadData(newToken);
   };
 
@@ -281,6 +300,9 @@ export default function App() {
   }, []);
 
   const [selectedRoundNumber, setSelectedRoundNumber] = useState<number>(1);
+  const [silentUpdates, setSilentUpdates] = useState<boolean>(true);
+  const prevCategoryRef = useRef<number>(activeCategoryId);
+  const autoAdvancedRoundsRef = useRef<Set<string>>(new Set());
   const [competitionResults, setCompetitionResults] = useState<Record<number, any[]>>({});
 
   // Construct full list of rounds for active competition dynamically
@@ -317,20 +339,27 @@ export default function App() {
     });
   }, [activeRawData, competitionResults, activeCategoryId, fetchedRoundMatches]);
 
-  // Auto-sync selected round to first available round in raw response when competition changes
+  // Auto-sync selected round to first available round in raw response when competition changes, or if silentUpdates is false
   useEffect(() => {
-    if (activeRawData?.rounds?.[0]?.roundNumber) {
-      const firstNum = Number(activeRawData.rounds[0].roundNumber);
-      if (firstNum && firstNum > 0) {
-        setSelectedRoundNumber(firstNum);
-        return;
+    const isCategoryChanged = prevCategoryRef.current !== activeCategoryId;
+    if (isCategoryChanged) {
+      prevCategoryRef.current = activeCategoryId;
+    }
+
+    if (isCategoryChanged || !silentUpdates) {
+      if (activeRawData?.rounds?.[0]?.roundNumber) {
+        const firstNum = Number(activeRawData.rounds[0].roundNumber);
+        if (firstNum && firstNum > 0) {
+          setSelectedRoundNumber(firstNum);
+          return;
+        }
+      }
+      if (availableRoundsList.length > 0) {
+        const firstRound = availableRoundsList[0]?.roundNumber;
+        if (firstRound) setSelectedRoundNumber(firstRound);
       }
     }
-    if (availableRoundsList.length > 0) {
-      const firstRound = availableRoundsList[0]?.roundNumber;
-      if (firstRound) setSelectedRoundNumber(firstRound);
-    }
-  }, [activeCategoryId, activeRawData]);
+  }, [activeCategoryId, activeRawData, silentUpdates, availableRoundsList]);
 
   // Fetch results & live ranking for the active competition to get finished scores and live standings
   useEffect(() => {
@@ -434,17 +463,61 @@ export default function App() {
     (r: any) => Number(r.roundNumber) === Number(selectedRoundNumber)
   );
   const cachedRoundData = fetchedRoundMatches[activeCacheKey];
+  const matchedResultRound = (competitionResults[activeCategoryId] || []).find(
+    (r: any) => Number(r.roundNumber) === Number(selectedRoundNumber)
+  );
+
+  const cachedMatchesArray = Array.isArray(cachedRoundData)
+    ? cachedRoundData
+    : cachedRoundData?.matches;
 
   const rawMatchesForActiveRound =
     activeRawRoundObj?.matches && activeRawRoundObj.matches.length > 0
       ? activeRawRoundObj.matches
-      : Array.isArray(cachedRoundData)
-      ? cachedRoundData
-      : cachedRoundData?.matches || [];
+      : cachedMatchesArray && cachedMatchesArray.length > 0
+      ? cachedMatchesArray
+      : matchedResultRound?.matches && matchedResultRound.matches.length > 0
+      ? matchedResultRound.matches
+      : [];
 
   const roundStartTime =
     activeRawRoundObj?.expectedStart ||
-    (!Array.isArray(cachedRoundData) ? cachedRoundData?.expectedStart : undefined);
+    (!Array.isArray(cachedRoundData) ? cachedRoundData?.expectedStart : undefined) ||
+    matchedResultRound?.expectedStart;
+
+  // Auto-switch to NEXT round when current round start time has elapsed by 1 min 15 sec (+75000 ms) AND auto-redirection (Cloche) is ACTIVE (!silentUpdates)
+  useEffect(() => {
+    if (silentUpdates || !roundStartTime) return;
+
+    const interval = setInterval(() => {
+      try {
+        const startMs = new Date(roundStartTime).getTime();
+        if (isNaN(startMs)) return;
+
+        const now = Date.now();
+        // 1 minute 15 seconds = 75,000 milliseconds
+        if (now >= startMs + 75000) {
+          const advanceKey = `${activeCategoryId}_${selectedRoundNumber}_${roundStartTime}`;
+          if (!autoAdvancedRoundsRef.current.has(advanceKey)) {
+            autoAdvancedRoundsRef.current.add(advanceKey);
+            const curIdx = availableRoundsList.findIndex(
+              (r) => Number(r.roundNumber) === Number(selectedRoundNumber)
+            );
+            if (curIdx >= 0 && curIdx < availableRoundsList.length - 1) {
+              const nextRound = availableRoundsList[curIdx + 1];
+              if (nextRound && Number(nextRound.roundNumber) !== Number(selectedRoundNumber)) {
+                setSelectedRoundNumber(Number(nextRound.roundNumber));
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Auto round switch error:", err);
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [silentUpdates, roundStartTime, activeCategoryId, selectedRoundNumber, availableRoundsList]);
 
   // Map matches of the active round directly from real API data
   const activeRoundMatches: CombinedMatchData[] = rawMatchesForActiveRound.map((m: any) => {
@@ -563,6 +636,46 @@ export default function App() {
     setSelectedRoundNumber(availableRoundsList[nextIdx].roundNumber);
   };
 
+  // Redirect handler to jump straight to the closest active or upcoming round (journée)
+  const handleGoToClosestMatch = useCallback(() => {
+    // 1. Search in current activeRoundMatches for UPCOMING or LIVE match
+    const hasUpcomingOrLive = activeRoundMatches.some((m) => {
+      const status = classifyMatchStatus(m);
+      return status === "upcoming" || status === "live";
+    });
+
+    if (hasUpcomingOrLive) {
+      if (currentTab === "finished") {
+        setCurrentTab("all");
+      }
+      setTimeout(() => {
+        const gridEl = document.getElementById("match-grid-container");
+        if (gridEl) {
+          gridEl.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+      }, 100);
+      return;
+    }
+
+    // 2. If no upcoming/live in current active round, search for the closest round in availableRoundsList
+    if (availableRoundsList.length > 0) {
+      const curIdx = availableRoundsList.findIndex((r) => Number(r.roundNumber) === Number(selectedRoundNumber));
+      const nextIdx = curIdx >= 0 && curIdx < availableRoundsList.length - 1 ? curIdx + 1 : 0;
+      const targetRound = availableRoundsList[nextIdx];
+      if (targetRound) {
+        setSelectedRoundNumber(Number(targetRound.roundNumber));
+        setCurrentTab("all");
+      }
+    }
+
+    setTimeout(() => {
+      const gridEl = document.getElementById("match-grid-container");
+      if (gridEl) {
+        gridEl.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }, 150);
+  }, [activeRoundMatches, availableRoundsList, selectedRoundNumber, currentTab]);
+
   const handleSelectCategory = (catId: number) => {
     setSelectedCategoryId(catId);
   };
@@ -596,19 +709,26 @@ export default function App() {
           {/* Brand Logo & Title with Toggle Button */}
           <div className="flex items-center justify-between gap-2">
             {!isSidebarCollapsed ? (
-              <div className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-emerald-500/20 via-teal-500/20 to-slate-900 border border-emerald-500/40 rounded-xl shadow-inner flex-1">
-                <Trophy className="w-5 h-5 text-emerald-400 shrink-0" />
-                <span className="font-black text-sm uppercase tracking-widest text-emerald-300 truncate">
-                  VIRTUAL SHOW
-                </span>
+              <div className="flex items-center justify-between gap-2 px-3 py-2 bg-gradient-to-r from-emerald-500/20 via-teal-500/20 to-slate-900 border border-emerald-500/40 rounded-xl shadow-inner flex-1 min-w-0">
+                <div className="flex items-center gap-2 min-w-0">
+                  <Trophy className="w-5 h-5 text-emerald-400 shrink-0" />
+                  <span className="font-black text-xs sm:text-sm uppercase tracking-wider text-emerald-300 truncate">
+                    VIRTUAL SHOW
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5 px-2 py-0.5 bg-slate-950/90 border border-emerald-400/40 rounded-lg text-emerald-300 font-mono text-xs font-black shadow-sm shrink-0">
+                  <Clock className="w-3.5 h-3.5 text-emerald-400 shrink-0 animate-pulse" />
+                  <span>{clockTime || "--:--:--"}</span>
+                </div>
               </div>
             ) : (
               <div
-                className="flex items-center justify-center w-10 h-10 bg-gradient-to-r from-emerald-500/20 via-teal-500/20 to-slate-900 border border-emerald-500/40 rounded-xl shadow-inner mx-auto cursor-pointer"
-                title="VIRTUAL SHOW"
+                className="flex flex-col items-center justify-center p-2 bg-gradient-to-r from-emerald-500/20 via-teal-500/20 to-slate-900 border border-emerald-500/40 rounded-xl shadow-inner mx-auto cursor-pointer"
+                title={`VIRTUAL SHOW - ${clockTime}`}
                 onClick={() => setIsSidebarCollapsed(false)}
               >
                 <Trophy className="w-5 h-5 text-emerald-400 shrink-0" />
+                <span className="font-mono text-[10px] text-emerald-300 font-bold mt-1">{clockTime}</span>
               </div>
             )}
 
@@ -778,7 +898,7 @@ export default function App() {
                   ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-300"
                   : "bg-slate-800 border-slate-700 text-slate-400 hover:text-slate-200"
               }`}
-              title="Activer/Désactiver l'actualisation automatique de 20s"
+              title="Activer/Désactiver l'actualisation automatique de 10s"
             >
               <RefreshCw
                 className={`w-3.5 h-3.5 shrink-0 ${
@@ -791,7 +911,7 @@ export default function App() {
             {/* Refresh Manual */}
             <button
               onClick={() => {
-                setCountdown(20);
+                setCountdown(10);
                 loadData(token);
               }}
               disabled={apiState.status === "loading"}
@@ -874,6 +994,10 @@ export default function App() {
               }}
               searchQuery={searchQuery}
               onSearchChange={(q) => setSearchQuery(q)}
+              onGoToClosestMatch={handleGoToClosestMatch}
+              categoryName={currentEntryPoint?.name}
+              silentUpdates={silentUpdates}
+              onToggleSilentUpdates={() => setSilentUpdates((prev) => !prev)}
             />
 
             {/* Main Content Area */}
@@ -942,7 +1066,7 @@ export default function App() {
 
               {/* Match Cards Grid */}
               {filteredMatches.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div id="match-grid-container" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {filteredMatches.map((ev, idx) => (
                     <MatchCard
                       key={ev.id || idx}
