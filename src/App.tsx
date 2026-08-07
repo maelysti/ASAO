@@ -36,14 +36,24 @@ import { ToolStrategyView } from "./components/ToolStrategyView";
 import { enrichRecordsWithRoundRanks, computeSeasonRoundRankings } from "./utils/standingsEngine";
 import { SafeParlayBanner } from "./components/SafeParlayBanner";
 import { RuleStatsRibbon } from "./components/RuleStatsRibbon";
+import { PasswordGateModal } from "./components/PasswordGateModal";
 
 import { RuleItem, AIRecapPrediction, ExtractedMatchRecord } from "./types";
 import { DEFAULT_RULES, processAllRules, runAIModeAnalysis } from "./utils/ruleEngine";
 import { getH2HAnalysisForMatch } from "./utils/globalAnalysisEngine";
 
-import { AlertTriangle, Key, RefreshCw, Trophy, Layers, Activity, Database, Download, ListOrdered, Sliders, Zap, BarChart3, PanelLeftClose, PanelLeftOpen, ChevronLeft, ChevronRight, Wrench, Clock, Flame } from "lucide-react";
+import { AlertTriangle, Key, RefreshCw, Trophy, Layers, Activity, Database, Download, ListOrdered, Sliders, Zap, BarChart3, PanelLeftClose, PanelLeftOpen, ChevronLeft, ChevronRight, Wrench, Clock, Flame, Lock } from "lucide-react";
 
 export default function App() {
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
+    return localStorage.getItem("SPORTY_SITE_AUTHENTICATED") === "true";
+  });
+
+  const handleLockSite = () => {
+    localStorage.removeItem("SPORTY_SITE_AUTHENTICATED");
+    setIsAuthenticated(false);
+  };
+
   const [token, setToken] = useState<string>(getStoredToken());
   const [entryPoints, setEntryPoints] = useState<SportyEntryPoint[]>([]);
   const [events, setEvents] = useState<SportyEvent[]>([]);
@@ -755,6 +765,10 @@ export default function App() {
     downloadAnchor.remove();
   };
 
+  if (!isAuthenticated) {
+    return <PasswordGateModal onUnlock={() => setIsAuthenticated(true)} />;
+  }
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col lg:flex-row font-sans selection:bg-emerald-500 selection:text-slate-950">
       {/* LEFT NAVIGATION SIDEBAR / RUBAN DE NAVIGATION GAUCHE */}
@@ -1035,6 +1049,15 @@ export default function App() {
           >
             <Download className="w-3.5 h-3.5 shrink-0" />
             {!isSidebarCollapsed && <span>Exporter JSON</span>}
+          </button>
+
+          <button
+            onClick={handleLockSite}
+            className="w-full py-2 rounded-xl bg-slate-800 hover:bg-rose-950/80 border border-slate-700 hover:border-rose-800/80 text-slate-300 hover:text-rose-300 text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer"
+            title="Verrouiller le site (Mot de passe Naty)"
+          >
+            <Lock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+            {!isSidebarCollapsed && <span>Verrouiller (Naty)</span>}
           </button>
         </div>
       </aside>

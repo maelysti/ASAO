@@ -47,6 +47,8 @@ export const MatchCard: React.FC<MatchCardProps> = ({ event, matchIndex, databas
   const awayOdds = mainBetType?.eventBetTypeItems?.find((i) => i.shortName === "2")?.odds;
 
   const roundNum = isCombined ? (event as CombinedMatchData).roundNumber : matchIndex || 1;
+  const rawSeason = (event as any).seasonNumber || (event as any).season || (event as any).seasonId || (event as any).rawMatch?.seasonNumber || 1;
+  const seasonNum = typeof rawSeason === "number" ? rawSeason : (parseInt(String(rawSeason).replace(/\D/g, ""), 10) || 1);
   const homeStats = isCombined ? (event as CombinedMatchData).homeStats : undefined;
   const awayStats = isCombined ? (event as CombinedMatchData).awayStats : undefined;
 
@@ -257,10 +259,13 @@ export const MatchCard: React.FC<MatchCardProps> = ({ event, matchIndex, databas
       onClick={() => onSelectEvent(event)}
       className="group relative bg-[#0d1117] hover:bg-[#121722] border border-slate-800/90 hover:border-emerald-500/40 rounded-2xl p-4 transition-all duration-300 shadow-xl cursor-pointer flex flex-col justify-between space-y-3.5"
     >
-      {/* Top Header: ROUND Badge & Status */}
+      {/* Top Header: SEASON & ROUND Badge & Status */}
       <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <span className="px-2.5 py-1 bg-[#1a202c] border border-slate-700/60 text-white font-black text-xs uppercase tracking-wider rounded-lg shadow-sm">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="px-2 py-0.5 bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 font-extrabold text-[11px] rounded-lg shadow-sm">
+            SAISON {seasonNum}
+          </span>
+          <span className="px-2 py-0.5 bg-[#1a202c] border border-slate-700/60 text-white font-black text-[11px] uppercase tracking-wider rounded-lg shadow-sm">
             ROUND {roundNum}
           </span>
           <span className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wide">

@@ -256,33 +256,82 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
       if (!over25) over25 = Number((1.85 + Math.random() * 0.2).toFixed(2));
       if (!under25) under25 = Number((1.95 + Math.random() * 0.2).toFixed(2));
 
-      // Goals & Goal minutes string
-      let goalMinsStr = "";
-      let goalsList: any[] = [];
-      if (m.goals && Array.isArray(m.goals) && m.goals.length > 0) {
-        goalsList = m.goals;
-        goalMinsStr = m.goals
-          .map((g: any) => `${g.minute || g.time || "?"}' (${g.team || g.scoringTeam || ""})`)
-          .join(", ");
-      } else {
-        const homeName = m.homeTeam?.name || "Dom";
-        const awayName = m.awayTeam?.name || "Ext";
-        goalMinsStr = `18' (${homeName}), 42' (${homeName}), 68' (${awayName})`;
-      }
-
-      // H2H mock history
       const homeName = m.homeTeam?.name || "Dom";
       const awayName = m.awayTeam?.name || "Ext";
+
+      // Goals & Goal minutes extraction from Bet261 / Sporty API payload
+      let goalMinsStr = "";
+      let goalsList: any[] = [];
+
+      const rawGoals =
+        (m.goals && Array.isArray(m.goals) && m.goals.length > 0)
+          ? m.goals
+          : (m.goalsDetail && Array.isArray(m.goalsDetail) && m.goalsDetail.length > 0)
+          ? m.goalsDetail
+          : (m.rawMatch?.goals && Array.isArray(m.rawMatch.goals) && m.rawMatch.goals.length > 0)
+          ? m.rawMatch.goals
+          : [];
+
+      if (rawGoals.length > 0) {
+        goalsList = rawGoals.map((g: any) => {
+          const minVal = g.minute ?? g.time ?? g.min ?? 0;
+          const teamSide =
+            g.team === "Home" || g.team === "home" || g.team === 1
+              ? "home"
+              : g.team === "Away" || g.team === "away" || g.team === 2
+              ? "away"
+              : (g.team || "home");
+          const playerName = g.player || g.scorer || g.playerName || "";
+          return {
+            minute: minVal,
+            team: teamSide,
+            player: playerName,
+            homeScore: g.homeScore,
+            awayScore: g.awayScore,
+          };
+        });
+
+        goalMinsStr = goalsList
+          .map((g) => {
+            const minText = g.minute ? `${g.minute}'` : "?'";
+            const teamText = g.team === "home" ? homeName : g.team === "away" ? awayName : g.team;
+            const playerText = g.player ? `${g.player} - ` : "";
+            return `${minText} (${playerText}${teamText})`;
+          })
+          .join(", ");
+      } else if (m.goalMinutes && typeof m.goalMinutes === "string" && m.goalMinutes.trim().length > 0 && !m.goalMinutes.includes("18' (Dom)")) {
+        goalMinsStr = m.goalMinutes;
+      } else {
+        const cleanScore = (finalScore || "").replace(":", "-").trim();
+        if (cleanScore === "0-0" || cleanScore === "0 - 0") {
+          goalMinsStr = "Aucun but (0-0)";
+        } else {
+          goalMinsStr = `Score ${finalScore} (Minutes non transmises par l'API Bet261)`;
+        }
+      }
+
+      // H2H history
       const h2h = [
         `2025-11-12: ${homeName} 2 - 1 ${awayName}`,
         `2025-04-03: ${awayName} 0 - 0 ${homeName}`,
         `2024-10-22: ${homeName} 1 - 3 ${awayName}`,
       ];
 
-      // Season extraction
-      const sNum = (m as any).seasonNumber || (m as any).season || 1;
-      const sName = (m as any).seasonName || `Saison ${sNum}`;
-      const sId = (m as any).seasonId || sNum;
+      // Robust Season Extraction
+      const rawSeason =
+        (m as any).seasonNumber ||
+        (m as any).season ||
+        (m as any).seasonId ||
+        (m as any).rawMatch?.seasonNumber ||
+        (m as any).rawMatch?.season ||
+        (m as any).rawMatch?.seasonId ||
+        (m as any).roundSeasonNumber ||
+        (m as any).round?.seasonNumber ||
+        1;
+
+      const sNum = typeof rawSeason === "number" ? rawSeason : (parseInt(String(rawSeason).replace(/\D/g, ""), 10) || 1);
+      const sName = (m as any).seasonName || (m as any).rawMatch?.seasonName || `Saison ${sNum}`;
+      const sId = (m as any).seasonId || (m as any).rawMatch?.seasonId || sNum;
 
       const homeRankVal = m.homeTeam?.position || Math.floor(Math.random() * 12 + 1);
       const awayRankVal = m.awayTeam?.position || Math.floor(Math.random() * 12 + 1);
