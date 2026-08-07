@@ -33,6 +33,7 @@ import { BulletView } from "./components/BulletView";
 import { ExtractionView } from "./components/ExtractionView";
 import { GlobalAnalysisView } from "./components/GlobalAnalysisView";
 import { ToolStrategyView } from "./components/ToolStrategyView";
+import { enrichRecordsWithRoundRanks, computeSeasonRoundRankings } from "./utils/standingsEngine";
 import { SafeParlayBanner } from "./components/SafeParlayBanner";
 import { RuleStatsRibbon } from "./components/RuleStatsRibbon";
 
@@ -305,7 +306,8 @@ export default function App() {
       prev.forEach((rec) => map.set(rec.id, rec));
       // Update/insert new
       newRecords.forEach((rec) => map.set(rec.id, rec));
-      return Array.from(map.values());
+      const combined = Array.from(map.values());
+      return enrichRecordsWithRoundRanks(combined);
     });
   }, []);
 
@@ -510,8 +512,36 @@ export default function App() {
       }
     });
 
+    // Continuous 5-second silent background poll for instant score & rank updates
+    const livePollTimer = setInterval(() => {
+      if (!isMounted) return;
+      fetchInstantLeagueRound(selectedRoundNumber, Number(eventCategoryId), token).then((res) => {
+        if (isMounted && res.data && res.data.matches && Array.isArray(res.data.matches)) {
+          setFetchedRoundMatches((prev) => ({
+            ...prev,
+            [cacheKey]: {
+              matches: res.data.matches,
+              expectedStart: res.data.expectedStart,
+            },
+          }));
+        }
+      });
+      fetchInstantLeagueResults(activeCategoryId, 0, 100, token).then((resResults) => {
+        if (isMounted && resResults.data) {
+          const roundsList = Array.isArray(resResults.data)
+            ? resResults.data
+            : (resResults.data as any).rounds || [];
+          setCompetitionResults((prev) => ({
+            ...prev,
+            [activeCategoryId]: roundsList,
+          }));
+        }
+      });
+    }, 5000);
+
     return () => {
       isMounted = false;
+      clearInterval(livePollTimer);
     };
   }, [selectedRoundNumber, activeCategoryId, token, apiState.lastUpdated]);
 
@@ -577,6 +607,12 @@ export default function App() {
     return () => clearInterval(interval);
   }, [silentUpdates, roundStartTime, activeCategoryId, selectedRoundNumber, availableRoundsList]);
 
+  // Calculate round-by-round entering rankings for the active category
+  const activeResultsRounds = competitionResults[activeCategoryId] || [];
+  const seasonRankings = useMemo(() => {
+    return computeSeasonRoundRankings(activeResultsRounds);
+  }, [activeResultsRounds]);
+
   // Map matches of the active round directly from real API data
   const activeRoundMatches: CombinedMatchData[] = rawMatchesForActiveRound.map((m: any) => {
     const matchStart =
@@ -588,7 +624,6 @@ export default function App() {
     const awayName = m.awayTeam?.name || m.name?.split(" vs ")[1] || "Équipe 2";
 
     // Cross-reference with results for this round & teams if available
-    const activeResultsRounds = competitionResults[activeCategoryId] || [];
     const matchedResultRound = activeResultsRounds.find(
       (r: any) => Number(r.roundNumber) === Number(selectedRoundNumber)
     );
@@ -608,6 +643,9 @@ export default function App() {
 
     const homeRankObj = rankingTeams.find((t) => t.name === homeName);
     const awayRankObj = rankingTeams.find((t) => t.name === awayName);
+
+    const homeRankAtRound = seasonRankings.getEnteringRank(selectedRoundNumber, homeName);
+    const awayRankAtRound = seasonRankings.getEnteringRank(selectedRoundNumber, awayName);
 
     return {
       id: m.id || resultMatch?.id,
@@ -631,6 +669,8 @@ export default function App() {
         lost: awayRankObj?.lost ?? m.awayTeam?.lost ?? 0,
         draw: awayRankObj?.draw ?? m.awayTeam?.draw ?? 0,
       },
+      homeRankAtRound,
+      awayRankAtRound,
       expectedStart: matchStart || resultMatch?.expectedStart,
       expectedEnd: activeRawRoundObj?.expectedEnd,
       state: m.state || (isFinished ? "Ended" : "PreEvent"),

@@ -339,6 +339,8 @@ export interface CombinedMatchData {
     lost: number;
     draw: number;
   };
+  homeRankAtRound?: number;
+  awayRankAtRound?: number;
   expectedStart: string;
   expectedEnd?: string;
   state: string;

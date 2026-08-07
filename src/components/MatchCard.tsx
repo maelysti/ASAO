@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { Clock, Shield, Activity, Layers, Database, Lightbulb, AlertCircle, Sparkles, Zap } from "lucide-react";
+import React, { useState, useMemo } from "react";
+import { Clock, Shield, Activity, Layers, Database, Lightbulb, AlertCircle, Sparkles, Zap, Trophy, X } from "lucide-react";
 import { SportyEvent, ExtractedMatchRecord, RuleItem } from "../types";
 import { classifyMatchStatus, CombinedMatchData, getTeamLogoUrl } from "../services/sportyApi";
 import { getH2HAnalysisForMatch } from "../utils/globalAnalysisEngine";
@@ -18,6 +18,7 @@ interface MatchCardProps {
 export const MatchCard: React.FC<MatchCardProps> = ({ event, matchIndex, database = [], activeRules, onSelectEvent }) => {
   const [showAnalyzerModal, setShowAnalyzerModal] = useState<boolean>(false);
   const [showStatsDetails, setShowStatsDetails] = useState<boolean>(false);
+  const [showFifaRecapModal, setShowFifaRecapModal] = useState<boolean>(false);
   const isCombined = "categoryName" in event;
   const statusCategory = classifyMatchStatus(event as any);
 
@@ -67,8 +68,8 @@ export const MatchCard: React.FC<MatchCardProps> = ({ event, matchIndex, databas
   const homePct = calculateWinPct(homeStats);
   const awayPct = calculateWinPct(awayStats);
 
-  const homeRank = homeStats?.position || 1;
-  const awayRank = awayStats?.position || 2;
+  const homeRank = (event as any).homeRankAtRound ?? (event as any).homeRank;
+  const awayRank = (event as any).awayRankAtRound ?? (event as any).awayRank;
 
   // Extract score data if available
   const rawScore = event.score || (event as any).rawMatch?.score;
@@ -134,16 +135,115 @@ export const MatchCard: React.FC<MatchCardProps> = ({ event, matchIndex, databas
     }
   }
 
+  // Helper to normalize any score string into "X - Y"
+  const normalizeScoreStr = (s: string | undefined | null) => {
+    if (!s) return "";
+    const clean = s.trim().replace(":", "-");
+    const parts = clean.split("-").map((p) => p.trim());
+    if (parts.length === 2 && !isNaN(parseInt(parts[0], 10)) && !isNaN(parseInt(parts[1], 10))) {
+      return `${parseInt(parts[0], 10)} - ${parseInt(parts[1], 10)}`;
+    }
+    return s;
+  };
+
+  if (formattedFtScore) {
+    formattedFtScore = normalizeScoreStr(formattedFtScore);
+  }
+
   // Format half time score (HT)
   let formattedHtScore = "";
   if (rawHtScore) {
-    formattedHtScore = rawHtScore.replace(":", " - ");
-  } else if (scoresArr && scoresArr.length > 1) {
+    formattedHtScore = normalizeScoreStr(rawHtScore);
+  } else if (scoresArr && scoresArr.length > 0) {
     const htObj = scoresArr.find((s: any) => s.type === "HT" || s.period === "HT" || s.period === "1stHalf");
     if (htObj && (htObj.homeScore !== undefined || htObj.home !== undefined)) {
       formattedHtScore = `${htObj.homeScore ?? htObj.home} - ${htObj.awayScore ?? htObj.away}`;
     }
   }
+
+  if (!formattedHtScore && Array.isArray(goalsList) && goalsList.length > 0) {
+    let htHome = 0;
+    let htAway = 0;
+    let hasHtGoal = false;
+    goalsList.forEach((g: any) => {
+      const min = g.minute ?? g.min;
+      if (min !== undefined && min <= 45) {
+        hasHtGoal = true;
+        const t = String(g.team || "").toLowerCase();
+        if (t === "home" || t === "1") htHome++;
+        else if (t === "away" || t === "2") htAway++;
+      }
+    });
+    if (hasHtGoal) {
+      formattedHtScore = `${htHome} - ${htAway}`;
+    }
+  }
+
+  // Format 2nd half score (2ND HT)
+  let formatted2ndHtScore = "";
+  if (scoresArr && scoresArr.length > 0) {
+    const secondHalfObj = scoresArr.find(
+      (s: any) =>
+        s.type === "2ndHalf" ||
+        s.type === "2HT" ||
+        s.period === "2ndHalf" ||
+        s.period === "2HT" ||
+        s.period === "2nd"
+    );
+    if (secondHalfObj && (secondHalfObj.homeScore !== undefined || secondHalfObj.home !== undefined)) {
+      formatted2ndHtScore = `${secondHalfObj.homeScore ?? secondHalfObj.home} - ${secondHalfObj.awayScore ?? secondHalfObj.away}`;
+    }
+  }
+
+  // If not explicitly provided in API, derive 2ND HT from FT minus HT
+  if (!formatted2ndHtScore) {
+    const ftToUse = formattedFtScore || (isEndedOrFinished ? "0 - 0" : "");
+    const htToUse = formattedHtScore || (isEndedOrFinished ? "0 - 0" : "");
+
+    if (ftToUse && htToUse) {
+      const ftParts = ftToUse.replace(":", "-").split("-").map((s) => parseInt(s.trim(), 10));
+      const htParts = htToUse.replace(":", "-").split("-").map((s) => parseInt(s.trim(), 10));
+
+      if (
+        ftParts.length === 2 &&
+        htParts.length === 2 &&
+        !isNaN(ftParts[0]) &&
+        !isNaN(ftParts[1]) &&
+        !isNaN(htParts[0]) &&
+        !isNaN(htParts[1])
+      ) {
+        const h2nd = Math.max(0, ftParts[0] - htParts[0]);
+        const a2nd = Math.max(0, ftParts[1] - htParts[1]);
+        formatted2ndHtScore = `${h2nd} - ${a2nd}`;
+      }
+    }
+  }
+
+  const formattedGoalsList = useMemo(() => {
+    if (Array.isArray(goalsList) && goalsList.length > 0) {
+      return goalsList.map((g: any) => ({
+        min: g.minute ?? g.min ?? 0,
+        player: g.player || g.playerName || g.scorer || g.scorerName || (g.type === "Penalty" ? "Pénalty" : "But"),
+        team: String(g.team || "").toLowerCase(),
+        type: g.type,
+      }));
+    }
+    const list: Array<{ min: number; player: string; team: string; type?: string }> = [];
+    homeGoals.forEach((m) => {
+      list.push({ min: m, player: "But", team: "home" });
+    });
+    awayGoals.forEach((m) => {
+      list.push({ min: m, player: "But", team: "away" });
+    });
+    return list.sort((a, b) => a.min - b.min);
+  }, [goalsList, homeGoals, awayGoals]);
+
+  const homeGoalsFormatted = formattedGoalsList.filter(
+    (g) => g.team === "home" || g.team === "1"
+  );
+  const awayGoalsFormatted = formattedGoalsList.filter(
+    (g) => g.team === "away" || g.team === "2"
+  );
 
   const statusLabel =
     statusCategory === "live"
@@ -197,15 +297,17 @@ export const MatchCard: React.FC<MatchCardProps> = ({ event, matchIndex, databas
                 }}
               />
               <Shield className="w-4 h-4 text-emerald-400 hidden" />
-              <span className="absolute bottom-0 right-0 bg-indigo-600 text-white text-[8px] sm:text-[9px] font-black px-1 rounded-tl shadow">
-                R{homeRank}
-              </span>
+              {homeRank !== undefined && homeRank !== null && homeRank > 0 && (
+                <span className="absolute bottom-0 right-0 bg-indigo-600 text-white text-[8px] sm:text-[9px] font-black px-1 rounded-tl shadow">
+                  R{homeRank}
+                </span>
+              )}
             </div>
           </div>
           <div className="text-[10px] sm:text-[11px] font-mono font-bold mt-1 text-slate-400 flex items-center gap-1 flex-wrap">
-            {homeStats?.points !== undefined && (
+            {homeRank !== undefined && homeRank !== null && homeRank > 0 && (
               <span className="text-amber-300 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.2 rounded text-[9px] whitespace-nowrap">
-                #{homeRank} ({homeStats.points} pts)
+                #{homeRank} {homeStats?.points !== undefined ? `(${homeStats.points} pts)` : ""}
               </span>
             )}
             <span className="text-emerald-400 whitespace-nowrap">{homePct.win}% V</span>
@@ -234,7 +336,14 @@ export const MatchCard: React.FC<MatchCardProps> = ({ event, matchIndex, databas
 
         {/* Center Badge: Score or VS */}
         {isEndedOrFinished || formattedFtScore ? (
-          <div className="flex flex-col items-center shrink-0 px-1 py-0.5 min-w-[85px] sm:min-w-[95px]">
+          <div
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowFifaRecapModal(true);
+            }}
+            className="flex flex-col items-center shrink-0 px-1 py-0.5 min-w-[110px] sm:min-w-[125px] cursor-pointer group/score hover:scale-105 transition-all"
+            title="Cliquer pour afficher le temps des buts et le récapitulatif"
+          >
             {/* Match Game Time (Heure de jeu) displayed above the score */}
             {event.expectedStart && formatMatchTime(event.expectedStart) ? (
               <div className="text-[10px] sm:text-[11px] font-mono font-extrabold text-amber-300 bg-slate-900 border border-slate-700/80 px-2 py-0.5 rounded-md mb-1 flex items-center gap-1 shadow-sm whitespace-nowrap">
@@ -244,20 +353,27 @@ export const MatchCard: React.FC<MatchCardProps> = ({ event, matchIndex, databas
             ) : null}
 
             {/* Main Score Badge */}
-            <div className="px-2.5 sm:px-3.5 py-1 bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 font-black font-mono text-sm sm:text-base rounded-xl shadow-md flex items-center justify-center tracking-wider whitespace-nowrap">
-              {formattedFtScore || "0 - 0"}
+            <div className="w-full px-2 py-1.5 bg-emerald-500/15 group-hover/score:bg-emerald-500/25 border border-emerald-500/40 group-hover/score:border-emerald-400 text-emerald-400 font-black font-mono rounded-xl shadow-md flex items-center justify-center tracking-wider whitespace-nowrap transition-colors">
+              <span className="text-sm sm:text-base text-emerald-400 font-extrabold">
+                {formattedFtScore || "0 - 0"}
+              </span>
             </div>
 
-            {/* HT Score */}
-            {formattedHtScore ? (
-              <div className="text-[9px] sm:text-[10px] font-mono font-bold text-slate-300 bg-slate-800/90 border border-slate-700/70 px-2 py-0.5 rounded-md mt-1 whitespace-nowrap">
-                HT: {formattedHtScore}
+            {/* Breakdown: HT & 2ND HT */}
+            <div className="w-full mt-1 flex flex-col gap-0.5 bg-slate-900/90 border border-slate-800 rounded-lg p-1 text-[9px] sm:text-[10px] font-mono">
+              <div className="flex items-center justify-between px-1">
+                <span className="text-slate-400 font-bold">HT :</span>
+                <span className="text-slate-200 font-extrabold">
+                  {formattedHtScore || (isEndedOrFinished ? "0 - 0" : "-")}
+                </span>
               </div>
-            ) : (
-              <div className="text-[9px] sm:text-[10px] font-mono font-bold text-slate-400 bg-slate-800/80 border border-slate-700/50 px-2 py-0.5 rounded-md mt-1 whitespace-nowrap">
-                FT
+              <div className="flex items-center justify-between px-1 border-t border-slate-800/60 pt-0.5">
+                <span className="text-slate-400 font-bold">2ND HT :</span>
+                <span className="text-amber-300 font-extrabold">
+                  {formatted2ndHtScore || (isEndedOrFinished ? "0 - 0" : "-")}
+                </span>
               </div>
-            )}
+            </div>
           </div>
         ) : (
           <div className="flex flex-col items-center shrink-0 px-1.5">
@@ -289,9 +405,11 @@ export const MatchCard: React.FC<MatchCardProps> = ({ event, matchIndex, databas
                 }}
               />
               <Shield className="w-4 h-4 text-teal-400 hidden" />
-              <span className="absolute bottom-0 right-0 bg-purple-600 text-white text-[8px] sm:text-[9px] font-black px-1 rounded-tl shadow">
-                R{awayRank}
-              </span>
+              {awayRank !== undefined && awayRank !== null && awayRank > 0 && (
+                <span className="absolute bottom-0 right-0 bg-purple-600 text-white text-[8px] sm:text-[9px] font-black px-1 rounded-tl shadow">
+                  R{awayRank}
+                </span>
+              )}
             </div>
             <span
               className="font-extrabold text-sm sm:text-base text-white truncate group-hover:text-emerald-300 transition-colors"
@@ -301,9 +419,9 @@ export const MatchCard: React.FC<MatchCardProps> = ({ event, matchIndex, databas
             </span>
           </div>
           <div className="text-[10px] sm:text-[11px] font-mono font-bold mt-1 text-slate-400 flex items-center gap-1 flex-wrap justify-end">
-            {awayStats?.points !== undefined && (
+            {awayRank !== undefined && awayRank !== null && awayRank > 0 && (
               <span className="text-amber-300 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.2 rounded text-[9px] whitespace-nowrap">
-                #{awayRank} ({awayStats.points} pts)
+                #{awayRank} {awayStats?.points !== undefined ? `(${awayStats.points} pts)` : ""}
               </span>
             )}
             <span className="text-emerald-400 whitespace-nowrap">{awayPct.win}% V</span>
@@ -424,6 +542,164 @@ export const MatchCard: React.FC<MatchCardProps> = ({ event, matchIndex, databas
           <span className="truncate">MARCHÉS</span>
         </button>
       </div>
+
+      {/* FIFA Match Recap Modal (Goal Timeline & Match Summary) */}
+      {showFifaRecapModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-in fade-in duration-200"
+          onClick={(e) => {
+            e.stopPropagation();
+            setShowFifaRecapModal(false);
+          }}
+        >
+          <div
+            className="bg-slate-900 border border-slate-800 rounded-2xl max-w-xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden relative"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header FIFA Broadcast Style */}
+            <div className="p-4 bg-gradient-to-r from-amber-950/60 via-slate-900 to-amber-950/60 border-b border-amber-500/30 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-400">
+                  <Trophy className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm sm:text-base font-black text-amber-300 uppercase tracking-wider flex items-center gap-2">
+                    <span>RÉCAPITULATIF DU MATCH</span>
+                  </h3>
+                  <p className="text-[11px] text-slate-400 font-mono">
+                    Journée {roundNum} • Temps des buts & Détaillé
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowFifaRecapModal(false)}
+                className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Main Score Board */}
+            <div className="p-5 bg-gradient-to-b from-slate-950 to-slate-900 border-b border-slate-800 flex items-center justify-between gap-4">
+              {/* Home Team */}
+              <div className="flex-1 flex flex-col items-center text-center">
+                <div className="relative w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-slate-800 border-2 border-slate-700 p-1 mb-2 shadow-lg flex items-center justify-center">
+                  <img src={getTeamLogoUrl(event.homeTeam?.name)} alt="" className="w-full h-full object-contain" />
+                  {homeRank && (
+                    <span className="absolute -bottom-1 -right-1 bg-indigo-600 text-white font-black text-[10px] px-1.5 py-0.5 rounded-full shadow">
+                      R{homeRank}
+                    </span>
+                  )}
+                </div>
+                <span className="font-black text-sm sm:text-base text-white line-clamp-1">
+                  {event.homeTeam?.name}
+                </span>
+                <span className="text-[10px] font-mono text-emerald-400 font-bold mt-0.5">
+                  Gagné {homeStats?.won ?? 0} • Nul {homeStats?.draw ?? 0} • Perdu {homeStats?.lost ?? 0}
+                </span>
+              </div>
+
+              {/* Score Badge Center */}
+              <div className="flex flex-col items-center px-3 py-2 bg-slate-950 border-2 border-emerald-500/50 rounded-2xl shadow-xl min-w-[100px] sm:min-w-[120px]">
+                <span className="text-xl sm:text-2xl font-black font-mono text-emerald-400 tracking-wider">
+                  {formattedFtScore || "0 - 0"}
+                </span>
+                <span className="text-[9px] font-bold text-amber-400 uppercase tracking-widest mt-0.5">
+                  Match Terminé
+                </span>
+              </div>
+
+              {/* Away Team */}
+              <div className="flex-1 flex flex-col items-center text-center">
+                <div className="relative w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-slate-800 border-2 border-slate-700 p-1 mb-2 shadow-lg flex items-center justify-center">
+                  <img src={getTeamLogoUrl(event.awayTeam?.name)} alt="" className="w-full h-full object-contain" />
+                  {awayRank && (
+                    <span className="absolute -bottom-1 -right-1 bg-purple-600 text-white font-black text-[10px] px-1.5 py-0.5 rounded-full shadow">
+                      R{awayRank}
+                    </span>
+                  )}
+                </div>
+                <span className="font-black text-sm sm:text-base text-white line-clamp-1">
+                  {event.awayTeam?.name}
+                </span>
+                <span className="text-[10px] font-mono text-amber-400 font-bold mt-0.5">
+                  Gagné {awayStats?.won ?? 0} • Nul {awayStats?.draw ?? 0} • Perdu {awayStats?.lost ?? 0}
+                </span>
+              </div>
+            </div>
+
+            {/* Goal Timeline / Temps des buts (FIFA style) */}
+            <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
+              <div className="bg-slate-950/80 border border-slate-800 p-3.5 rounded-xl">
+                <div className="text-xs font-black text-amber-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                  <span>⚽ TEMPS DES BUTS & MARQUEURS</span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 divide-x divide-slate-800/80">
+                  {/* Home Goals */}
+                  <div className="pr-2 space-y-2">
+                    <span className="text-[11px] font-extrabold text-slate-300 block mb-1">
+                      {event.homeTeam?.name}
+                    </span>
+                    {homeGoalsFormatted.length === 0 ? (
+                      <p className="text-[11px] text-slate-500 font-mono italic">Aucun but marqué</p>
+                    ) : (
+                      homeGoalsFormatted.map((g, i) => (
+                        <div key={i} className="flex items-center gap-1.5 text-xs text-emerald-300 font-mono bg-slate-900 border border-slate-800 px-2 py-1 rounded-lg">
+                          <span>⚽</span>
+                          <span className="font-black text-amber-400">{g.min}'</span>
+                          <span className="text-slate-200 truncate">{g.player}</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  {/* Away Goals */}
+                  <div className="pl-3 space-y-2">
+                    <span className="text-[11px] font-extrabold text-slate-300 block mb-1">
+                      {event.awayTeam?.name}
+                    </span>
+                    {awayGoalsFormatted.length === 0 ? (
+                      <p className="text-[11px] text-slate-500 font-mono italic">Aucun but marqué</p>
+                    ) : (
+                      awayGoalsFormatted.map((g, i) => (
+                        <div key={i} className="flex items-center gap-1.5 text-xs text-emerald-300 font-mono bg-slate-900 border border-slate-800 px-2 py-1 rounded-lg">
+                          <span>⚽</span>
+                          <span className="font-black text-amber-400">{g.min}'</span>
+                          <span className="text-slate-200 truncate">{g.player}</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Breakdown HT / 2ND HT */}
+              <div className="bg-slate-950/80 border border-slate-800 p-3 rounded-xl flex items-center justify-around font-mono text-xs">
+                <div className="text-center">
+                  <span className="text-[10px] text-slate-400 block font-bold">1ère Mi-Temps (HT)</span>
+                  <span className="text-sm font-black text-white">{formattedHtScore || "0 - 0"}</span>
+                </div>
+                <div className="h-8 w-px bg-slate-800" />
+                <div className="text-center">
+                  <span className="text-[10px] text-slate-400 block font-bold">2ème Mi-Temps (2ND HT)</span>
+                  <span className="text-sm font-black text-amber-400">{formatted2ndHtScore || "0 - 0"}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="p-3 bg-slate-950 border-t border-slate-800 flex justify-end">
+              <button
+                onClick={() => setShowFifaRecapModal(false)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs rounded-xl transition-colors cursor-pointer"
+              >
+                Fermer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Interactive Match Analyzer Modal */}
       {showAnalyzerModal && (

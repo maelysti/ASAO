@@ -184,6 +184,8 @@ export interface ExtractedMatchRecord {
   awayTeamName: string;
   homeRank: number;
   awayRank: number;
+  homeRankAtRound?: number;
+  awayRankAtRound?: number;
   homePoints?: number;
   awayPoints?: number;
   competitionId: number;

@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
+import * as XLSX from "xlsx";
 import { GoogleDriveModal } from "./GoogleDriveModal";
 import {
   Download,
@@ -278,18 +279,31 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
         `2024-10-22: ${homeName} 1 - 3 ${awayName}`,
       ];
 
+      // Season extraction
+      const sNum = (m as any).seasonNumber || (m as any).season || 1;
+      const sName = (m as any).seasonName || `Saison ${sNum}`;
+      const sId = (m as any).seasonId || sNum;
+
+      const homeRankVal = m.homeTeam?.position || Math.floor(Math.random() * 12 + 1);
+      const awayRankVal = m.awayTeam?.position || Math.floor(Math.random() * 12 + 1);
+
       newExtracted.push({
         id: m.id,
         matchName: m.name || `${homeName} vs ${awayName}`,
         homeTeamName: homeName,
         awayTeamName: awayName,
-        homeRank: m.homeTeam?.position || Math.floor(Math.random() * 12 + 1),
-        awayRank: m.awayTeam?.position || Math.floor(Math.random() * 12 + 1),
+        homeRank: homeRankVal,
+        awayRank: awayRankVal,
+        homeRankAtRound: homeRankVal,
+        awayRankAtRound: awayRankVal,
         homePoints: m.homeTeam?.points || 24,
         awayPoints: m.awayTeam?.points || 18,
         competitionId: compId,
         competitionName: categoryName || `Ligue #${compId}`,
         roundNumber: roundNum,
+        seasonNumber: sNum,
+        seasonName: sName,
+        seasonId: sId,
         status: m.state || m.preEventOrLive || "Terminé",
         expectedStart: m.expectedStart,
         score: finalScore,
@@ -447,11 +461,12 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
       "ID",
       "Match",
       "Ligue",
+      "Saison",
       "Round",
       "Score",
       "Statut",
-      "Rang Dom",
-      "Rang Ext",
+      "Rang Dom (Round)",
+      "Rang Ext (Round)",
       "Cote 1",
       "Cote X",
       "Cote 2",
@@ -467,11 +482,12 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
       m.id,
       `"${m.matchName.replace(/"/g, '""')}"`,
       `"${m.competitionName.replace(/"/g, '""')}"`,
+      `"Saison ${m.seasonNumber || 1}"`,
       m.roundNumber,
       `"${m.score || ""}"`,
       `"${m.status}"`,
-      m.homeRank,
-      m.awayRank,
+      m.homeRankAtRound ?? m.homeRank,
+      m.awayRankAtRound ?? m.awayRank,
       m.homeOdds || 0,
       m.drawOdds || 0,
       m.awayOdds || 0,
@@ -491,7 +507,71 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
     document.body.appendChild(link);
     link.click();
     link.remove();
-    addLog("SUCCESS", `[EXPORT] ${extractedDatabase.length} enregistrements exportés en CSV.`);
+    addLog("SUCCESS", `[EXPORT CSV] ${extractedDatabase.length} enregistrements exportés en CSV.`);
+  };
+
+  const handleExportXLSX = () => {
+    if (extractedDatabase.length === 0) {
+      addLog("WARN", "[EXPORT XLSX] Aucune donnée à exporter. La base de données est vide.");
+      alert("Base de données vide. Veuillez d'abord effectuer une extraction.");
+      return;
+    }
+
+    const exportRows = extractedDatabase.map((m) => ({
+      "ID Match": m.id,
+      "Nom Match": m.matchName,
+      "Équipe Domicile": m.homeTeamName,
+      "Équipe Extérieur": m.awayTeamName,
+      "Compétition": m.competitionName,
+      "Saison": m.seasonNumber ? `Saison ${m.seasonNumber}` : (m.seasonName || "Saison 1"),
+      "Journée / Round": m.roundNumber,
+      "Rang Domicile (Au Round)": m.homeRankAtRound ?? m.homeRank,
+      "Rang Extérieur (Au Round)": m.awayRankAtRound ?? m.awayRank,
+      "Points Domicile": m.homePoints ?? 0,
+      "Points Extérieur": m.awayPoints ?? 0,
+      "Score Final": m.score || "",
+      "Score Mi-Temps": m.halfTimeScore || "",
+      "Statut Match": m.status,
+      "Date / Heure Match": m.expectedStart || "",
+      "Cote 1": m.homeOdds || 0,
+      "Cote X": m.drawOdds || 0,
+      "Cote 2": m.awayOdds || 0,
+      "Cote 1X": m.doubleChanceOdds?.dc1X || 0,
+      "Cote 12": m.doubleChanceOdds?.dc12 || 0,
+      "Cote X2": m.doubleChanceOdds?.dcX2 || 0,
+      "Cote Over 2.5": m.overUnderOdds?.over25 || 0,
+      "Cote Under 2.5": m.overUnderOdds?.under25 || 0,
+      "Cote GG (Oui)": m.bothTeamsScoreOdds?.yes || 0,
+      "Cote NG (Non)": m.bothTeamsScoreOdds?.no || 0,
+      "Minutes Buts": m.goalMinutes || "",
+      "Date Extraite": m.extractedAt,
+      "Source": m.source || "Live Extraction",
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(exportRows);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Matchs BDD");
+
+    // Auto-adjust column widths
+    const colWidths = Object.keys(exportRows[0] || {}).map((key) => {
+      let maxLen = key.length;
+      exportRows.forEach((row: any) => {
+        const valStr = String(row[key] || "");
+        if (valStr.length > maxLen) maxLen = valStr.length;
+      });
+      return { wch: Math.min(maxLen + 3, 40) };
+    });
+    worksheet["!cols"] = colWidths;
+
+    XLSX.writeFile(
+      workbook,
+      `bdd_sporty_matches_${new Date().toISOString().slice(0, 10)}.xlsx`
+    );
+
+    addLog(
+      "SUCCESS",
+      `[EXPORT XLSX] 📊 ${extractedDatabase.length} enregistrements exportés avec succès dans le fichier Excel (.xlsx).`
+    );
   };
 
   // Open Google Drive folder directly
@@ -889,10 +969,18 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
                   </button>
                   <button
                     onClick={handleExportCSV}
-                    className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-emerald-300 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer"
+                    className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-amber-300 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer"
                   >
                     <FileSpreadsheet className="w-3 h-3" />
                     <span>CSV</span>
+                  </button>
+                  <button
+                    onClick={handleExportXLSX}
+                    className="px-2.5 py-1 bg-emerald-600/30 hover:bg-emerald-600/40 text-emerald-300 border border-emerald-500/40 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer shadow-sm"
+                    title="Exporter la BDD en fichier Excel (.xlsx)"
+                  >
+                    <FileSpreadsheet className="w-3 h-3 text-emerald-400" />
+                    <span>XLSX (Excel)</span>
                   </button>
                   <button
                     onClick={() => setShowGoogleDriveModal(true)}
@@ -925,9 +1013,10 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
                 <thead>
                   <tr className="bg-slate-950 text-slate-400 uppercase font-bold text-[10px] tracking-wider border-b border-slate-800">
                     <th className="p-3">Match</th>
-                    <th className="p-3">Compétition</th>
+                    <th className="p-3">Compétition & Saison</th>
+                    <th className="p-3 text-center">Journée</th>
                     <th className="p-3 text-center">Score</th>
-                    <th className="p-3 text-center">Rangs</th>
+                    <th className="p-3 text-center">Rang (Journée)</th>
                     <th className="p-3 text-center">Toutes les Cotes (1X2 | DC | O2.5)</th>
                     <th className="p-3">Minutes Buts</th>
                     <th className="p-3 text-right">Actions</th>
@@ -941,12 +1030,18 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
                         <span className="px-2 py-0.5 rounded-md bg-slate-950 text-cyan-300 border border-slate-800 text-[10px] font-bold">
                           {rec.competitionName}
                         </span>
+                        <span className="ml-1.5 px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] font-bold">
+                          S{rec.seasonNumber || 1}
+                        </span>
+                      </td>
+                      <td className="p-3 text-center font-mono font-bold text-slate-300 text-[11px]">
+                        J{rec.roundNumber || "?"}
                       </td>
                       <td className="p-3 text-center font-mono font-black text-amber-400 text-sm">
                         {rec.score || "0-0"}
                       </td>
                       <td className="p-3 text-center font-mono text-slate-300">
-                        #{rec.homeRank} vs #{rec.awayRank}
+                        R{rec.homeRankAtRound ?? rec.homeRank} vs R{rec.awayRankAtRound ?? rec.awayRank}
                       </td>
                       <td className="p-3 text-center font-mono text-emerald-400 font-bold text-[11px]">
                         1X2: {rec.homeOdds?.toFixed(2)} / {rec.drawOdds?.toFixed(2)} / {rec.awayOdds?.toFixed(2)}
@@ -976,7 +1071,7 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
                   ))}
                   {extractedDatabase.length === 0 && (
                     <tr>
-                      <td colSpan={7} className="p-8 text-center text-slate-500 text-xs">
+                      <td colSpan={8} className="p-8 text-center text-slate-500 text-xs">
                         Aucune donnée extraite pour le moment. Cliquez sur "Lancer l'Extraction Continuous" ci-dessus.
                       </td>
                     </tr>
@@ -1035,6 +1130,15 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
                 >
                   <FileSpreadsheet className="w-3.5 h-3.5" />
                   <span>Exporter CSV</span>
+                </button>
+
+                <button
+                  onClick={handleExportXLSX}
+                  className="px-3 py-2 bg-emerald-600/30 hover:bg-emerald-600/40 text-emerald-300 border border-emerald-500/50 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+                  title="Exporter la BDD au format Excel (.xlsx)"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Exporter XLSX (.xlsx)</span>
                 </button>
 
                 <button
@@ -1101,9 +1205,10 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
                   <tr>
                     <th className="p-3">ID</th>
                     <th className="p-3">Match</th>
-                    <th className="p-3">Ligue</th>
+                    <th className="p-3">Ligue & Saison</th>
+                    <th className="p-3 text-center">Journée</th>
                     <th className="p-3 text-center">Score</th>
-                    <th className="p-3 text-center">Rangs</th>
+                    <th className="p-3 text-center">Rang (Journée)</th>
                     <th className="p-3 text-center">Cotes 1X2</th>
                     <th className="p-3">Minutes Buts</th>
                     <th className="p-3 text-right">Actions</th>
@@ -1118,12 +1223,18 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
                         <span className="px-2 py-0.5 rounded-md bg-slate-950 text-cyan-300 border border-slate-800 text-[10px] font-bold">
                           {m.competitionName}
                         </span>
+                        <span className="ml-1.5 px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] font-bold">
+                          S{m.seasonNumber || 1}
+                        </span>
+                      </td>
+                      <td className="p-3 text-center font-mono font-bold text-slate-300 text-[11px]">
+                        J{m.roundNumber || "?"}
                       </td>
                       <td className="p-3 text-center font-mono font-black text-amber-400 text-sm">
                         {m.score || "0-0"}
                       </td>
                       <td className="p-3 text-center font-mono text-slate-300">
-                        #{m.homeRank} vs #{m.awayRank}
+                        {m.homeRankAtRound ? `R${m.homeRankAtRound}` : m.homeRank ? `R${m.homeRank}` : "-"} vs {m.awayRankAtRound ? `R${m.awayRankAtRound}` : m.awayRank ? `R${m.awayRank}` : "-"}
                       </td>
                       <td className="p-3 text-center font-mono text-emerald-400 font-bold">
                         {m.homeOdds?.toFixed(2)} | {m.drawOdds?.toFixed(2)} | {m.awayOdds?.toFixed(2)}
@@ -1153,7 +1264,7 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
                   ))}
                   {filteredDatabase.length === 0 && (
                     <tr>
-                      <td colSpan={8} className="p-8 text-center text-slate-500 text-xs">
+                      <td colSpan={9} className="p-8 text-center text-slate-500 text-xs">
                         Aucune entrée dans la base de données.
                       </td>
                     </tr>

@@ -1,5 +1,6 @@
 import { ExtractedMatchRecord, SportyEvent } from "../types";
 import { CombinedMatchData, InstantLeagueRoundResult } from "../services/sportyApi";
+import { enrichRecordsWithRoundRanks } from "./standingsEngine";
 
 /**
  * Converts raw fetched Instant League round results into standardized ExtractedMatchRecords for database persistence
@@ -40,6 +41,8 @@ export function convertRoundResultsToExtractedRecords(
         awayTeamName: awayName,
         homeRank: m.homeTeam?.position || 0,
         awayRank: m.awayTeam?.position || 0,
+        homeRankAtRound: m.homeTeam?.position || 0,
+        awayRankAtRound: m.awayTeam?.position || 0,
         homePoints: m.homeTeam?.points || 0,
         awayPoints: m.awayTeam?.points || 0,
         competitionId: competitionId,
@@ -60,7 +63,7 @@ export function convertRoundResultsToExtractedRecords(
       });
     });
   });
-  return records;
+  return enrichRecordsWithRoundRanks(records);
 }
 
 export interface GlobalStrategyInsight {

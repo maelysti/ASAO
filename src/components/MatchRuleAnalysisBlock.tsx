@@ -46,13 +46,14 @@ export const MatchRuleAnalysisBlock: React.FC<MatchRuleAnalysisBlockProps> = ({
     return effectiveRules
       .filter((r) => r.isActive !== false)
       .map((r) => {
-        const evaluation = evaluateRuleOnMatch(r, event);
+        const catName = (event as any).categoryName || "Ligue";
+        const evaluation = evaluateRuleOnMatch(r, event as any, catName);
         return {
           rule: r,
           evaluation,
         };
       })
-      .filter((item) => item.evaluation.isTriggered);
+      .filter((item): item is { rule: RuleItem; evaluation: NonNullable<ReturnType<typeof evaluateRuleOnMatch>> } => item.evaluation !== null && item.evaluation.isTriggered);
   }, [effectiveRules, event]);
 
   const getRiskColor = (r: string) => {

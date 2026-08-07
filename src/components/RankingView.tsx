@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from "react";
 import { RankingTeam, getTeamLogoUrl } from "../services/sportyApi";
+import { computeSeasonRoundRankings } from "../utils/standingsEngine";
 import {
   Trophy,
   Search,
@@ -53,11 +54,57 @@ export const RankingView: React.FC<RankingViewProps> = ({
   const [searchTerm, setSearchTerm] = useState("");
   const [viewMode, setViewMode] = useState<"standard" | "all">("standard");
   const [selectedTeamForModal, setSelectedTeamForModal] = useState<string | null>(null);
+  const [selectedRoundModal, setSelectedRoundModal] = useState<number | null>(null);
   const [activeTooltip, setActiveTooltip] = useState<{
     teamName: string;
     roundNum: number;
     data: RoundTrajectoryItem;
   } | null>(null);
+
+  // Compute round-by-round entering rankings for the competition
+  const seasonRankings = useMemo(() => {
+    return computeSeasonRoundRankings(resultsRounds || []);
+  }, [resultsRounds]);
+
+  // Helper to retrieve all confrontations for a specific round with entering ranks
+  const getRoundMatchesForModal = (rn: number) => {
+    const resRound = (resultsRounds || []).find((r: any) => Number(r.roundNumber) === rn);
+    const rawRound = (rawRoundsData || []).find((r: any) => Number(r.roundNumber) === rn);
+
+    const matchesMap = new Map<string, any>();
+
+    const processMatch = (m: any) => {
+      const home = m.homeTeam?.name || m.name?.split(" vs ")[0]?.trim();
+      const away = m.awayTeam?.name || m.name?.split(" vs ")[1]?.trim();
+      if (!home || !away) return;
+      const key = `${home}_vs_${away}`;
+
+      const hRank = seasonRankings.getEnteringRank(rn, home);
+      const aRank = seasonRankings.getEnteringRank(rn, away);
+
+      if (!matchesMap.has(key)) {
+        matchesMap.set(key, {
+          homeTeam: home,
+          awayTeam: away,
+          score: m.score,
+          halfTimeScore: m.halfTimeScore,
+          homeRankAtRound: hRank,
+          awayRankAtRound: aRank,
+          status: m.score ? "Finished" : (m.state || "Scheduled"),
+        });
+      } else if (m.score) {
+        const existing = matchesMap.get(key)!;
+        existing.score = m.score;
+        existing.halfTimeScore = m.halfTimeScore;
+        existing.status = "Finished";
+      }
+    };
+
+    (resRound?.matches || []).forEach(processMatch);
+    (rawRound?.matches || []).forEach(processMatch);
+
+    return Array.from(matchesMap.values());
+  };
 
   // Filter teams by search term
   const filteredTeams = useMemo(() => {
@@ -567,6 +614,25 @@ export const RankingView: React.FC<RankingViewProps> = ({
             </div>
           </div>
 
+          {/* Ribbon Bar: Quick round selector (Click or Double Click) */}
+          <div className="bg-slate-950/80 border border-slate-800 p-2.5 rounded-xl flex items-center gap-2 overflow-x-auto scrollbar-thin scrollbar-thumb-slate-700">
+            <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider shrink-0 px-1 flex items-center gap-1">
+              <Info className="w-3 h-3" />
+              <span>Cliquer / Double-cliquer une Journée :</span>
+            </span>
+            {roundsArray.map((rn) => (
+              <button
+                key={rn}
+                onClick={() => setSelectedRoundModal(rn)}
+                onDoubleClick={() => setSelectedRoundModal(rn)}
+                className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-amber-500/20 border border-slate-800 hover:border-amber-500/40 text-slate-300 hover:text-amber-300 font-mono text-xs font-bold transition-all shrink-0 active:scale-95 cursor-pointer"
+                title={`Double-cliquez pour ouvrir toutes les confrontations et rangs de la Journée ${rn}`}
+              >
+                J{rn}
+              </button>
+            ))}
+          </div>
+
           <div className="overflow-x-auto scrollbar-thin scrollbar-thumb-slate-700 max-h-[70vh]">
             <table className="w-full text-left border-collapse min-w-[1200px]">
               <thead className="sticky top-0 bg-slate-950 z-20 shadow-md">
@@ -581,8 +647,14 @@ export const RankingView: React.FC<RankingViewProps> = ({
                     PTS
                   </th>
                   {roundsArray.map((rn) => (
-                    <th key={rn} className="py-3 px-1 text-center min-w-[34px] font-mono border-r border-slate-800/40">
-                      J{rn}
+                    <th
+                      key={rn}
+                      onClick={() => setSelectedRoundModal(rn)}
+                      onDoubleClick={() => setSelectedRoundModal(rn)}
+                      className="py-3 px-1 text-center min-w-[36px] font-mono border-r border-slate-800/40 cursor-pointer hover:bg-amber-500/20 hover:text-amber-300 transition-colors group"
+                      title={`Double-cliquez ou cliquez pour afficher les confrontations et les rangs de la Journée ${rn}`}
+                    >
+                      <span className="group-hover:underline">J{rn}</span>
                     </th>
                   ))}
                 </tr>
@@ -858,6 +930,121 @@ export const RankingView: React.FC<RankingViewProps> = ({
             <div className="p-4 bg-slate-950 border-t border-slate-800 flex justify-end">
               <button
                 onClick={() => setSelectedTeamForModal(null)}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs transition-colors"
+              >
+                Fermer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL CONFRONTATIONS DE LA JOURNÉE (J1 -> J38) */}
+      {selectedRoundModal !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-2xl w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden relative">
+            {/* Modal Header */}
+            <div className="p-4 sm:p-5 bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 border-b border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400 font-black font-mono text-sm">
+                  J{selectedRoundModal}
+                </div>
+                <div>
+                  <h3 className="text-lg font-black text-white uppercase tracking-wide flex items-center gap-2">
+                    <span>CONFRONTATIONS JOURNÉE {selectedRoundModal}</span>
+                  </h3>
+                  <p className="text-xs text-slate-400 font-mono">
+                    Rangs d'entrée de chaque équipe avant le coup d'envoi de la Journée {selectedRoundModal}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setSelectedRoundModal(null)}
+                className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body: List of all matches in Journée selectedRoundModal */}
+            <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3">
+              {getRoundMatchesForModal(selectedRoundModal).length === 0 ? (
+                <div className="py-12 text-center text-slate-400 text-xs font-mono">
+                  Aucun match trouvé pour la Journée {selectedRoundModal}
+                </div>
+              ) : (
+                getRoundMatchesForModal(selectedRoundModal).map((match, idx) => (
+                  <div
+                    key={idx}
+                    className="bg-slate-950 border border-slate-800 hover:border-slate-700 p-3 sm:p-4 rounded-xl flex items-center justify-between gap-2 sm:gap-4 transition-colors"
+                  >
+                    {/* Home Team */}
+                    <div className="flex-1 flex items-center justify-end gap-2 text-right min-w-0">
+                      <span className="font-extrabold text-xs sm:text-sm text-white truncate">
+                        {match.homeTeam}
+                      </span>
+                      <div className="relative w-8 h-8 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center shrink-0 overflow-hidden p-0.5">
+                        <img
+                          src={getTeamLogoUrl(match.homeTeam)}
+                          alt=""
+                          className="w-full h-full object-contain"
+                        />
+                        {match.homeRankAtRound !== undefined && match.homeRankAtRound !== null && (
+                          <span className="absolute bottom-0 right-0 bg-indigo-600 text-white text-[8px] font-black px-1 rounded-tl shadow">
+                            R{match.homeRankAtRound}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Score / Status Badge */}
+                    <div className="flex flex-col items-center justify-center px-3 py-1 bg-slate-900 border border-slate-800 rounded-xl min-w-[85px] sm:min-w-[100px] shrink-0 font-mono">
+                      <span className="text-sm sm:text-base font-black text-amber-400">
+                        {match.score || "-:-"}
+                      </span>
+                      {match.halfTimeScore && (
+                        <span className="text-[10px] text-slate-400">
+                          MT: {match.halfTimeScore}
+                        </span>
+                      )}
+                      {!match.score && (
+                        <span className="text-[9px] text-slate-500 font-sans font-bold">
+                          À Venir
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Away Team */}
+                    <div className="flex-1 flex items-center justify-start gap-2 text-left min-w-0">
+                      <div className="relative w-8 h-8 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center shrink-0 overflow-hidden p-0.5">
+                        <img
+                          src={getTeamLogoUrl(match.awayTeam)}
+                          alt=""
+                          className="w-full h-full object-contain"
+                        />
+                        {match.awayRankAtRound !== undefined && match.awayRankAtRound !== null && (
+                          <span className="absolute bottom-0 right-0 bg-purple-600 text-white text-[8px] font-black px-1 rounded-tl shadow">
+                            R{match.awayRankAtRound}
+                          </span>
+                        )}
+                      </div>
+                      <span className="font-extrabold text-xs sm:text-sm text-white truncate">
+                        {match.awayTeam}
+                      </span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 bg-slate-950 border-t border-slate-800 flex items-center justify-between">
+              <span className="text-xs text-slate-400 font-mono">
+                {getRoundMatchesForModal(selectedRoundModal).length} Confrontations
+              </span>
+              <button
+                onClick={() => setSelectedRoundModal(null)}
                 className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs transition-colors"
               >
                 Fermer
