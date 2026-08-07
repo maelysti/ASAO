@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
+import * as XLSX from "xlsx";
 import {
   Trophy,
   Calendar,
@@ -248,25 +249,25 @@ export const MatchResultsView: React.FC<MatchResultsViewProps> = ({
     }
   };
 
-  // Export Results to Excel/CSV format
+  // Export Results to native Excel (.xlsx) format
   const exportResultsToExcel = () => {
     if (displayedRounds.length === 0) return;
 
     const headers = [
-      "Ligue / Competition",
-      "Journee / Round",
+      "Ligue / Compétition",
+      "Journée / Round",
       "Date / Heure",
-      "Equipe Domicile",
-      "Equipe Visiteur",
+      "Équipe Domicile",
+      "Équipe Visiteur",
       "Score HT (Mi-Temps)",
       "Score FT (Fin de Match)",
-      "Resultat 1X2",
+      "Résultat 1X2",
       "Total Buts",
       "Over 2.5",
-      "Deroulement des Buts",
+      "Déroulement des Buts",
     ];
 
-    const rows: string[][] = [];
+    const rows: (string | number)[][] = [];
 
     displayedRounds.forEach((roundObj) => {
       const roundMatches = (roundObj.matches || []).filter((m) => {
@@ -303,41 +304,50 @@ export const MatchResultsView: React.FC<MatchResultsViewProps> = ({
 
         let res1x2 = "Nul (X)";
         if (hNum > aNum) res1x2 = "Domicile (1)";
-        else if (aNum > hNum) res1x2 = "Exterieur (2)";
+        else if (aNum > hNum) res1x2 = "Extérieur (2)";
 
         const goalsDetailStr = (m.goals || [])
           .map((g: any) => `${g.minute}' (${g.team === "Home" ? homeName : awayName})`)
           .join("; ");
 
         rows.push([
-          `"${league.replace(/"/g, '""')}"`,
-          `"${round}"`,
-          `"${dateTime}"`,
-          `"${homeName.replace(/"/g, '""')}"`,
-          `"${awayName.replace(/"/g, '""')}"`,
-          `"${htScore}"`,
-          `"${ftScore}"`,
-          `"${res1x2}"`,
-          `"${totalGoals}"`,
-          `"${over25}"`,
-          `"${goalsDetailStr.replace(/"/g, '""')}"`,
+          league,
+          round,
+          dateTime,
+          homeName,
+          awayName,
+          htScore,
+          ftScore,
+          res1x2,
+          totalGoals,
+          over25,
+          goalsDetailStr,
         ]);
       });
     });
 
-    const csvContent = "\uFEFF" + [headers.join(";"), ...rows.map((r) => r.join(";"))].join("\n");
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+    ws["!cols"] = [
+      { wch: 22 }, // Ligue
+      { wch: 10 }, // Round
+      { wch: 18 }, // Date
+      { wch: 22 }, // Domicile
+      { wch: 22 }, // Visiteur
+      { wch: 12 }, // HT
+      { wch: 12 }, // FT
+      { wch: 15 }, // 1X2
+      { wch: 10 }, // Total Buts
+      { wch: 10 }, // Over 2.5
+      { wch: 40 }, // Goals detail
+    ];
+
+    const wb = XLSX.utils.book_new();
     const catName = (currentEntryPoint?.name || "Resultats").replace(/[^a-zA-Z0-9]/g, "_");
-    link.setAttribute(
-      "download",
-      `Bet261_Resultats_${catName}_J${selectedRoundFilter === "all" ? "Toutes" : selectedRoundFilter}.csv`
+    XLSX.utils.book_append_sheet(wb, ws, "Résultats");
+    XLSX.writeFile(
+      wb,
+      `Bet261_Resultats_${catName}_J${selectedRoundFilter === "all" ? "Toutes" : selectedRoundFilter}.xlsx`
     );
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
   };
 
   return (
