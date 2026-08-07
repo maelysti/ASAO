@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { X, Shield, Clock, Trophy, Code, Copy, Check, Activity, Sparkles, Layers, Hash, Database, BarChart2 } from "lucide-react";
+import React, { useState, useMemo } from "react";
+import { X, Shield, Clock, Trophy, Code, Copy, Check, Activity, Sparkles, Layers, Hash, Database, BarChart2, Swords, Calendar, TrendingUp, CheckCircle2 } from "lucide-react";
 import { SportyEvent, ExtractedMatchRecord, RuleItem } from "../types";
 import { classifyMatchStatus, CombinedMatchData, getTeamLogoUrl } from "../services/sportyApi";
 import { getH2HAnalysisForMatch } from "../utils/globalAnalysisEngine";
@@ -16,13 +16,113 @@ interface MatchDetailModalProps {
 export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({ event, database = [], activeRules, onClose }) => {
   const [copied, setCopied] = useState(false);
   const [showRawJson, setShowRawJson] = useState(false);
+  const [activeH2hTab, setActiveH2hTab] = useState<"direct" | "home" | "away">("direct");
+
+  const homeName = (event?.homeTeamName || "").trim().toLowerCase();
+  const awayName = (event?.awayTeamName || "").trim().toLowerCase();
+
+  // Filter direct head-to-head matches from database
+  const directH2HRecords = useMemo(() => {
+    if (!database || database.length === 0 || !homeName || !awayName) return [];
+    return database.filter((m) => {
+      const dbHome = (m.homeTeamName || "").trim().toLowerCase();
+      const dbAway = (m.awayTeamName || "").trim().toLowerCase();
+      return (
+        ((dbHome.includes(homeName) || homeName.includes(dbHome)) &&
+         (dbAway.includes(awayName) || awayName.includes(dbAway))) ||
+        ((dbHome.includes(awayName) || awayName.includes(dbHome)) &&
+         (dbAway.includes(homeName) || homeName.includes(dbAway)))
+      );
+    });
+  }, [database, homeName, awayName]);
+
+  // Filter home team past matches from database
+  const homeTeamPastRecords = useMemo(() => {
+    if (!database || database.length === 0 || !homeName) return [];
+    return database.filter((m) => {
+      const dbHome = (m.homeTeamName || "").trim().toLowerCase();
+      const dbAway = (m.awayTeamName || "").trim().toLowerCase();
+      return dbHome.includes(homeName) || dbAway.includes(homeName);
+    });
+  }, [database, homeName]);
+
+  // Filter away team past matches from database
+  const awayTeamPastRecords = useMemo(() => {
+    if (!database || database.length === 0 || !awayName) return [];
+    return database.filter((m) => {
+      const dbHome = (m.homeTeamName || "").trim().toLowerCase();
+      const dbAway = (m.awayTeamName || "").trim().toLowerCase();
+      return dbHome.includes(awayName) || dbAway.includes(awayName);
+    });
+  }, [database, awayName]);
+
+  // Detailed stats for direct H2H records
+  const directStats = useMemo(() => {
+    if (directH2HRecords.length === 0) return null;
+    let homeW = 0;
+    let drawW = 0;
+    let awayW = 0;
+    let totalGoals = 0;
+    let over25 = 0;
+    let btts = 0;
+
+    directH2HRecords.forEach((m) => {
+      let hS = 0;
+      let aS = 0;
+      if (m.score && m.score.includes(":")) {
+        const parts = m.score.split(":");
+        hS = parseInt(parts[0], 10) || 0;
+        aS = parseInt(parts[1], 10) || 0;
+      } else if (m.score && m.score.includes("-")) {
+        const parts = m.score.split("-");
+        hS = parseInt(parts[0], 10) || 0;
+        aS = parseInt(parts[1], 10) || 0;
+      }
+
+      const sum = hS + aS;
+      totalGoals += sum;
+      if (sum > 2) over25++;
+      if (hS > 0 && aS > 0) btts++;
+
+      const dbHome = (m.homeTeamName || "").trim().toLowerCase();
+      if (hS > aS) {
+        if (dbHome.includes(homeName)) homeW++;
+        else awayW++;
+      } else if (hS === aS) {
+        drawW++;
+      } else {
+        if (dbHome.includes(homeName)) awayW++;
+        else homeW++;
+      }
+    });
+
+    const count = directH2HRecords.length;
+    return {
+      count,
+      homeW,
+      drawW,
+      awayW,
+      homeWPct: Math.round((homeW / count) * 100),
+      drawWPct: Math.round((drawW / count) * 100),
+      awayWPct: Math.round((awayW / count) * 100),
+      avgGoals: parseFloat((totalGoals / count).toFixed(2)),
+      over25Pct: Math.round((over25 / count) * 100),
+      bttsPct: Math.round((btts / count) * 100),
+    };
+  }, [directH2HRecords, homeName]);
 
   if (!event) return null;
 
   const h2h = getH2HAnalysisForMatch(event, database);
-
   const isCombined = "categoryName" in event;
   const status = classifyMatchStatus(event as any);
+
+  const activeRecordsToDisplay =
+    activeH2hTab === "direct"
+      ? directH2HRecords
+      : activeH2hTab === "home"
+      ? homeTeamPastRecords
+      : awayTeamPastRecords;
 
   const handleCopyJson = () => {
     navigator.clipboard.writeText(JSON.stringify(event, null, 2));
@@ -250,6 +350,211 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({ event, datab
                 <p className="text-xs text-slate-300 bg-slate-900/60 p-2.5 rounded-xl border border-slate-800/80 leading-relaxed">
                   💡 <strong className="text-emerald-400">Raisonnement :</strong> {h2h.rationale}
                 </p>
+              </div>
+
+              {/* Historique des Confrontations Directes (H2H - Database Extraite) */}
+              <div className="bg-slate-950/90 border border-slate-800 rounded-2xl p-4 shadow-xl space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
+                  <div className="flex items-center gap-2">
+                    <Swords className="w-4 h-4 text-amber-400" />
+                    <div>
+                      <h3 className="text-xs font-black text-white uppercase tracking-wider flex items-center gap-2">
+                        <span>HISTORIQUE DES CONFRONTATIONS DIRECTES (H2H)</span>
+                        <span className="bg-amber-500/20 text-amber-400 border border-amber-500/30 text-[10px] px-2 py-0.5 rounded-full font-mono">
+                          {directH2HRecords.length} Matchs Directs
+                        </span>
+                      </h3>
+                      <p className="text-[10px] text-slate-400">
+                        Basé sur les données historiques extraites dans la base de données
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Filter Tabs */}
+                  <div className="flex items-center gap-1 bg-slate-900 p-1 rounded-xl border border-slate-800 text-[11px] font-bold">
+                    <button
+                      onClick={() => setActiveH2hTab("direct")}
+                      className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
+                        activeH2hTab === "direct"
+                          ? "bg-amber-500 text-slate-950 font-black"
+                          : "text-slate-400 hover:text-slate-200"
+                      }`}
+                    >
+                      H2H Directs ({directH2HRecords.length})
+                    </button>
+                    <button
+                      onClick={() => setActiveH2hTab("home")}
+                      className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
+                        activeH2hTab === "home"
+                          ? "bg-indigo-600 text-white font-black"
+                          : "text-slate-400 hover:text-slate-200"
+                      }`}
+                    >
+                      {event.homeTeamName} ({homeTeamPastRecords.length})
+                    </button>
+                    <button
+                      onClick={() => setActiveH2hTab("away")}
+                      className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
+                        activeH2hTab === "away"
+                          ? "bg-purple-600 text-white font-black"
+                          : "text-slate-400 hover:text-slate-200"
+                      }`}
+                    >
+                      {event.awayTeamName} ({awayTeamPastRecords.length})
+                    </button>
+                  </div>
+                </div>
+
+                {/* Direct Stats Bar */}
+                {activeH2hTab === "direct" && directStats && (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-slate-900/90 border border-slate-800 p-3 rounded-xl text-center text-xs font-mono">
+                    <div className="bg-slate-950/60 p-2 rounded-lg border border-slate-800/80">
+                      <span className="text-[10px] text-slate-400 block font-sans">Victoires {event.homeTeamName}</span>
+                      <span className="font-extrabold text-emerald-400 text-sm">{directStats.homeW} ({directStats.homeWPct}%)</span>
+                    </div>
+                    <div className="bg-slate-950/60 p-2 rounded-lg border border-slate-800/80">
+                      <span className="text-[10px] text-slate-400 block font-sans">Matchs Nuls</span>
+                      <span className="font-extrabold text-amber-400 text-sm">{directStats.drawW} ({directStats.drawWPct}%)</span>
+                    </div>
+                    <div className="bg-slate-950/60 p-2 rounded-lg border border-slate-800/80">
+                      <span className="text-[10px] text-slate-400 block font-sans">Victoires {event.awayTeamName}</span>
+                      <span className="font-extrabold text-teal-400 text-sm">{directStats.awayW} ({directStats.awayWPct}%)</span>
+                    </div>
+                    <div className="bg-slate-950/60 p-2 rounded-lg border border-slate-800/80">
+                      <span className="text-[10px] text-slate-400 block font-sans">Moy. Buts / Over 2.5</span>
+                      <span className="font-extrabold text-cyan-300 text-sm">{directStats.avgGoals} ({directStats.over25Pct}%)</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* List of Match Records */}
+                {activeRecordsToDisplay.length > 0 ? (
+                  <div className="space-y-2.5 max-h-[320px] overflow-y-auto pr-1">
+                    {activeRecordsToDisplay.map((rec) => {
+                      const dbHome = rec.homeTeamName || "Dom.";
+                      const dbAway = rec.awayTeamName || "Ext.";
+                      const isHomeEq = dbHome.toLowerCase().includes(homeName);
+                      const isAwayEq = dbAway.toLowerCase().includes(awayName);
+
+                      let hS = 0;
+                      let aS = 0;
+                      if (rec.score && rec.score.includes(":")) {
+                        const parts = rec.score.split(":");
+                        hS = parseInt(parts[0], 10) || 0;
+                        aS = parseInt(parts[1], 10) || 0;
+                      } else if (rec.score && rec.score.includes("-")) {
+                        const parts = rec.score.split("-");
+                        hS = parseInt(parts[0], 10) || 0;
+                        aS = parseInt(parts[1], 10) || 0;
+                      }
+
+                      let winnerText = "Match Nul";
+                      let winnerBadgeClass = "bg-slate-800 text-slate-300 border-slate-700";
+                      if (hS > aS) {
+                        winnerText = `Victoire ${dbHome}`;
+                        winnerBadgeClass = isHomeEq
+                          ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
+                          : "bg-indigo-500/20 text-indigo-300 border-indigo-500/40";
+                      } else if (aS > hS) {
+                        winnerText = `Victoire ${dbAway}`;
+                        winnerBadgeClass = isAwayEq
+                          ? "bg-purple-500/20 text-purple-300 border-purple-500/40"
+                          : "bg-rose-500/20 text-rose-300 border-rose-500/40";
+                      }
+
+                      return (
+                        <div
+                          key={rec.id || `${rec.homeTeamName}-${rec.awayTeamName}-${rec.roundNumber}`}
+                          className="bg-slate-900/90 border border-slate-800/90 hover:border-slate-700 p-3 rounded-xl space-y-2 transition-all"
+                        >
+                          <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono">
+                            <span className="flex items-center gap-1.5 font-bold text-slate-300">
+                              <Calendar className="w-3 h-3 text-amber-400" />
+                              <span>{rec.competitionName || "Ligue"}</span>
+                              {rec.seasonNumber && <span>• Saison {rec.seasonNumber}</span>}
+                              {rec.roundNumber && (
+                                <span className="bg-slate-800 text-amber-300 px-1.5 py-0.5 rounded border border-slate-700">
+                                  Journée {rec.roundNumber}
+                                </span>
+                              )}
+                            </span>
+                            <span className={`px-2 py-0.5 rounded-full border text-[9px] font-bold ${winnerBadgeClass}`}>
+                              {winnerText}
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-3 items-center gap-2">
+                            {/* Home Team */}
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div className="w-6 h-6 rounded-full bg-slate-800 p-0.5 border border-slate-700 shrink-0 flex items-center justify-center">
+                                <img src={getTeamLogoUrl(dbHome)} alt="" className="w-full h-full object-contain" />
+                              </div>
+                              <span className={`text-xs font-bold truncate ${isHomeEq ? "text-emerald-300 font-black" : "text-slate-200"}`}>
+                                {dbHome}
+                              </span>
+                              {rec.homeRankAtRound ? (
+                                <span className="text-[9px] font-mono text-slate-500">R{rec.homeRankAtRound}</span>
+                              ) : null}
+                            </div>
+
+                            {/* Score */}
+                            <div className="flex flex-col items-center justify-center">
+                              <div className="px-2.5 py-0.5 bg-slate-950 border border-slate-700/80 rounded-lg text-xs font-black font-mono text-emerald-400">
+                                {rec.score || "0 - 0"}
+                              </div>
+                              {rec.halfTimeScore && (
+                                <span className="text-[9px] font-mono text-slate-500 mt-0.5">
+                                  HT: {rec.halfTimeScore}
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Away Team */}
+                            <div className="flex items-center justify-end gap-2 min-w-0">
+                              {rec.awayRankAtRound ? (
+                                <span className="text-[9px] font-mono text-slate-500">R{rec.awayRankAtRound}</span>
+                              ) : null}
+                              <span className={`text-xs font-bold truncate text-right ${isAwayEq ? "text-amber-300 font-black" : "text-slate-200"}`}>
+                                {dbAway}
+                              </span>
+                              <div className="w-6 h-6 rounded-full bg-slate-800 p-0.5 border border-slate-700 shrink-0 flex items-center justify-center">
+                                <img src={getTeamLogoUrl(dbAway)} alt="" className="w-full h-full object-contain" />
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Goal detail list if available */}
+                          {rec.goalsDetail && rec.goalsDetail.length > 0 ? (
+                            <div className="pt-1 border-t border-slate-800/60 flex flex-wrap gap-1.5 text-[10px] font-mono text-slate-400">
+                              <span className="text-amber-400 font-bold">⚽ Buts:</span>
+                              {rec.goalsDetail.map((g, idx) => (
+                                <span key={idx} className="bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800 text-slate-300">
+                                  {g.minute}' {g.player || g.scorer || (g.team === "home" ? dbHome : dbAway)}
+                                </span>
+                              ))}
+                            </div>
+                          ) : rec.goalMinutes ? (
+                            <div className="pt-1 border-t border-slate-800/60 text-[10px] font-mono text-slate-400">
+                              <span className="text-amber-400 font-bold">⚽ Minutes des buts:</span> {rec.goalMinutes}
+                            </div>
+                          ) : null}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="p-6 text-center bg-slate-900/60 rounded-xl border border-slate-800 space-y-2">
+                    <Database className="w-8 h-8 text-slate-600 mx-auto" />
+                    <p className="text-xs text-slate-400 font-medium">
+                      {activeH2hTab === "direct"
+                        ? `Aucun affrontement direct enregistré dans la base de données extraite entre ${event.homeTeamName} et ${event.awayTeamName}.`
+                        : `Aucun match enregistré dans la base de données extraite pour cette équipe.`}
+                    </p>
+                    <p className="text-[11px] text-slate-500 italic">
+                      Les confrontations s'enrichissent automatiquement au fil des extractions.
+                    </p>
+                  </div>
+                )}
               </div>
 
               {/* Markets & Odds Breakdown */}
