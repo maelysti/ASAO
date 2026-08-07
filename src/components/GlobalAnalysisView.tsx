@@ -22,6 +22,8 @@ import {
   generateProducedMatchesWithRationale,
   calculateKellyCriterion,
   exportPredictionsToCSV,
+  analyzeHtFtScenarios,
+  analyzeGoalTimingDistribution,
 } from "../utils/sequenceEngine";
 import {
   BarChart3,
@@ -142,6 +144,14 @@ export const GlobalAnalysisView: React.FC<GlobalAnalysisViewProps> = ({
 
   const sequencePatterns = useMemo(() => {
     return detectSequencePatterns(filteredDatabase);
+  }, [filteredDatabase]);
+
+  const htFtScenarios = useMemo(() => {
+    return analyzeHtFtScenarios(filteredDatabase);
+  }, [filteredDatabase]);
+
+  const goalTimingDist = useMemo(() => {
+    return analyzeGoalTimingDistribution(filteredDatabase);
   }, [filteredDatabase]);
 
   const producedMatches = useMemo(() => {
@@ -935,6 +945,111 @@ export const GlobalAnalysisView: React.FC<GlobalAnalysisViewProps> = ({
                   <span className="text-[9px] text-slate-500 block">{sf.count} fois</span>
                 </div>
               ))}
+            </div>
+          </div>
+
+          {/* HT/FT Scenarios Distribution */}
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <Layers className="w-5 h-5 text-emerald-400" />
+                <div>
+                  <h4 className="text-sm font-black text-white uppercase tracking-wider">
+                    Analyse des Scénarios Mi-Temps / Fin de Match (HT / FT)
+                  </h4>
+                  <p className="text-xs text-slate-400">
+                    Déroulement et retournements de situation observés entre la pause et la fin du match
+                  </p>
+                </div>
+              </div>
+              <span className="text-xs font-mono font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-3 py-1 rounded-xl">
+                {htFtScenarios.reduce((acc, curr) => acc + curr.count, 0)} Matchs Détaillés
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 md:grid-cols-3 gap-3">
+              {htFtScenarios.map((htft) => (
+                <div
+                  key={htft.code}
+                  className="bg-slate-950 border border-slate-800/80 hover:border-emerald-500/40 p-3.5 rounded-2xl space-y-2 transition-all"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-black font-mono px-2.5 py-1 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-400">
+                      {htft.code}
+                    </span>
+                    <span className="text-sm font-black text-amber-400 font-mono">
+                      {htft.pct}%
+                    </span>
+                  </div>
+
+                  <div className="space-y-1">
+                    <span className="text-xs font-bold text-white block truncate">{htft.label}</span>
+                    <span className="text-[10px] text-slate-500 font-mono block">{htft.count} occurrences en BDD</span>
+                  </div>
+
+                  <div className="w-full bg-slate-900 h-2 rounded-full overflow-hidden">
+                    <div
+                      style={{ width: `${Math.min(100, htft.pct * 2)}%` }}
+                      className="bg-gradient-to-r from-emerald-500 to-teal-400 h-full rounded-full"
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Goal Timing Chronology Distribution */}
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <Activity className="w-5 h-5 text-cyan-400" />
+                <div>
+                  <h4 className="text-sm font-black text-white uppercase tracking-wider">
+                    Distribution Chronologique des Buts (Par Tranches de 15 Min)
+                  </h4>
+                  <p className="text-xs text-slate-400">
+                    Séquences temporelles où l'algorithme génère le plus de buts
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 text-xs font-mono">
+                <span className="text-cyan-300">1ère MT : <strong className="text-white">{goalTimingDist.firstHalfPct}%</strong></span>
+                <span className="text-amber-400">2ème MT : <strong className="text-white">{goalTimingDist.secondHalfPct}%</strong></span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
+              {[
+                { label: "0' - 15'", pct: goalTimingDist.p0_15, color: "from-blue-500 to-cyan-400" },
+                { label: "16' - 30'", pct: goalTimingDist.p16_30, color: "from-cyan-500 to-teal-400" },
+                { label: "31' - 45'", pct: goalTimingDist.p31_45, color: "from-teal-500 to-emerald-400" },
+                { label: "46' - 60'", pct: goalTimingDist.p46_60, color: "from-amber-500 to-yellow-400" },
+                { label: "61' - 75'", pct: goalTimingDist.p61_75, color: "from-orange-500 to-amber-400" },
+                { label: "76' - 90'", pct: goalTimingDist.p76_90, color: "from-rose-500 to-orange-400" },
+              ].map((bucket, bIdx) => (
+                <div key={bIdx} className="bg-slate-950 border border-slate-800/80 p-3 rounded-2xl text-center space-y-2">
+                  <span className="text-xs font-bold text-slate-300 block">{bucket.label}</span>
+                  <span className="text-base font-black text-white font-mono block">{bucket.pct}%</span>
+                  <div className="w-full bg-slate-900 h-2 rounded-full overflow-hidden">
+                    <div
+                      style={{ width: `${Math.min(100, bucket.pct * 3)}%` }}
+                      className={`bg-gradient-to-r ${bucket.color} h-full rounded-full`}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="bg-slate-950/80 border border-slate-800/80 p-4 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-2">
+                <Target className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span className="text-slate-300">
+                  Taux de victoire de l'équipe inscrivant le <strong>1er but du match</strong> :
+                </span>
+              </div>
+              <span className="text-lg font-black font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-3 py-1 rounded-xl shrink-0">
+                {goalTimingDist.firstScorerWinPct}% de Victoires
+              </span>
             </div>
           </div>
         </div>

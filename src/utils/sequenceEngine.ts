@@ -1,6 +1,234 @@
 import { ExtractedMatchRecord } from "../types";
 import { CombinedMatchData } from "../services/sportyApi";
 
+export interface HtFtScenarioStats {
+  code: string; // e.g. "1/1", "X/1", "2/1", etc.
+  label: string;
+  count: number;
+  pct: number;
+}
+
+export interface GoalTimingDistribution {
+  p0_15: number;
+  p16_30: number;
+  p31_45: number;
+  p46_60: number;
+  p61_75: number;
+  p76_90: number;
+  firstHalfPct: number;
+  secondHalfPct: number;
+  firstScorerWinPct: number;
+  totalGoalsAnalyzed: number;
+}
+
+export interface MatchFlowScenario {
+  match: ExtractedMatchRecord;
+  similarityScore: number;
+  htScore: string;
+  ftScore: string;
+  goalsSummary: string;
+}
+
+/**
+ * Analyzes HT/FT (Mi-Temps / Fin de Match) scenario frequencies from database.
+ */
+export function analyzeHtFtScenarios(database: ExtractedMatchRecord[]): HtFtScenarioStats[] {
+  if (!database || database.length === 0) return [];
+
+  const map: Record<string, number> = {
+    "1/1": 0, "1/X": 0, "1/2": 0,
+    "X/1": 0, "X/X": 0, "X/2": 0,
+    "2/1": 0, "2/X": 0, "2/2": 0,
+  };
+
+  const labels: Record<string, string> = {
+    "1/1": "Domicile / Domicile",
+    "1/X": "Domicile / Nul",
+    "1/2": "Domicile / Extérieur (Remontée)",
+    "X/1": "Nul / Domicile (Bascule 2MT)",
+    "X/X": "Nul / Nul",
+    "X/2": "Nul / Extérieur (Bascule 2MT)",
+    "2/1": "Extérieur / Domicile (Remontée)",
+    "2/X": "Extérieur / Nul",
+    "2/2": "Extérieur / Extérieur",
+  };
+
+  let totalWithHt = 0;
+
+  database.forEach((m) => {
+    if (!m.score || !m.halfTimeScore) return;
+
+    // Parse HT
+    let htH = 0, htA = 0;
+    const htClean = m.halfTimeScore.replace("-", ":").trim();
+    if (htClean.includes(":")) {
+      const parts = htClean.split(":").map((s) => parseInt(s, 10) || 0);
+      htH = parts[0];
+      htA = parts[1];
+    } else return;
+
+    // Parse FT
+    let ftH = 0, ftA = 0;
+    const ftClean = m.score.replace("-", ":").trim();
+    if (ftClean.includes(":")) {
+      const parts = ftClean.split(":").map((s) => parseInt(s, 10) || 0);
+      ftH = parts[0];
+      ftA = parts[1];
+    } else return;
+
+    const htRes = htH > htA ? "1" : htH === htA ? "X" : "2";
+    const ftRes = ftH > ftA ? "1" : ftH === ftA ? "X" : "2";
+    const code = `${htRes}/${ftRes}`;
+
+    if (map[code] !== undefined) {
+      map[code]++;
+      totalWithHt++;
+    }
+  });
+
+  if (totalWithHt === 0) return [];
+
+  return Object.entries(map)
+    .map(([code, count]) => ({
+      code,
+      label: labels[code] || code,
+      count,
+      pct: Math.round((count / totalWithHt) * 1000) / 10,
+    }))
+    .sort((a, b) => b.count - a.count);
+}
+
+/**
+ * Analyzes Goal Timing distribution across 15-minute intervals.
+ */
+export function analyzeGoalTimingDistribution(database: ExtractedMatchRecord[]): GoalTimingDistribution {
+  let p0_15 = 0;
+  let p16_30 = 0;
+  let p31_45 = 0;
+  let p46_60 = 0;
+  let p61_75 = 0;
+  let p76_90 = 0;
+
+  let firstHalfGoals = 0;
+  let secondHalfGoals = 0;
+  let totalGoals = 0;
+
+  let firstScorerWinMatches = 0;
+  let totalMatchesWithGoals = 0;
+
+  database.forEach((m) => {
+    const goals = m.goalsDetail || [];
+
+    if (goals.length > 0) {
+      totalMatchesWithGoals++;
+      // Determine first scorer
+      const sortedGoals = [...goals].sort((a, b) => (a.minute || 0) - (b.minute || 0));
+      const firstGoal = sortedGoals[0];
+
+      // FT result
+      let ftH = 0, ftA = 0;
+      if (m.score) {
+        const parts = m.score.replace("-", ":").split(":").map((s) => parseInt(s, 10) || 0);
+        ftH = parts[0];
+        ftA = parts[1];
+      }
+
+      if (firstGoal) {
+        const firstGoalTeam = (firstGoal.team || "").toLowerCase();
+        if (
+          (firstGoalTeam === "home" && ftH > ftA) ||
+          (firstGoalTeam === "away" && ftA > ftH)
+        ) {
+          firstScorerWinMatches++;
+        }
+      }
+
+      goals.forEach((g) => {
+        const min = g.minute || 0;
+        totalGoals++;
+        if (min <= 15) p0_15++;
+        else if (min <= 30) p16_30++;
+        else if (min <= 45) p31_45++;
+        else if (min <= 60) p46_60++;
+        else if (min <= 75) p61_75++;
+        else p76_90++;
+
+        if (min <= 45) firstHalfGoals++;
+        else secondHalfGoals++;
+      });
+    }
+  });
+
+  const totalBucketGoals = Math.max(1, totalGoals);
+
+  return {
+    p0_15: Math.round((p0_15 / totalBucketGoals) * 100),
+    p16_30: Math.round((p16_30 / totalBucketGoals) * 100),
+    p31_45: Math.round((p31_45 / totalBucketGoals) * 100),
+    p46_60: Math.round((p46_60 / totalBucketGoals) * 100),
+    p61_75: Math.round((p61_75 / totalBucketGoals) * 100),
+    p76_90: Math.round((p76_90 / totalBucketGoals) * 100),
+    firstHalfPct: Math.round((firstHalfGoals / totalBucketGoals) * 100),
+    secondHalfPct: Math.round((secondHalfGoals / totalBucketGoals) * 100),
+    firstScorerWinPct: totalMatchesWithGoals > 0 ? Math.round((firstScorerWinMatches / totalMatchesWithGoals) * 100) : 0,
+    totalGoalsAnalyzed: totalGoals,
+  };
+}
+
+/**
+ * Finds top matching historical scenarios from database for a given current match.
+ */
+export function findSimilarHistoricalScenarios(
+  homeTeam: string,
+  awayTeam: string,
+  homeOdds: number,
+  database: ExtractedMatchRecord[]
+): MatchFlowScenario[] {
+  if (!database || database.length === 0) return [];
+
+  const hName = homeTeam.toLowerCase().trim();
+  const aName = awayTeam.toLowerCase().trim();
+
+  const scored = database.map((m) => {
+    let score = 0;
+    const dbHome = (m.homeTeamName || "").toLowerCase().trim();
+    const dbAway = (m.awayTeamName || "").toLowerCase().trim();
+    const dbHOdds = m.homeOdds || 2.0;
+
+    // Direct team match (+50 pts)
+    if (dbHome.includes(hName) && dbAway.includes(aName)) score += 50;
+    else if (dbHome.includes(aName) && dbAway.includes(hName)) score += 40;
+
+    // Odds bracket closeness (up to +30 pts)
+    const oddsDiff = Math.abs(dbHOdds - homeOdds);
+    if (oddsDiff <= 0.1) score += 30;
+    else if (oddsDiff <= 0.25) score += 20;
+    else if (oddsDiff <= 0.5) score += 10;
+
+    // Team presence (+10 pts)
+    if (dbHome.includes(hName) || dbAway.includes(hName)) score += 10;
+    if (dbHome.includes(aName) || dbAway.includes(aName)) score += 10;
+
+    const goalsSummary =
+      m.goalsDetail && m.goalsDetail.length > 0
+        ? m.goalsDetail.map((g) => `${g.minute}' (${g.player || "But"})`).join(", ")
+        : m.goalMinutes || "Pas de détail des minutes";
+
+    return {
+      match: m,
+      similarityScore: Math.min(99, score),
+      htScore: m.halfTimeScore || "N/D",
+      ftScore: m.score || "0:0",
+      goalsSummary,
+    };
+  });
+
+  return scored
+    .filter((s) => s.similarityScore > 15)
+    .sort((a, b) => b.similarityScore - a.similarityScore)
+    .slice(0, 5);
+}
+
 export interface SequencePatternResult {
   patternType: "STREAK" | "ODDS_BRACKET" | "ROUND_PHASE" | "SCORE_REPETITION";
   title: string;
