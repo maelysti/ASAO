@@ -17,6 +17,7 @@ import {
   Calendar,
   ChevronRight,
   Eye,
+  Download,
 } from "lucide-react";
 
 export interface RankingViewProps {
@@ -298,6 +299,87 @@ export const RankingView: React.FC<RankingViewProps> = ({
     };
   }, [selectedTeamForModal, teams, trajectoryMap, roundsArray]);
 
+  // Export Ranking table & full trajectory to Excel/CSV
+  const exportRankingToExcel = () => {
+    if (!filteredTeams || filteredTeams.length === 0) return;
+
+    const headers = [
+      "Position",
+      "Équipe",
+      "Matchs Joués (MJ)",
+      "Victoires (V)",
+      "Nuls (N)",
+      "Défaites (D)",
+      "Buts Pour (BP)",
+      "Buts Contre (BC)",
+      "Différence (Diff)",
+      "Points (PTS)",
+      "Forme Récente",
+    ];
+
+    // Add round headers J1 to J38
+    roundsArray.forEach((rn) => {
+      headers.push(`J${rn}`);
+    });
+
+    const rows: string[][] = [];
+
+    filteredTeams.forEach((t, idx) => {
+      const pos = t.position || idx + 1;
+      const name = t.name || "";
+      const played = t.played ?? 0;
+      const won = t.won ?? 0;
+      const drawn = t.drawn ?? 0;
+      const lost = t.lost ?? 0;
+      const gf = t.goalsFor ?? 0;
+      const ga = t.goalsAgainst ?? 0;
+      const diff = t.goalDifference ?? (gf - ga);
+      const pts = t.points ?? 0;
+      const formStr = (t.form || []).join("-");
+
+      const row = [
+        `"${pos}"`,
+        `"${name.replace(/"/g, '""')}"`,
+        `"${played}"`,
+        `"${won}"`,
+        `"${drawn}"`,
+        `"${lost}"`,
+        `"${gf}"`,
+        `"${ga}"`,
+        `"${diff > 0 ? "+" + diff : diff}"`,
+        `"${pts}"`,
+        `"${formStr}"`,
+      ];
+
+      // Add round details
+      const teamRounds = trajectoryMap[name] || {};
+      roundsArray.forEach((rn) => {
+        const item = teamRounds[rn];
+        if (!item || item.result === "Upcoming") {
+          row.push(`"${item?.opponent ? `vs ${item.opponent}` : "-"}"`);
+        } else {
+          const resCode = item.result === "Won" ? "V" : item.result === "Lost" ? "D" : "N";
+          const scoreText = item.score ? ` (${item.score})` : "";
+          const oppText = item.opponent ? ` ${item.isHome ? "vs" : "@"} ${item.opponent}` : "";
+          row.push(`"${resCode}${scoreText}${oppText}"`);
+        }
+      });
+
+      rows.push(row);
+    });
+
+    const csvContent = "\uFEFF" + [headers.join(";"), ...rows.map((r) => r.join(";"))].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    const catClean = (categoryName || "Championnat").replace(/[^a-zA-Z0-9]/g, "_");
+    link.setAttribute("download", `Bet261_Classement_${catClean}_J1-J${maxRounds}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <div className="space-y-6">
       {/* Top Banner & Title */}
@@ -360,6 +442,16 @@ export const RankingView: React.FC<RankingViewProps> = ({
               className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-2 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-amber-500/60 transition-colors"
             />
           </div>
+
+          <button
+            onClick={exportRankingToExcel}
+            disabled={!filteredTeams || filteredTeams.length === 0}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 text-xs font-black transition-all cursor-pointer shadow-md disabled:opacity-50 shrink-0"
+            title="Exporter le classement et parcours complet sous format Excel / CSV"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>Exporter Excel</span>
+          </button>
 
           {onRefresh && (
             <button
