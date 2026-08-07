@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Clock, Shield, Activity, Layers, Database, Lightbulb, AlertCircle, Sparkles, Zap } from "lucide-react";
-import { SportyEvent, ExtractedMatchRecord } from "../types";
+import { SportyEvent, ExtractedMatchRecord, RuleItem } from "../types";
 import { classifyMatchStatus, CombinedMatchData, getTeamLogoUrl } from "../services/sportyApi";
 import { getH2HAnalysisForMatch } from "../utils/globalAnalysisEngine";
 import { TeamFormTrajectory } from "./TeamFormTrajectory";
@@ -11,10 +11,11 @@ interface MatchCardProps {
   event: SportyEvent | CombinedMatchData;
   matchIndex?: number;
   database?: ExtractedMatchRecord[];
+  activeRules?: RuleItem[];
   onSelectEvent: (event: any) => void;
 }
 
-export const MatchCard: React.FC<MatchCardProps> = ({ event, matchIndex, database = [], onSelectEvent }) => {
+export const MatchCard: React.FC<MatchCardProps> = ({ event, matchIndex, database = [], activeRules, onSelectEvent }) => {
   const [showAnalyzerModal, setShowAnalyzerModal] = useState<boolean>(false);
   const [showStatsDetails, setShowStatsDetails] = useState<boolean>(false);
   const isCombined = "categoryName" in event;
@@ -384,7 +385,7 @@ export const MatchCard: React.FC<MatchCardProps> = ({ event, matchIndex, databas
           />
 
           {/* Rule & High Precision Analysis Block */}
-          <MatchRuleAnalysisBlock event={event} database={database} />
+          <MatchRuleAnalysisBlock event={event} database={database} activeRules={activeRules} />
         </div>
       )}
 

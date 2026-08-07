@@ -1,18 +1,21 @@
-import React, { useState } from "react";
-import { ShieldCheck, Target, CheckCircle2, Info, TrendingUp, AlertTriangle, ChevronDown, ChevronUp, Database, Sparkles, BarChart2 } from "lucide-react";
-import { SportyEvent, ExtractedMatchRecord } from "../types";
+import React, { useState, useMemo } from "react";
+import { ShieldCheck, Target, CheckCircle2, XCircle, Clock, Info, TrendingUp, AlertTriangle, ChevronDown, ChevronUp, Database, Sparkles, BarChart2, Flame } from "lucide-react";
+import { SportyEvent, ExtractedMatchRecord, RuleItem } from "../types";
 import { CombinedMatchData } from "../services/sportyApi";
 import { getH2HAnalysisForMatch } from "../utils/globalAnalysisEngine";
+import { evaluateRuleOnMatch, DEFAULT_RULES } from "../utils/ruleEngine";
 
 interface MatchRuleAnalysisBlockProps {
   event: SportyEvent | CombinedMatchData;
   database?: ExtractedMatchRecord[];
+  activeRules?: RuleItem[];
   compact?: boolean;
 }
 
 export const MatchRuleAnalysisBlock: React.FC<MatchRuleAnalysisBlockProps> = ({
   event,
   database = [],
+  activeRules,
   compact = false,
 }) => {
   const [expanded, setExpanded] = useState<boolean>(!compact);
@@ -22,6 +25,35 @@ export const MatchRuleAnalysisBlock: React.FC<MatchRuleAnalysisBlockProps> = ({
 
   const conf = rule?.confidence || h2h.confidence || 85;
   const risk = rule?.riskLevel || "FAIBLE";
+
+  // Resolve rules list from props or localStorage/DEFAULT_RULES
+  const effectiveRules = useMemo(() => {
+    if (activeRules && activeRules.length > 0) return activeRules;
+    try {
+      const saved = localStorage.getItem("bullet_sporty_rules");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {
+      // ignore
+    }
+    return DEFAULT_RULES;
+  }, [activeRules]);
+
+  // Evaluate all active rules on this match
+  const triggeredRules = useMemo(() => {
+    return effectiveRules
+      .filter((r) => r.isActive !== false)
+      .map((r) => {
+        const evaluation = evaluateRuleOnMatch(r, event);
+        return {
+          rule: r,
+          evaluation,
+        };
+      })
+      .filter((item) => item.evaluation.isTriggered);
+  }, [effectiveRules, event]);
 
   const getRiskColor = (r: string) => {
     switch (r) {
@@ -92,6 +124,59 @@ export const MatchRuleAnalysisBlock: React.FC<MatchRuleAnalysisBlockProps> = ({
           {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
         </button>
       </div>
+
+      {/* TRIGGERED ACTIVE RULES & RECAP STATUS (BULLET / CUSTOM RULES) */}
+      {triggeredRules.length > 0 && (
+        <div className="space-y-2 pt-2 border-t border-slate-800/80">
+          <div className="text-[11px] font-extrabold uppercase text-amber-300 flex items-center gap-1.5">
+            <Flame className="w-3.5 h-3.5 text-amber-400 fill-amber-400/20" />
+            <span>Règles Appliquées à ce Match ({triggeredRules.length})</span>
+          </div>
+
+          <div className="space-y-1.5">
+            {triggeredRules.map(({ rule: r, evaluation: ev }, idx) => (
+              <div
+                key={idx}
+                className="p-2.5 rounded-xl bg-slate-950 border border-amber-500/30 flex items-center justify-between gap-2 text-xs"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-mono text-[10px] font-black border border-amber-500/40">
+                      {r.id}
+                    </span>
+                    <span className="font-extrabold text-white truncate">{r.title}</span>
+                    <span className="text-[10px] text-emerald-300 font-mono bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/30 font-bold">
+                      Prono: {ev.predictedOutcome}
+                    </span>
+                  </div>
+                  <div className="text-[10px] text-slate-400 font-mono mt-0.5 truncate">
+                    {r.conditionText}
+                  </div>
+                </div>
+
+                <div className="shrink-0">
+                  {ev.status === "VALIDÉ" ? (
+                    <span className="px-2 py-1 rounded-lg bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 font-black text-[10px] flex items-center gap-1 shadow-sm">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                      GAGNANT ({ev.actualScore})
+                    </span>
+                  ) : ev.status === "ERREUR" ? (
+                    <span className="px-2 py-1 rounded-lg bg-rose-500/20 border border-rose-500/40 text-rose-300 font-black text-[10px] flex items-center gap-1 shadow-sm">
+                      <XCircle className="w-3.5 h-3.5 text-rose-400" />
+                      PERDANT ({ev.actualScore})
+                    </span>
+                  ) : (
+                    <span className="px-2 py-1 rounded-lg bg-amber-500/20 border border-amber-500/40 text-amber-300 font-black text-[10px] flex items-center gap-1 shadow-sm">
+                      <Clock className="w-3.5 h-3.5 text-amber-400" />
+                      EN ATTENTE
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* EXPANDABLE SECTION: HIGH PRECISION PROBABILITIES & DATABASE EVIDENCE */}
       {expanded && (

@@ -98,6 +98,8 @@ export function evaluateRuleOnMatch(
 
   const homeRank = match.homeTeam?.position || 99;
   const awayRank = match.awayTeam?.position || 99;
+  const homePts = match.homeTeam?.points || 0;
+  const awayPts = match.awayTeam?.points || 0;
   const { homeOdds, drawOdds, awayOdds } = getOddsFromMatch(match);
 
   let isTriggered = false;
@@ -105,47 +107,70 @@ export function evaluateRuleOnMatch(
 
   const cond = rule.conditionText.replace(/\s+/g, "");
 
-  // Rule #R1 format: IFRank1 < Rank2 AND Odds1 > Odds2THEN2
-  if (cond.includes("Rank1<Rank2") && cond.includes("Odds1>Odds2")) {
-    if (homeRank < awayRank && homeOdds > awayOdds && homeOdds > 0) {
+  // Extract THEN part
+  let thenPart = "1";
+  if (cond.includes("THEN")) {
+    thenPart = cond.split("THEN")[1] || "1";
+  }
+
+  // Check Rank & Points conditions (e.g. Bullet Rules)
+  if (cond.includes("Rank1") || cond.includes("Rank2") || cond.includes("Points1") || cond.includes("Points2") || cond.includes("Pts")) {
+    let rank1Ok = true;
+    let rank2Ok = true;
+    let ptsDiffOk = true;
+
+    const r1Match = cond.match(/Rank1<=?(\d+)/i);
+    if (r1Match && homeRank > parseInt(r1Match[1], 10)) rank1Ok = false;
+
+    const r2Match = cond.match(/Rank2>=?(\d+)/i);
+    if (r2Match && awayRank < parseInt(r2Match[1], 10)) rank2Ok = false;
+
+    const ptsDiffMatch = cond.match(/(?:Points1-Points2|PtsDiff)>=?(-?\d+)/i);
+    if (ptsDiffMatch && (homePts - awayPts) < parseInt(ptsDiffMatch[1], 10)) ptsDiffOk = false;
+
+    if (rank1Ok && rank2Ok && ptsDiffOk) {
       isTriggered = true;
-      predictedOutcome = cond.endsWith("THEN2") ? "2" : "1";
+      predictedOutcome = thenPart;
     }
   }
-  // Condition: IFRank1 <= 5 AND Odds1 < 2.10THEN1X
-  else if (cond.includes("Rank1<=5") && cond.includes("Odds1<")) {
-    if (homeRank <= 5 && homeOdds > 0 && homeOdds <= 2.1) {
-      isTriggered = true;
-      predictedOutcome = "1X";
-    }
-  }
-  // Condition: IFRank2 <= 3 AND Odds2 <= 1.85THEN2
-  else if (cond.includes("Rank2<=3") && cond.includes("Odds2<")) {
-    if (awayRank <= 3 && awayOdds > 0 && awayOdds <= 2.0) {
-      isTriggered = true;
-      predictedOutcome = "2";
-    }
-  }
-  // Generic fallback parser for IF Rank1 ...
-  else if (cond.includes("Rank1<Rank2")) {
-    if (homeRank < awayRank) {
-      isTriggered = true;
-      predictedOutcome = cond.split("THEN")[1] || "1";
-    }
-  } else if (cond.includes("Rank2<Rank1")) {
-    if (awayRank < homeRank) {
-      isTriggered = true;
-      predictedOutcome = cond.split("THEN")[1] || "2";
-    }
-  } else if (cond.includes("Odds1<Odds2")) {
-    if (homeOdds > 0 && awayOdds > 0 && homeOdds < awayOdds) {
-      isTriggered = true;
-      predictedOutcome = cond.split("THEN")[1] || "1";
-    }
-  } else if (cond.includes("Odds2<Odds1")) {
-    if (homeOdds > 0 && awayOdds > 0 && awayOdds < homeOdds) {
-      isTriggered = true;
-      predictedOutcome = cond.split("THEN")[1] || "2";
+
+  // Fallbacks for standard condition rules
+  if (!isTriggered) {
+    if (cond.includes("Rank1<Rank2") && cond.includes("Odds1>Odds2")) {
+      if (homeRank < awayRank && homeOdds > awayOdds && homeOdds > 0) {
+        isTriggered = true;
+        predictedOutcome = thenPart || "2";
+      }
+    } else if (cond.includes("Rank1<=5") && cond.includes("Odds1<")) {
+      if (homeRank <= 5 && homeOdds > 0 && homeOdds <= 2.1) {
+        isTriggered = true;
+        predictedOutcome = "1X";
+      }
+    } else if (cond.includes("Rank2<=3") && cond.includes("Odds2<")) {
+      if (awayRank <= 3 && awayOdds > 0 && awayOdds <= 2.0) {
+        isTriggered = true;
+        predictedOutcome = "2";
+      }
+    } else if (cond.includes("Rank1<Rank2")) {
+      if (homeRank < awayRank) {
+        isTriggered = true;
+        predictedOutcome = thenPart || "1";
+      }
+    } else if (cond.includes("Rank2<Rank1")) {
+      if (awayRank < homeRank) {
+        isTriggered = true;
+        predictedOutcome = thenPart || "2";
+      }
+    } else if (cond.includes("Odds1<Odds2")) {
+      if (homeOdds > 0 && awayOdds > 0 && homeOdds < awayOdds) {
+        isTriggered = true;
+        predictedOutcome = thenPart || "1";
+      }
+    } else if (cond.includes("Odds2<Odds1")) {
+      if (homeOdds > 0 && awayOdds > 0 && awayOdds < homeOdds) {
+        isTriggered = true;
+        predictedOutcome = thenPart || "2";
+      }
     }
   }
 
@@ -177,7 +202,7 @@ export function evaluateRuleOnMatch(
     else if (predictedOutcome === "Over2.5" && homeGoals + awayGoals > 2) isValid = true;
 
     status = isValid ? "VALIDÉ" : "ERREUR";
-    details = `Score: ${scoreStr} | Prédiction: ${predictedOutcome} (${isValid ? "Validée" : "Échouée"})`;
+    details = `Score: ${scoreStr} | Pronostic: ${predictedOutcome} (${isValid ? "Validé / Gagnant 🟢" : "Échoué / Perdant 🔴"})`;
   }
 
   return {

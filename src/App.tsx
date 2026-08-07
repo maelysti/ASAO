@@ -29,6 +29,7 @@ import { MatchResultsView } from "./components/MatchResultsView";
 import { RankingView } from "./components/RankingView";
 import { RulesView } from "./components/RulesView";
 
+import { BulletView } from "./components/BulletView";
 import { ExtractionView } from "./components/ExtractionView";
 import { GlobalAnalysisView } from "./components/GlobalAnalysisView";
 import { ToolStrategyView } from "./components/ToolStrategyView";
@@ -39,7 +40,7 @@ import { RuleItem, AIRecapPrediction, ExtractedMatchRecord } from "./types";
 import { DEFAULT_RULES, processAllRules, runAIModeAnalysis } from "./utils/ruleEngine";
 import { getH2HAnalysisForMatch } from "./utils/globalAnalysisEngine";
 
-import { AlertTriangle, Key, RefreshCw, Trophy, Layers, Activity, Database, Download, ListOrdered, Sliders, Zap, BarChart3, PanelLeftClose, PanelLeftOpen, ChevronLeft, ChevronRight, Wrench, Clock } from "lucide-react";
+import { AlertTriangle, Key, RefreshCw, Trophy, Layers, Activity, Database, Download, ListOrdered, Sliders, Zap, BarChart3, PanelLeftClose, PanelLeftOpen, ChevronLeft, ChevronRight, Wrench, Clock, Flame } from "lucide-react";
 
 export default function App() {
   const [token, setToken] = useState<string>(getStoredToken());
@@ -83,10 +84,29 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [activeRuleFilter, setActiveRuleFilter] = useState<string | null>(null);
   const [activeBetFilter, setActiveBetFilter] = useState<string | null>(null);
-  const [activeMainView, setActiveMainView] = useState<"current" | "ranking" | "results" | "rules" | "extraction" | "database" | "global_analysis" | "tool">("current");
+  const [activeMainView, setActiveMainView] = useState<"current" | "ranking" | "results" | "bullet" | "rules" | "extraction" | "database" | "global_analysis" | "tool">("current");
 
   // Rules & AI State
-  const [rules, setRules] = useState<RuleItem[]>(DEFAULT_RULES);
+  const [rules, setRules] = useState<RuleItem[]>(() => {
+    try {
+      const saved = localStorage.getItem("bullet_sporty_rules");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {
+      // ignore
+    }
+    return DEFAULT_RULES;
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("bullet_sporty_rules", JSON.stringify(rules));
+    } catch {
+      // ignore
+    }
+  }, [rules]);
   const [rulesMode, setRulesMode] = useState<"Manuel" | "IA">("Manuel");
   const [aiRecaps, setAiRecaps] = useState<AIRecapPrediction[]>([]);
   const [isScanningAI, setIsScanningAI] = useState<boolean>(false);
@@ -799,6 +819,29 @@ export default function App() {
 
               <div className="h-[1px] bg-slate-800 my-1" />
 
+              {/* BULLET RUBBON ITEM */}
+              <button
+                onClick={() => setActiveMainView("bullet")}
+                title="BULLET INTEL"
+                className={`flex items-center ${
+                  isSidebarCollapsed ? "justify-center px-0 py-3" : "justify-between px-3.5 py-2.5"
+                } rounded-xl text-xs font-black transition-all cursor-pointer ${
+                  activeMainView === "bullet"
+                    ? "bg-gradient-to-r from-amber-500 via-orange-500 to-emerald-500 text-slate-950 shadow-lg shadow-amber-500/25 ring-1 ring-amber-400/50"
+                    : "text-amber-400/90 hover:text-amber-300 hover:bg-slate-800/60"
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <Flame className="w-4 h-4 text-amber-400 shrink-0 fill-amber-400/20" />
+                  {!isSidebarCollapsed && <span className="font-extrabold uppercase">BULLET</span>}
+                </div>
+                {!isSidebarCollapsed && (
+                  <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold border border-amber-500/30">
+                    BDD +
+                  </span>
+                )}
+              </button>
+
               <button
                 onClick={() => setActiveMainView("rules")}
                 title="RULES"
@@ -1071,6 +1114,7 @@ export default function App() {
                       event={ev}
                       matchIndex={idx + 1}
                       database={extractedDatabase}
+                      activeRules={evaluatedRules}
                       onSelectEvent={(e) => setSelectedEvent(e)}
                     />
                   ))}
@@ -1122,6 +1166,18 @@ export default function App() {
             token={token}
             database={extractedDatabase}
             onAutoSaveResultsToDatabase={handleAddExtractedRecords}
+          />
+        </main>
+      ) : activeMainView === "bullet" ? (
+        <main className="flex-1 max-w-7xl w-full mx-auto px-4 lg:px-8 py-6">
+          <BulletView
+            database={extractedDatabase}
+            entryPoints={validEntryPoints}
+            allMatchesByComp={allMatchesByComp}
+            onCreateRule={handleCreateRule}
+            activeRules={evaluatedRules}
+            onToggleRule={handleToggleRule}
+            onDeleteRule={handleDeleteRule}
           />
         </main>
       ) : activeMainView === "rules" ? (
@@ -1200,6 +1256,7 @@ export default function App() {
       <MatchDetailModal
         event={selectedEvent}
         database={extractedDatabase}
+        activeRules={evaluatedRules}
         onClose={() => setSelectedEvent(null)}
       />
 

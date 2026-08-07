@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { X, Shield, Clock, Trophy, Code, Copy, Check, Activity, Sparkles, Layers, Hash, Database, BarChart2 } from "lucide-react";
-import { SportyEvent, ExtractedMatchRecord } from "../types";
+import { SportyEvent, ExtractedMatchRecord, RuleItem } from "../types";
 import { classifyMatchStatus, CombinedMatchData, getTeamLogoUrl } from "../services/sportyApi";
 import { getH2HAnalysisForMatch } from "../utils/globalAnalysisEngine";
 import { MatchRuleAnalysisBlock } from "./MatchRuleAnalysisBlock";
@@ -9,10 +9,11 @@ import { TeamFormTrajectory } from "./TeamFormTrajectory";
 interface MatchDetailModalProps {
   event: SportyEvent | CombinedMatchData | null;
   database?: ExtractedMatchRecord[];
+  activeRules?: RuleItem[];
   onClose: () => void;
 }
 
-export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({ event, database = [], onClose }) => {
+export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({ event, database = [], activeRules, onClose }) => {
   const [copied, setCopied] = useState(false);
   const [showRawJson, setShowRawJson] = useState(false);
 
@@ -211,7 +212,7 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({ event, datab
               />
 
               {/* Master Rule Analysis & Probabilities Block */}
-              <MatchRuleAnalysisBlock event={event} database={database} />
+              <MatchRuleAnalysisBlock event={event} database={database} activeRules={activeRules} />
 
               {/* Analyse H2H & Algo Database Injected */}
               <div className="bg-slate-950/90 border border-emerald-500/30 rounded-2xl p-4 shadow-xl space-y-3">
