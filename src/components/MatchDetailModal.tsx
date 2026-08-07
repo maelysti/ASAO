@@ -266,6 +266,17 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({ event, datab
                           {(event as SportyEvent).scores?.[0]?.homeScore ?? 0} - {(event as SportyEvent).scores?.[0]?.awayScore ?? 0}
                         </div>
                       </div>
+                    ) : (event as any).score || (event as any).rawMatch?.score ? (
+                      <div className="flex flex-col items-center gap-1">
+                        <div className="px-3 py-1 bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 font-black font-mono text-xl sm:text-2xl rounded-xl shadow-lg">
+                          {((event as any).score || (event as any).rawMatch?.score).replace(":", " - ")}
+                        </div>
+                        {((event as any).halfTimeScore || (event as any).rawMatch?.halfTimeScore) && (
+                          <span className="text-[10px] font-mono font-bold text-slate-400">
+                            HT: {((event as any).halfTimeScore || (event as any).rawMatch?.halfTimeScore).replace(":", " - ")}
+                          </span>
+                        )}
+                      </div>
                     ) : (
                       <div className="w-10 h-10 rounded-full bg-slate-800/80 border border-slate-700 flex items-center justify-center font-bold text-xs text-slate-400">
                         VS
@@ -300,6 +311,21 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({ event, datab
                     )}
                   </div>
                 </div>
+
+                {/* Goal Timeline / Déroulement des Buts */}
+                {((event as any).goalMinutes || ((event as any).goalsDetail && (event as any).goalsDetail.length > 0) || ((event as any).goals && (event as any).goals.length > 0)) && (
+                  <div className="mt-4 pt-3 border-t border-slate-800/80">
+                    <div className="flex items-center justify-center gap-1.5 text-[11px] font-extrabold text-amber-400 uppercase tracking-wider mb-2">
+                      <span>⚽ DÉROULEMENT ET MINUTES DES BUTS</span>
+                    </div>
+                    <div className="p-2.5 bg-slate-950/90 border border-slate-800 rounded-xl font-mono text-xs text-emerald-400 font-bold text-center leading-relaxed">
+                      {(event as any).goalMinutes ||
+                        ((event as any).goalsDetail || (event as any).goals || [])
+                          .map((g: any) => `${g.minute || g.time || "?"}' (${g.player ? `${g.player} - ` : ""}${g.team === "home" ? event.homeTeamName : g.team === "away" ? event.awayTeamName : g.team})`)
+                          .join(", ")}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Team Form Trajectory (Parcours des deux équipes) */}

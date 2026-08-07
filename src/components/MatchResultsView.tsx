@@ -23,6 +23,7 @@ import {
   List,
   Database,
   TrendingUp,
+  Download,
 } from "lucide-react";
 import {
   fetchInstantLeagueResults,
@@ -247,6 +248,98 @@ export const MatchResultsView: React.FC<MatchResultsViewProps> = ({
     }
   };
 
+  // Export Results to Excel/CSV format
+  const exportResultsToExcel = () => {
+    if (displayedRounds.length === 0) return;
+
+    const headers = [
+      "Ligue / Competition",
+      "Journee / Round",
+      "Date / Heure",
+      "Equipe Domicile",
+      "Equipe Visiteur",
+      "Score HT (Mi-Temps)",
+      "Score FT (Fin de Match)",
+      "Resultat 1X2",
+      "Total Buts",
+      "Over 2.5",
+      "Deroulement des Buts",
+    ];
+
+    const rows: string[][] = [];
+
+    displayedRounds.forEach((roundObj) => {
+      const roundMatches = (roundObj.matches || []).filter((m) => {
+        if (searchQuery.trim()) {
+          const q = searchQuery.toLowerCase();
+          const home = m.homeTeam?.name?.toLowerCase() || "";
+          const away = m.awayTeam?.name?.toLowerCase() || "";
+          if (!home.includes(q) && !away.includes(q) && !m.name?.toLowerCase().includes(q)) {
+            return false;
+          }
+        }
+        if (outcomeFilter !== "all") {
+          const [h, a] = (m.score || "0:0").split(":").map((s) => parseInt(s, 10) || 0);
+          if (outcomeFilter === "home" && h <= a) return false;
+          if (outcomeFilter === "draw" && h !== a) return false;
+          if (outcomeFilter === "away" && h >= a) return false;
+          if (outcomeFilter === "over25" && h + a <= 2.5) return false;
+        }
+        return true;
+      });
+
+      roundMatches.forEach((m) => {
+        const league = currentEntryPoint?.name || "Virtual League";
+        const round = `J${roundObj.roundNumber || ""}`;
+        const dateTime = `${formatMatchDate(roundObj.expectedStart)} ${formatMatchTime(roundObj.expectedStart)}`.trim();
+        const homeName = m.homeTeam?.name || m.name?.split(" vs ")[0] || "Home";
+        const awayName = m.awayTeam?.name || m.name?.split(" vs ")[1] || "Away";
+        const ftScore = m.score || "0:0";
+        const htScore = m.halfTimeScore || "0:0";
+
+        const [hNum, aNum] = ftScore.split(":").map((s) => parseInt(s, 10) || 0);
+        const totalGoals = hNum + aNum;
+        const over25 = totalGoals > 2.5 ? "OUI" : "NON";
+
+        let res1x2 = "Nul (X)";
+        if (hNum > aNum) res1x2 = "Domicile (1)";
+        else if (aNum > hNum) res1x2 = "Exterieur (2)";
+
+        const goalsDetailStr = (m.goals || [])
+          .map((g: any) => `${g.minute}' (${g.team === "Home" ? homeName : awayName})`)
+          .join("; ");
+
+        rows.push([
+          `"${league.replace(/"/g, '""')}"`,
+          `"${round}"`,
+          `"${dateTime}"`,
+          `"${homeName.replace(/"/g, '""')}"`,
+          `"${awayName.replace(/"/g, '""')}"`,
+          `"${htScore}"`,
+          `"${ftScore}"`,
+          `"${res1x2}"`,
+          `"${totalGoals}"`,
+          `"${over25}"`,
+          `"${goalsDetailStr.replace(/"/g, '""')}"`,
+        ]);
+      });
+    });
+
+    const csvContent = "\uFEFF" + [headers.join(";"), ...rows.map((r) => r.join(";"))].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    const catName = (currentEntryPoint?.name || "Resultats").replace(/[^a-zA-Z0-9]/g, "_");
+    link.setAttribute(
+      "download",
+      `Bet261_Resultats_${catName}_J${selectedRoundFilter === "all" ? "Toutes" : selectedRoundFilter}.csv`
+    );
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <div className="space-y-6">
       {/* 1. TOP COMPETITION SELECTOR RIBBON */}
@@ -266,14 +359,38 @@ export const MatchResultsView: React.FC<MatchResultsViewProps> = ({
             </div>
           </div>
 
-          <button
-            onClick={loadResults}
-            disabled={loading}
-            className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200 border border-slate-700 transition-all cursor-pointer disabled:opacity-50"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin text-emerald-400" : ""}`} />
-            <span>Recharger les Données</span>
-          </button>
+          <div className="flex items-center gap-2 flex-wrap">
+            {hasMore && (
+              <button
+                onClick={handleLoadAllRounds}
+                disabled={loadingMore}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 text-xs font-black transition-all cursor-pointer shadow-md disabled:opacity-50"
+                title="Charger l'intégralité des journées (Afficher Tout)"
+              >
+                <Zap className={`w-3.5 h-3.5 ${loadingMore ? "animate-spin" : ""}`} />
+                <span>{loadingMore ? "Chargement..." : "Afficher Tout (Charger 100%)"}</span>
+              </button>
+            )}
+
+            <button
+              onClick={exportResultsToExcel}
+              disabled={allDisplayedMatches.length === 0}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 text-xs font-black transition-all cursor-pointer shadow-md disabled:opacity-50"
+              title="Exporter les résultats affichés sous format Excel (.CSV)"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Exporter Excel ({allDisplayedMatches.length})</span>
+            </button>
+
+            <button
+              onClick={loadResults}
+              disabled={loading}
+              className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200 border border-slate-700 transition-all cursor-pointer disabled:opacity-50"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin text-emerald-400" : ""}`} />
+              <span className="hidden sm:inline">Recharger</span>
+            </button>
+          </div>
         </div>
 
         {/* Categories Horizontal Ribbon */}
