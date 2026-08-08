@@ -47,8 +47,15 @@ export const MatchCard: React.FC<MatchCardProps> = ({ event, matchIndex, databas
   const awayOdds = mainBetType?.eventBetTypeItems?.find((i) => i.shortName === "2")?.odds;
 
   const roundNum = isCombined ? (event as CombinedMatchData).roundNumber : matchIndex || 1;
-  const rawSeason = (event as any).seasonNumber || (event as any).season || (event as any).seasonId || (event as any).rawMatch?.seasonNumber || 1;
-  const seasonNum = typeof rawSeason === "number" ? rawSeason : (parseInt(String(rawSeason).replace(/\D/g, ""), 10) || 1);
+  const rawSeason =
+    (event as any).seasonNumber ||
+    (event as any).season ||
+    (event as any).seasonId ||
+    (event as any).rawMatch?.seasonNumber ||
+    (event as any).rawMatch?.seasonId ||
+    ((event as any).sourceRef ? String((event as any).sourceRef).split("-").pop() : null) ||
+    1;
+  const seasonNum = typeof rawSeason === "number" ? rawSeason : (rawSeason && /^\d+$/.test(String(rawSeason)) ? rawSeason : (parseInt(String(rawSeason).replace(/\D/g, ""), 10) || rawSeason));
   const homeStats = isCombined ? (event as CombinedMatchData).homeStats : undefined;
   const awayStats = isCombined ? (event as CombinedMatchData).awayStats : undefined;
 

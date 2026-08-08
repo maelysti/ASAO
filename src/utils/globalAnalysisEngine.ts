@@ -25,10 +25,13 @@ export function convertRoundResultsToExtractedRecords(
 
       const sNum =
         (r as any).seasonNumber ||
+        (r as any).seasonId ||
         (r as any).season ||
         (m as any).seasonNumber ||
+        (m as any).seasonId ||
         (m as any).season ||
         1;
+      const sId = (r as any).seasonId || (m as any).seasonId || sNum;
       const sName =
         (r as any).seasonName ||
         (m as any).seasonName ||

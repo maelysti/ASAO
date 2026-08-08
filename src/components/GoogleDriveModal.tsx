@@ -219,36 +219,44 @@ export const GoogleDriveModal: React.FC<GoogleDriveModalProps> = ({
           rawList = parsed.records;
         }
 
-        importedRecords = rawList.map((item: any, idx: number) => ({
-          id: typeof item.id === "number" ? item.id : Date.now() + idx,
-          matchName: item.matchName || item.match || `${item.homeTeamName || item.homeTeam || "Équipe A"} vs ${item.awayTeamName || item.awayTeam || "Équipe B"}`,
-          homeTeamName: item.homeTeamName || item.homeTeam || "Équipe A",
-          awayTeamName: item.awayTeamName || item.awayTeam || "Équipe B",
-          homeRank: item.homeRank || 1,
-          awayRank: item.awayRank || 2,
-          homePoints: item.homePoints || 0,
-          awayPoints: item.awayPoints || 0,
-          competitionId: item.competitionId || 100,
-          competitionName: item.competitionName || item.competition || "Ligue Virtuelle",
-          roundNumber: item.roundNumber || item.round || 1,
-          status: item.status || "Ended",
-          expectedStart: item.expectedStart || item.date || new Date().toISOString(),
-          score: item.score || item.finalScore || `${item.homeScore || 0}-${item.awayScore || 0}`,
-          halfTimeScore: item.halfTimeScore || "0-0",
-          goalsCount: item.goalsCount || 0,
-          goalMinutes: item.goalMinutes || "",
-          goalsDetail: item.goalsDetail || [],
-          homeOdds: item.homeOdds || item.oddsHome || 2.1,
-          drawOdds: item.drawOdds || item.oddsDraw || 3.2,
-          awayOdds: item.awayOdds || item.oddsAway || 3.4,
-          doubleChanceOdds: item.doubleChanceOdds || { dc1X: 1.3, dc12: 1.25, dcX2: 1.6 },
-          overUnderOdds: item.overUnderOdds || { over25: 1.85, under25: 1.95 },
-          bothTeamsScoreOdds: item.bothTeamsScoreOdds || { yes: 1.75, no: 2.05 },
-          allOddsSummary: item.allOddsSummary || "1: 2.10 | X: 3.20 | 2: 3.40",
-          headToHeadHistory: item.headToHeadHistory || [],
-          extractedAt: item.extractedAt || new Date().toISOString(),
-          source: "Imported JSON",
-        }));
+        importedRecords = rawList.map((item: any, idx: number) => {
+          const rawS = item.seasonNumber || item.seasonId || item.season || item.rawMatch?.seasonNumber || item.rawMatch?.seasonId || 1;
+          const sNum = typeof rawS === "number" ? rawS : (parseInt(String(rawS).replace(/\D/g, ""), 10) || 1);
+          const sId = item.seasonId || sNum;
+          return {
+            id: typeof item.id === "number" ? item.id : Date.now() + idx,
+            matchName: item.matchName || item.match || `${item.homeTeamName || item.homeTeam || "Équipe A"} vs ${item.awayTeamName || item.awayTeam || "Équipe B"}`,
+            homeTeamName: item.homeTeamName || item.homeTeam || "Équipe A",
+            awayTeamName: item.awayTeamName || item.awayTeam || "Équipe B",
+            homeRank: item.homeRank || 1,
+            awayRank: item.awayRank || 2,
+            homePoints: item.homePoints || 0,
+            awayPoints: item.awayPoints || 0,
+            competitionId: item.competitionId || 100,
+            competitionName: item.competitionName || item.competition || "Ligue Virtuelle",
+            roundNumber: item.roundNumber || item.round || 1,
+            seasonNumber: sNum,
+            seasonId: sId,
+            seasonName: item.seasonName || `Saison ${sNum}`,
+            status: item.status || "Ended",
+            expectedStart: item.expectedStart || item.date || new Date().toISOString(),
+            score: item.score || item.finalScore || `${item.homeScore || 0}-${item.awayScore || 0}`,
+            halfTimeScore: item.halfTimeScore || "0-0",
+            goalsCount: item.goalsCount || 0,
+            goalMinutes: item.goalMinutes || "",
+            goalsDetail: item.goalsDetail || [],
+            homeOdds: item.homeOdds || item.oddsHome || 2.1,
+            drawOdds: item.drawOdds || item.oddsDraw || 3.2,
+            awayOdds: item.awayOdds || item.oddsAway || 3.4,
+            doubleChanceOdds: item.doubleChanceOdds || { dc1X: 1.3, dc12: 1.25, dcX2: 1.6 },
+            overUnderOdds: item.overUnderOdds || { over25: 1.85, under25: 1.95 },
+            bothTeamsScoreOdds: item.bothTeamsScoreOdds || { yes: 1.75, no: 2.05 },
+            allOddsSummary: item.allOddsSummary || "1: 2.10 | X: 3.20 | 2: 3.40",
+            headToHeadHistory: item.headToHeadHistory || [],
+            extractedAt: item.extractedAt || new Date().toISOString(),
+            source: "Imported JSON",
+          };
+        });
       } else if (file.name.endsWith(".csv") || file.mimeType.includes("csv")) {
         // Parse CSV lines
         const lines = fileText.split(/\r?\n/).filter((l) => l.trim().length > 0);

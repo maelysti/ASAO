@@ -23,6 +23,7 @@ interface MatchTabsProps {
   onSearchChange: (q: string) => void;
   onGoToClosestMatch?: () => void;
   categoryName?: string;
+  categoryId?: number;
   silentUpdates?: boolean;
   onToggleSilentUpdates?: () => void;
 }
@@ -43,6 +44,7 @@ export const MatchTabs: React.FC<MatchTabsProps> = ({
   onSearchChange,
   onGoToClosestMatch,
   categoryName: _categoryName,
+  categoryId,
   silentUpdates = true,
   onToggleSilentUpdates,
 }) => {
@@ -208,24 +210,31 @@ export const MatchTabs: React.FC<MatchTabsProps> = ({
               </button>
             </div>
 
-            {/* Search Bar */}
-            <div className="relative w-full sm:w-64 shrink-0">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => onSearchChange(e.target.value)}
-                placeholder="Rechercher une équipe..."
-                className="w-full pl-9 pr-4 py-2 bg-slate-950/90 border border-slate-800 focus:border-emerald-500/80 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-emerald-500/50 transition-all"
-              />
-              {searchQuery && (
-                <button
-                  onClick={() => onSearchChange("")}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 text-xs font-bold"
-                >
-                  ✕
-                </button>
+            {/* Search Bar with Event Category ID Badge */}
+            <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
+              {categoryId && (
+                <span className="px-2.5 py-1.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-[11px] font-black font-mono shrink-0 shadow-sm" title="Event Category ID">
+                  ID: {categoryId}
+                </span>
               )}
+              <div className="relative w-full sm:w-64 shrink-0">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => onSearchChange(e.target.value)}
+                  placeholder="Rechercher une équipe..."
+                  className="w-full pl-9 pr-4 py-2 bg-slate-950/90 border border-slate-800 focus:border-emerald-500/80 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-emerald-500/50 transition-all"
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => onSearchChange("")}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 text-xs font-bold"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>

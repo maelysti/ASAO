@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import * as XLSX from "xlsx";
 import { GoogleDriveModal } from "./GoogleDriveModal";
 import {
@@ -45,6 +45,7 @@ import {
 interface ExtractionViewProps {
   entryPoints: SportyEntryPoint[];
   activeCategoryId: number;
+  activeEventCategoryId?: number;
   extractedDatabase: ExtractedMatchRecord[];
   onAddExtractedRecords: (records: ExtractedMatchRecord[]) => void;
   onClearDatabase: () => void;
@@ -67,6 +68,7 @@ interface MatrixLogEntry {
 export const ExtractionView: React.FC<ExtractionViewProps> = ({
   entryPoints,
   activeCategoryId,
+  activeEventCategoryId,
   extractedDatabase,
   onAddExtractedRecords,
   onClearDatabase,
@@ -440,6 +442,15 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
       const homeRankVal = m.homeTeam?.position || Math.floor(Math.random() * 12 + 1);
       const awayRankVal = m.awayTeam?.position || Math.floor(Math.random() * 12 + 1);
 
+      const eventCatId =
+        (m as any).eventCategoryId ||
+        (m as any).rawMatch?.eventCategoryId ||
+        (m as any).round?.eventCategoryId ||
+        (m as any).categoryId ||
+        (m as any).rawMatch?.categoryId ||
+        (compId === activeCategoryId && activeEventCategoryId ? activeEventCategoryId : compId) ||
+        compId;
+
       newExtracted.push({
         id: m.id,
         matchName: m.name || `${homeName} vs ${awayName}`,
@@ -452,6 +463,7 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
         homePoints: m.homeTeam?.points || 24,
         awayPoints: m.awayTeam?.points || 18,
         competitionId: compId,
+        eventCategoryId: eventCatId,
         competitionName: categoryName || `Ligue #${compId}`,
         roundNumber: roundNum,
         seasonNumber: sNum,
@@ -765,6 +777,17 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
     alert(`Exportation Google Drive générée pour ${driveUserEmail} !\nLe fichier JSON est téléchargé et prêt à être déposé dans votre emplacement Google Drive :\n${driveFolderUrl}`);
   };
 
+  const [selectedSeasonFilter, setSelectedSeasonFilter] = useState<string>("ALL");
+
+  const availableSeasonsInDb = useMemo(() => {
+    const set = new Set<string>();
+    extractedDatabase.forEach((m) => {
+      const s = m.seasonNumber || m.seasonId;
+      if (s) set.add(String(s));
+    });
+    return Array.from(set).sort();
+  }, [extractedDatabase]);
+
   const handleImportJSON = (e: React.ChangeEvent<HTMLInputElement>) => {
     const fileReader = new FileReader();
     if (e.target.files && e.target.files[0]) {
@@ -772,15 +795,60 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
       fileReader.onload = (event) => {
         try {
           const parsedData = JSON.parse(event.target?.result as string);
+          let rawList: any[] = [];
           if (Array.isArray(parsedData)) {
-            const formatted: ExtractedMatchRecord[] = parsedData.map((item: any) => ({
-              ...item,
-              source: "Imported JSON",
-              extractedAt: item.extractedAt || new Date().toLocaleTimeString("fr-FR"),
-            }));
+            rawList = parsedData;
+          } else if (parsedData && Array.isArray(parsedData.records)) {
+            rawList = parsedData.records;
+          } else if (parsedData && Array.isArray(parsedData.matches)) {
+            rawList = parsedData.matches;
+          } else if (parsedData && Array.isArray(parsedData.rounds)) {
+            parsedData.rounds.forEach((r: any) => {
+              const rSeason = r.seasonNumber || r.seasonId || r.season;
+              (r.matches || []).forEach((m: any) => {
+                rawList.push({
+                  ...m,
+                  roundNumber: r.roundNumber || m.round,
+                  seasonNumber: m.seasonNumber || m.season || m.seasonId || rSeason || 1,
+                  seasonId: m.seasonId || rSeason || 1,
+                  seasonName: m.seasonName || r.seasonName || `Saison ${rSeason || 1}`,
+                });
+              });
+            });
+          }
+
+          if (rawList.length > 0) {
+            const formatted: ExtractedMatchRecord[] = rawList.map((item: any, idx: number) => {
+              const rawS = item.seasonNumber || item.seasonId || item.season || item.rawMatch?.seasonNumber || item.rawMatch?.seasonId || 1;
+              const sNum = typeof rawS === "number" ? rawS : (parseInt(String(rawS).replace(/\D/g, ""), 10) || 1);
+              const sId = item.seasonId || sNum;
+              return {
+                ...item,
+                id: typeof item.id === "number" ? item.id : Date.now() + idx,
+                matchName: item.matchName || item.match || `${item.homeTeamName || item.homeTeam?.name || "Dom"} vs ${item.awayTeamName || item.awayTeam?.name || "Ext"}`,
+                homeTeamName: item.homeTeamName || item.homeTeam?.name || "Dom",
+                awayTeamName: item.awayTeamName || item.awayTeam?.name || "Ext",
+                homeRank: item.homeRank ?? item.homeTeam?.position ?? 1,
+                awayRank: item.awayRank ?? item.awayTeam?.position ?? 2,
+                competitionId: item.competitionId || item.entryPointId || 8035,
+                eventCategoryId: item.eventCategoryId || item.categoryId || item.competitionId || item.entryPointId || 8035,
+                competitionName: item.competitionName || item.categoryName || "Ligue",
+                roundNumber: item.roundNumber || item.round || 1,
+                seasonNumber: sNum,
+                seasonId: sId,
+                seasonName: item.seasonName || `Saison ${sNum}`,
+                status: item.status || (item.score ? "Finished" : "PreEvent"),
+                score: item.score || "",
+                halfTimeScore: item.halfTimeScore || "",
+                source: item.source || "Imported JSON",
+                extractedAt: item.extractedAt || new Date().toLocaleTimeString("fr-FR"),
+              };
+            });
             onAddExtractedRecords(formatted);
             addLog("SUCCESS", `[IMPORT] ${formatted.length} enregistrements importés dans la base de données.`);
             alert(`Succès : ${formatted.length} enregistrements importés !`);
+          } else {
+            alert("Aucun match valide trouvé dans le fichier JSON.");
           }
         } catch (err) {
           addLog("WARN", "[IMPORT_ERROR] Fichier JSON invalide.");
@@ -792,6 +860,9 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
 
   const filteredDatabase = extractedDatabase.filter((record) => {
     if (selectedLeagueFilter !== "ALL" && record.competitionId !== selectedLeagueFilter) {
+      return false;
+    }
+    if (selectedSeasonFilter !== "ALL" && String(record.seasonNumber || record.seasonId || 1) !== String(selectedSeasonFilter)) {
       return false;
     }
     if (selectedStatusFilter !== "ALL" && record.status !== selectedStatusFilter) {
@@ -1314,14 +1385,21 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
             </div>
 
             {/* Filter Search inputs */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Rechercher une équipe, un match..."
-                className="px-3.5 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500"
-              />
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 pt-2">
+              <div className="flex items-center gap-2">
+                {(activeEventCategoryId || activeCategoryId) && (
+                  <span className="px-2.5 py-2 rounded-xl bg-cyan-500/15 border border-cyan-500/30 text-cyan-400 text-[11px] font-black font-mono shrink-0 shadow-sm" title="Event Category ID">
+                    ID: {activeEventCategoryId || activeCategoryId}
+                  </span>
+                )}
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Rechercher une équipe, un match..."
+                  className="w-full px-3.5 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500"
+                />
+              </div>
 
               <select
                 value={selectedLeagueFilter === "ALL" ? "ALL" : selectedLeagueFilter.toString()}
@@ -1335,6 +1413,19 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
                 {entryPoints.map((ep) => (
                   <option key={ep.id} value={ep.id.toString()}>
                     🏆 {ep.name}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                value={selectedSeasonFilter}
+                onChange={(e) => setSelectedSeasonFilter(e.target.value)}
+                className="px-3.5 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-amber-300 font-bold focus:outline-none focus:border-amber-500 cursor-pointer"
+              >
+                <option value="ALL">📅 Toutes les Saisons</option>
+                {availableSeasonsInDb.map((s) => (
+                  <option key={s} value={s}>
+                    📅 Saison {s}
                   </option>
                 ))}
               </select>

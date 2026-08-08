@@ -26,19 +26,34 @@ export function saveStoredToken(token: string): void {
   }
 }
 
+export const TARGET_COMPETITION_IDS = [8035, 8065, 8056, 8060, 8036, 8037, 8042, 8043, 8044];
+
 export const ALLOWED_COMPETITIONS = [
-  { key: "english league", label: "English League", alt: "english fast league" },
-  { key: "coupe du monde", label: "Coupe du monde", alt: "world cup" },
-  { key: "champions league", label: "Champions League", alt: "champio league" },
-  { key: "coupe d'afrique", label: "Coupe d'Afrique", alt: "can" },
-  { key: "italian league", label: "Italian League", alt: "italian fast league" },
-  { key: "spanish league", label: "Spanish League", alt: "spanish fast league" },
-  { key: "french league", label: "French League", alt: "ligue 1" },
-  { key: "german league", label: "German League", alt: "bundesliga" },
-  { key: "portuguese league", label: "Portuguese League", alt: "portuguaise league" },
+  { key: "english", label: "English League", alt: "premier", id: 8035 },
+  { key: "coupe du monde", label: "Coupe du monde", alt: "world cup", id: 8065 },
+  { key: "champions", label: "Champions League", alt: "champio", id: 8056 },
+  { key: "coupe d'afrique", label: "Coupe d'Afrique", alt: "can", id: 8060 },
+  { key: "italian", label: "Italian League", alt: "serie a", id: 8036 },
+  { key: "spanish", label: "Spanish League", alt: "la liga", id: 8037 },
+  { key: "french", label: "French League", alt: "ligue 1", id: 8042 },
+  { key: "german", label: "German League", alt: "bundesliga", id: 8043 },
+  { key: "portuguese", label: "Portuguese League", alt: "portugal", id: 8044 },
 ];
 
-export function isAllowedCompetition(name: string): boolean {
+export const DEFAULT_ENTRY_POINTS: SportyEntryPoint[] = [
+  { id: 8035, parentEventCategoryId: 5, name: "English League", eventsCount: 470, priority: 1 },
+  { id: 8065, parentEventCategoryId: 5, name: "Coupe du monde", eventsCount: 4056, priority: 2 },
+  { id: 8056, parentEventCategoryId: 5, name: "Champions League", eventsCount: 2178, priority: 3 },
+  { id: 8060, parentEventCategoryId: 5, name: "Coupe d'Afrique", eventsCount: 840, priority: 4 },
+  { id: 8036, parentEventCategoryId: 5, name: "Italian League", eventsCount: 470, priority: 5 },
+  { id: 8037, parentEventCategoryId: 5, name: "Spanish League", eventsCount: 470, priority: 6 },
+  { id: 8042, parentEventCategoryId: 5, name: "French League", eventsCount: 423, priority: 7 },
+  { id: 8043, parentEventCategoryId: 5, name: "German League", eventsCount: 423, priority: 8 },
+  { id: 8044, parentEventCategoryId: 5, name: "Portuguese League", eventsCount: 414, priority: 9 },
+];
+
+export function isAllowedCompetition(name: string, id?: number): boolean {
+  if (id && TARGET_COMPETITION_IDS.includes(id)) return true;
   if (!name) return false;
   const lower = name.toLowerCase().trim();
   return ALLOWED_COMPETITIONS.some(
@@ -62,17 +77,32 @@ export async function fetchEntryPoints(token?: string): Promise<{ data: SportyEn
 
     if (!res.ok) {
       const errText = await res.text().catch(() => "");
-      return { data: [], status: res.status, error: errText || `HTTP ${res.status}` };
+      return { data: DEFAULT_ENTRY_POINTS, status: res.status, error: errText || `HTTP ${res.status}` };
     }
 
     const raw: SportyEntryPoint[] = await res.json();
+    if (!Array.isArray(raw) || raw.length === 0) {
+      return { data: DEFAULT_ENTRY_POINTS, status: 200 };
+    }
     
-    // Filter strictly for allowed competitions
-    const filtered = raw.filter((item) => isAllowedCompetition(item.name));
+    // Strictly filter by target IDs or allowed competition rules
+    const filtered = raw.filter((item) => TARGET_COMPETITION_IDS.includes(item.id) || isAllowedCompetition(item.name, item.id));
+    
+    // Sort according to target ID priority order
+    filtered.sort((a, b) => {
+      const idxA = TARGET_COMPETITION_IDS.indexOf(a.id);
+      const idxB = TARGET_COMPETITION_IDS.indexOf(b.id);
+      if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+      if (idxA !== -1) return -1;
+      if (idxB !== -1) return 1;
+      return (a.priority || 99) - (b.priority || 99);
+    });
 
-    return { data: filtered, status: 200 };
+    const result = filtered.length > 0 ? filtered : DEFAULT_ENTRY_POINTS;
+
+    return { data: result, status: 200 };
   } catch (err: any) {
-    return { data: [], status: 500, error: err.message || "Network Error" };
+    return { data: DEFAULT_ENTRY_POINTS, status: 500, error: err.message || "Network Error" };
   }
 }
 
@@ -398,16 +428,85 @@ export async function fetchAllDataForCompetitions(
       lastError = res.error;
     }
 
-    if (res.data && res.data.rounds) {
-      rawResponses[entryPoint.id] = res.data;
+    let roundsToProcess: any[] = [];
 
-      res.data.rounds.forEach((round) => {
+    if (res.data && res.data.rounds && res.data.rounds.length > 0) {
+      roundsToProcess = res.data.rounds;
+    } else {
+      // Fallback: group standard events for this entryPoint into synthetic rounds by expectedStart
+      const compEvents = events.filter(
+        (ev) =>
+          ev.entryPointId === entryPoint.id ||
+          ev.categoryId === entryPoint.id ||
+          (ev.categoryPath && ev.categoryPath.includes(`/${entryPoint.id}/`))
+      );
+
+      if (compEvents.length > 0) {
+        // Group events by expectedStart timestamp
+        const timeGroups = new Map<string, SportyEvent[]>();
+        compEvents.forEach((ev) => {
+          const key = ev.expectedStart || "upcoming";
+          if (!timeGroups.has(key)) timeGroups.set(key, []);
+          timeGroups.get(key)!.push(ev);
+        });
+
+        // Sort start times chronologically
+        const sortedTimes = Array.from(timeGroups.keys()).sort((a, b) => {
+          if (a === "upcoming") return 1;
+          if (b === "upcoming") return -1;
+          return new Date(a).getTime() - new Date(b).getTime();
+        });
+
+        let rNum = 1;
+        sortedTimes.forEach((timeKey) => {
+          const evList = timeGroups.get(timeKey)!;
+          roundsToProcess.push({
+            roundNumber: rNum++,
+            eventCategoryId: entryPoint.id,
+            expectedStart: timeKey !== "upcoming" ? timeKey : undefined,
+            matches: evList.map((ev) => ({
+              id: ev.id,
+              name: `${ev.homeTeamName} vs ${ev.awayTeamName}`,
+              homeTeam: { name: ev.homeTeamName },
+              awayTeam: { name: ev.awayTeamName },
+              expectedStart: ev.expectedStart,
+              expectedEnd: ev.expectedEnd,
+              state: ev.state || "PreEvent",
+              preEventOrLive: ev.preEventOrLive || "PreEvent",
+              eventBetTypes: ev.eventBetTypes || [],
+              score: (ev as any).score,
+              halfTimeScore: (ev as any).halfTimeScore,
+              goals: (ev as any).goals,
+              scores: (ev as any).scores,
+              rawMatch: ev,
+            })),
+          });
+        });
+      }
+    }
+
+    if (roundsToProcess.length > 0) {
+      rawResponses[entryPoint.id] = { rounds: roundsToProcess };
+
+      roundsToProcess.forEach((round) => {
         if (round.matches && Array.isArray(round.matches)) {
-          round.matches.forEach((m) => {
+          round.matches.forEach((m: any) => {
             const matchStart =
               m.expectedStart && m.expectedStart !== "0001-01-01T00:00:00Z"
                 ? m.expectedStart
                 : round.expectedStart;
+
+            const extractedSourceRef = m.sourceRef || (m.rawMatch && m.rawMatch.sourceRef);
+            let sourceRefSeason: string | number | null = null;
+            if (extractedSourceRef) {
+              const parts = String(extractedSourceRef).split("-");
+              if (parts.length > 0) {
+                const last = parts[parts.length - 1];
+                if (last && /^\d+$/.test(last)) {
+                  sourceRefSeason = last;
+                }
+              }
+            }
 
             const sNum =
               (round as any).seasonNumber ||
@@ -415,24 +514,28 @@ export async function fetchAllDataForCompetitions(
               (m as any).seasonNumber ||
               (m as any).season ||
               (round as any).seasonId ||
-              1;
+              (m as any).seasonId ||
+              sourceRefSeason ||
+              entryPoint.id;
+
+            const sId = (round as any).seasonId || (m as any).seasonId || sourceRefSeason || sNum;
+
             const sName =
               (round as any).seasonName ||
               (m as any).seasonName ||
               `Saison ${sNum}`;
-            const sId = (round as any).seasonId || (m as any).seasonId || sNum;
 
             combinedList.push({
               id: m.id,
               entryPointId: entryPoint.id,
-              eventCategoryId: round.eventCategoryId,
+              eventCategoryId: round.eventCategoryId || entryPoint.id,
               categoryName: entryPoint.name,
-              roundNumber: round.roundNumber || m.round,
+              roundNumber: round.roundNumber || m.round || 1,
               seasonNumber: sNum,
               seasonName: sName,
               seasonId: sId,
-              homeTeamName: m.homeTeam?.name || m.name.split(" vs ")[0] || "Équipe 1",
-              awayTeamName: m.awayTeam?.name || m.name.split(" vs ")[1] || "Équipe 2",
+              homeTeamName: m.homeTeam?.name || m.name?.split(" vs ")[0] || "Équipe 1",
+              awayTeamName: m.awayTeam?.name || m.name?.split(" vs ")[1] || "Équipe 2",
               homeStats: m.homeTeam
                 ? {
                     points: m.homeTeam.points,
@@ -466,6 +569,11 @@ export async function fetchAllDataForCompetitions(
         }
       });
     }
+  }
+
+  if (combinedList.length > 0) {
+    lastStatus = 200;
+    lastError = undefined;
   }
 
   return {

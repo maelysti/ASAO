@@ -16,6 +16,7 @@ import {
   RankingTeam,
   classifyMatchStatus,
   CombinedMatchData,
+  DEFAULT_ENTRY_POINTS,
 } from "./services/sportyApi";
 
 import { CompetitionRibbon } from "./components/CompetitionRibbon";
@@ -144,34 +145,33 @@ export default function App() {
   const loadData = useCallback(async (currentToken: string) => {
     setApiState((prev) => ({ ...prev, status: "loading" }));
 
-    // 1. Fetch entry points
+    // 1. Fetch entry points (falls back to DEFAULT_ENTRY_POINTS if empty or error)
     const epRes = await fetchEntryPoints(currentToken);
-
-    if (epRes.status !== 200 || !epRes.data) {
-      setApiState({
-        status: "error",
-        statusCode: epRes.status,
-        message:
-          epRes.status === 401
-            ? "Jeton Authorization Bearer expiré ou non valide."
-            : `Erreur API Sporty-Tech (Code HTTP ${epRes.status})`,
-      });
-      return;
-    }
-
-    setEntryPoints(epRes.data);
+    const validEPs = epRes.data && epRes.data.length > 0 ? epRes.data : DEFAULT_ENTRY_POINTS;
+    setEntryPoints(validEPs);
 
     // 2. Fetch both standard events and instant league matches
-    const allData = await fetchAllDataForCompetitions(epRes.data, currentToken);
+    const allData = await fetchAllDataForCompetitions(validEPs, currentToken);
 
     setEvents(allData.events);
     setInstantMatches(allData.instantLeagueMatches);
     setRawInstantResponses(allData.rawInstantLeagueResponses);
 
-    setApiState({
-      status: "success",
-      lastUpdated: new Date(),
-    });
+    if (allData.instantLeagueMatches.length > 0 || allData.events.length > 0) {
+      setApiState({
+        status: "success",
+        lastUpdated: new Date(),
+      });
+    } else {
+      setApiState({
+        status: "error",
+        statusCode: allData.status || epRes.status,
+        message:
+          epRes.status === 401
+            ? "Jeton Authorization Bearer expiré ou non valide."
+            : `Erreur API Sporty-Tech (Code HTTP ${allData.status || epRes.status})`,
+      });
+    }
   }, []);
 
   // Initial load on mount or when token changes
@@ -212,13 +212,15 @@ export default function App() {
     return hasRounds || hasEvents;
   });
 
+  const displayEntryPoints = validEntryPoints.length > 0 ? validEntryPoints : entryPoints;
+
   // Active competition category ID (default to English League 8035 or first valid)
   const activeCategoryId =
-    selectedCategoryId && validEntryPoints.some((ep) => ep.id === selectedCategoryId)
+    selectedCategoryId && displayEntryPoints.some((ep) => ep.id === selectedCategoryId)
       ? selectedCategoryId
-      : validEntryPoints[0]?.id || 8035;
+      : displayEntryPoints[0]?.id || 8035;
 
-  const currentEntryPoint = validEntryPoints.find((ep) => ep.id === activeCategoryId);
+  const currentEntryPoint = displayEntryPoints.find((ep) => ep.id === activeCategoryId);
 
   // Extract rounds for active competition directly from API response
   const activeRawData = rawInstantResponses[activeCategoryId];
@@ -259,6 +261,24 @@ export default function App() {
 
     return map;
   }, [entryPoints, rawInstantResponses, fetchedRoundMatches]);
+
+  // Specific eventCategoryId (e.g. 159864 for Spanish League, 159866 for English League)
+  const activeEventCategoryId = useMemo(() => {
+    const raw = rawInstantResponses[activeCategoryId];
+    if (raw && raw.rounds && raw.rounds[0] && raw.rounds[0].eventCategoryId) {
+      return Number(raw.rounds[0].eventCategoryId);
+    }
+    const compMatches = allMatchesByComp[activeCategoryId]?.matches;
+    if (compMatches && compMatches[0]) {
+      const catId =
+        compMatches[0].eventCategoryId ||
+        compMatches[0].categoryId ||
+        compMatches[0].rawMatch?.eventCategoryId ||
+        compMatches[0].rawMatch?.categoryId;
+      if (catId) return Number(catId);
+    }
+    return activeCategoryId;
+  }, [rawInstantResponses, activeCategoryId, allMatchesByComp]);
 
   // Process rules dynamically on matches data
   const evaluatedRules = useMemo(() => {
@@ -333,7 +353,8 @@ export default function App() {
 
   const [selectedRoundNumber, setSelectedRoundNumber] = useState<number>(1);
   const [silentUpdates, setSilentUpdates] = useState<boolean>(true);
-  const prevCategoryRef = useRef<number>(activeCategoryId);
+  const prevCategoryRef = useRef<number | null>(null);
+  const hasInitializedRoundRef = useRef<boolean>(false);
   const autoAdvancedRoundsRef = useRef<Set<string>>(new Set());
   const [competitionResults, setCompetitionResults] = useState<Record<number, any[]>>({});
 
@@ -408,8 +429,11 @@ export default function App() {
 
     if (bestRoundNumber !== null) {
       setSelectedRoundNumber(bestRoundNumber);
-      setCurrentTab("all");
     }
+    setCurrentTab("all");
+    setSearchQuery("");
+    setActiveRuleFilter(null);
+    setActiveBetFilter(null);
 
     setTimeout(() => {
       const gridEl = document.getElementById("match-grid-container");
@@ -419,17 +443,20 @@ export default function App() {
     }, 100);
   }, [availableRoundsList, activeRawData]);
 
-  // Auto-sync selected round to first available round in raw response when competition changes, or if silentUpdates is false
+  // Auto-sync selected round to closest active round on initial load or when competition changes
   useEffect(() => {
     const isCategoryChanged = prevCategoryRef.current !== activeCategoryId;
     if (isCategoryChanged) {
       prevCategoryRef.current = activeCategoryId;
     }
 
-    if (isCategoryChanged || !silentUpdates) {
-      handleGoToClosestMatch();
+    if (isCategoryChanged || !hasInitializedRoundRef.current || !silentUpdates) {
+      if (availableRoundsList.length > 0 || activeRawData?.rounds?.length) {
+        hasInitializedRoundRef.current = true;
+        handleGoToClosestMatch();
+      }
     }
-  }, [activeCategoryId, silentUpdates, handleGoToClosestMatch]);
+  }, [activeCategoryId, availableRoundsList, activeRawData, silentUpdates, handleGoToClosestMatch]);
 
   // Fetch results & live ranking for the active competition to get finished scores and live standings
   useEffect(() => {
@@ -498,8 +525,7 @@ export default function App() {
   useEffect(() => {
     if (!selectedRoundNumber || !activeCategoryId) return;
 
-    const eventCategoryId =
-      activeRawData?.rounds?.[0]?.eventCategoryId || activeCategoryId;
+    const eventCategoryId = activeEventCategoryId;
     const cacheKey = `${activeCategoryId}_${selectedRoundNumber}`;
 
     let isMounted = true;
@@ -1065,9 +1091,9 @@ export default function App() {
       {/* MAIN CONTENT WRAPPER */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Sticky Top Frozen Competition Ribbon */}
-        {validEntryPoints.length > 0 && (
+        {displayEntryPoints.length > 0 && (
           <CompetitionRibbon
-            entryPoints={validEntryPoints}
+            entryPoints={displayEntryPoints}
             selectedCategoryId={activeCategoryId}
             onSelectCategory={handleSelectCategory}
           />
@@ -1100,6 +1126,7 @@ export default function App() {
               onSearchChange={(q) => setSearchQuery(q)}
               onGoToClosestMatch={handleGoToClosestMatch}
               categoryName={currentEntryPoint?.name}
+              categoryId={activeEventCategoryId}
               silentUpdates={silentUpdates}
               onToggleSilentUpdates={() => setSilentUpdates((prev) => !prev)}
             />
@@ -1192,15 +1219,24 @@ export default function App() {
                     <p className="text-xs text-slate-500 max-w-sm mx-auto">
                       Aucun match ne correspond aux filtres sélectionnés (compétition, plage horaire ou recherche).
                     </p>
-                    {searchQuery && (
+                    {(searchQuery || currentTab !== "all" || activeRuleFilter || activeBetFilter) ? (
                       <button
                         onClick={() => {
                           setSearchQuery("");
                           setCurrentTab("all");
+                          setActiveRuleFilter(null);
+                          setActiveBetFilter(null);
                         }}
-                        className="mt-2 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-emerald-400 transition-colors"
+                        className="mt-2 px-4 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-xs font-bold text-emerald-400 border border-emerald-500/30 transition-colors"
                       >
-                        Réinitialiser les filtres
+                        Réinitialiser tous les filtres
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => handleGoToClosestMatch()}
+                        className="mt-2 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-emerald-400 border border-slate-700 transition-colors"
+                      >
+                        Afficher la Journée en Cours
                       </button>
                     )}
                   </div>
@@ -1213,6 +1249,7 @@ export default function App() {
             <RankingView
               teams={rankingTeams}
               categoryName={currentEntryPoint?.name || "Ligue Virtuelle"}
+              categoryId={activeEventCategoryId}
               isLoading={apiState.status === "loading"}
               onRefresh={() => loadData(token)}
               lastUpdated={apiState.lastUpdated}
@@ -1225,6 +1262,7 @@ export default function App() {
           <MatchResultsView
             entryPoints={validEntryPoints}
             selectedCategoryId={selectedCategoryId}
+            eventCategoryId={activeEventCategoryId}
             onSelectCategory={handleSelectCategory}
             token={token}
             database={extractedDatabase}
@@ -1281,6 +1319,7 @@ export default function App() {
           <ExtractionView
             entryPoints={validEntryPoints}
             activeCategoryId={activeCategoryId}
+            activeEventCategoryId={activeEventCategoryId}
             extractedDatabase={extractedDatabase}
             onAddExtractedRecords={handleAddExtractedRecords}
             onClearDatabase={handleClearDatabase}

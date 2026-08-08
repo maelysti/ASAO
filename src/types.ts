@@ -174,6 +174,7 @@ export interface GoalDetails {
   minute?: number | string;
   team?: "home" | "away" | string;
   scorer?: string;
+  player?: string;
   scoreAfterGoal?: string;
 }
 
@@ -189,6 +190,7 @@ export interface ExtractedMatchRecord {
   homePoints?: number;
   awayPoints?: number;
   competitionId: number;
+  eventCategoryId?: number;
   competitionName: string;
   roundNumber: number | string;
   seasonNumber?: number | string;

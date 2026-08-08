@@ -122,7 +122,8 @@ export function analyzeGoalTimingDistribution(database: ExtractedMatchRecord[]):
     if (goals.length > 0) {
       totalMatchesWithGoals++;
       // Determine first scorer
-      const sortedGoals = [...goals].sort((a, b) => (a.minute || 0) - (b.minute || 0));
+      const getMin = (g: any) => (typeof g?.minute === "number" ? g.minute : parseInt(String(g?.minute || 0), 10) || 0);
+      const sortedGoals = [...goals].sort((a, b) => getMin(a) - getMin(b));
       const firstGoal = sortedGoals[0];
 
       // FT result
@@ -144,7 +145,7 @@ export function analyzeGoalTimingDistribution(database: ExtractedMatchRecord[]):
       }
 
       goals.forEach((g) => {
-        const min = g.minute || 0;
+        const min = getMin(g);
         totalGoals++;
         if (min <= 15) p0_15++;
         else if (min <= 30) p16_30++;

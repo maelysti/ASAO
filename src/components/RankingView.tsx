@@ -24,6 +24,7 @@ import {
 export interface RankingViewProps {
   teams: RankingTeam[];
   categoryName?: string;
+  categoryId?: number;
   isLoading?: boolean;
   onRefresh?: () => void;
   lastUpdated?: Date | null;
@@ -47,6 +48,7 @@ export interface RoundTrajectoryItem {
 export const RankingView: React.FC<RankingViewProps> = ({
   teams,
   categoryName = "Championnat Virtuel",
+  categoryId,
   isLoading = false,
   onRefresh,
   lastUpdated,
@@ -300,30 +302,105 @@ export const RankingView: React.FC<RankingViewProps> = ({
     };
   }, [selectedTeamForModal, teams, trajectoryMap, roundsArray]);
 
-  // Export Ranking table & full matrix trajectory to XLSX matching screenshot layout
+  // Export Ranking table & full matrix trajectory with styled HTML/CSS Excel format (.xls)
   const exportRankingToExcel = () => {
     if (!filteredTeams || filteredTeams.length === 0) return;
 
-    // Headers matching the matrix view: RANG | ÉQUIPE | PTS | MJ | V | N | D | BP | BC | DIFF | J1 | J2 | ...
-    const headers = [
-      "RANG",
-      "ÉQUIPE",
-      "PTS",
-      "MJ",
-      "V",
-      "N",
-      "D",
-      "BP",
-      "BC",
-      "DIFF",
-    ];
+    const eventCatId = categoryId || "8035";
+    const exportDate = new Date().toLocaleDateString("fr-FR") + " " + new Date().toLocaleTimeString("fr-FR");
 
-    // Add round headers J1 to J<maxRounds>
-    roundsArray.forEach((rn) => {
-      headers.push(`J${rn}`);
-    });
+    // Build HTML spreadsheet representation with full site styling (dark slate background, emerald green, amber accents, colored result pills)
+    let html = `<!DOCTYPE html>
+<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+<head>
+<meta charset="utf-8">
+<style>
+  body { font-family: 'Segoe UI', Arial, sans-serif; background-color: #0f172a; color: #f8fafc; }
+  .title-banner { background-color: #0f172a; color: #f59e0b; font-size: 18px; font-weight: 900; text-transform: uppercase; padding: 12px; text-align: left; border: 2px solid #334155; }
+  .meta-card { border-collapse: collapse; margin-bottom: 20px; width: 100%; }
+  .meta-card td { padding: 8px 12px; border: 1px solid #334155; font-size: 12px; }
+  .meta-label { background-color: #1e293b; color: #94a3b8; font-weight: bold; width: 220px; }
+  .meta-val { background-color: #0f172a; color: #10b981; font-weight: bold; }
+  .meta-val-badge { background-color: #0f172a; color: #ef4444; font-weight: bold; }
+  
+  .section-header { background-color: #1e293b; color: #38bdf8; font-size: 14px; font-weight: 800; padding: 10px; text-align: left; border: 1px solid #334155; text-transform: uppercase; margin-top: 20px; }
+  
+  .data-table { border-collapse: collapse; width: 100%; margin-bottom: 30px; font-size: 12px; }
+  .data-table th { background-color: #1e293b; color: #38bdf8; font-weight: bold; padding: 10px 8px; border: 1px solid #334155; text-align: center; }
+  .data-table th.th-round { background-color: #0f172a; color: #f59e0b; }
+  .data-table td { padding: 8px 6px; border: 1px solid #1e293b; text-align: center; }
+  .data-table td.team-name { text-align: left; font-weight: bold; color: #ffffff; background-color: #0f172a; }
+  .data-table td.pts-col { background-color: #1e293b; color: #10b981; font-weight: 900; font-size: 13px; }
+  .data-table td.rank-col { background-color: #0f172a; color: #f59e0b; font-weight: bold; }
+  
+  .res-v { background-color: #064e3b; color: #34d399; font-weight: bold; }
+  .res-n { background-color: #78350f; color: #fbbf24; font-weight: bold; }
+  .res-d { background-color: #7f1d1d; color: #f87171; font-weight: bold; }
+  .res-dash { background-color: #1e293b; color: #64748b; }
+  
+  .matches-table { border-collapse: collapse; width: 100%; font-size: 12px; margin-top: 10px; }
+  .matches-table th { background-color: #1e293b; color: #a7f3d0; font-weight: bold; padding: 8px; border: 1px solid #334155; text-align: center; }
+  .matches-table td { padding: 6px 10px; border: 1px solid #1e293b; text-align: center; color: #cbd5e1; }
+  .matches-table tr:nth-child(even) td { background-color: #0f172a; }
+  .matches-table tr:nth-child(odd) td { background-color: #1e293b; }
+</style>
+</head>
+<body>
 
-    const rows: (string | number)[][] = [];
+<table class="meta-card">
+  <tr>
+    <td colspan="${10 + roundsArray.length}" class="title-banner">
+      🏆 BET261 - MATRICE CLASSEMENT & TRAJECTOIRE COMPLÈTE DES MATCHS
+    </td>
+  </tr>
+  <tr>
+    <td class="meta-label">Compétition / Ligue :</td>
+    <td colspan="${9 + roundsArray.length}" class="meta-val">${categoryName}</td>
+  </tr>
+  <tr>
+    <td class="meta-label">ID Event Category (Carte d'identité) :</td>
+    <td colspan="${9 + roundsArray.length}" class="meta-val">${eventCatId}</td>
+  </tr>
+  <tr>
+    <td class="meta-label">Bannière / Saison :</td>
+    <td colspan="${9 + roundsArray.length}" class="meta-val-badge">
+      SAISON : ${(categoryName || "CHAMPIONNAT").toUpperCase()} - SAISON (${eventCatId}) - ${exportDate.split(" ")[0]}
+    </td>
+  </tr>
+  <tr>
+    <td class="meta-label">Saison ID :</td>
+    <td colspan="${9 + roundsArray.length}" class="meta-val">${activeSeasonId}</td>
+  </tr>
+  <tr>
+    <td class="meta-label">Nombre de Journées :</td>
+    <td colspan="${9 + roundsArray.length}" class="meta-val">J1 à J${maxRounds} (${roundsArray.length} journées enregistrées)</td>
+  </tr>
+  <tr>
+    <td class="meta-label">Date & Heure d'Exportation :</td>
+    <td colspan="${9 + roundsArray.length}" class="meta-val">${exportDate}</td>
+  </tr>
+</table>
+
+<div class="section-header">1. CLASSEMENT GÉNÉRAL & MATRICE DE TRAJECTOIRE (J1 → J${maxRounds})</div>
+
+<table class="data-table">
+  <thead>
+    <tr>
+      <th>RANG</th>
+      <th>ÉQUIPE</th>
+      <th>PTS</th>
+      <th>MJ</th>
+      <th>V</th>
+      <th>N</th>
+      <th>D</th>
+      <th>BP</th>
+      <th>BC</th>
+      <th>DIFF</th>
+      ${roundsArray.map((rn) => `<th class="th-round">J${rn}</th>`).join("")}
+    </tr>
+  </thead>
+  <tbody>
+`;
 
     filteredTeams.forEach((t, idx) => {
       const pos = `#${t.position || idx + 1}`;
@@ -337,61 +414,165 @@ export const RankingView: React.FC<RankingViewProps> = ({
       const diff = t.goalDifference ?? (gf - ga);
       const pts = t.points ?? 0;
 
-      const row: (string | number)[] = [
-        pos,
-        name,
-        pts,
-        played,
-        won,
-        drawn,
-        lost,
-        gf,
-        ga,
-        diff > 0 ? `+${diff}` : diff,
-      ];
+      html += `
+    <tr>
+      <td class="rank-col">${pos}</td>
+      <td class="team-name">${name}</td>
+      <td class="pts-col">${pts}</td>
+      <td>${played}</td>
+      <td>${won}</td>
+      <td>${drawn}</td>
+      <td>${lost}</td>
+      <td>${gf}</td>
+      <td>${ga}</td>
+      <td style="font-weight:bold; color: ${diff > 0 ? '#34d399' : diff < 0 ? '#f87171' : '#94a3b8'}">${diff > 0 ? `+${diff}` : diff}</td>
+      `;
 
-      // Add round result badges V (Victoire), N (Nul), D (Défaite), - (À venir)
       const teamRounds = trajectoryMap[name] || {};
       roundsArray.forEach((rn) => {
         const item = teamRounds[rn];
         if (!item || item.result === "Upcoming") {
-          row.push("-");
+          html += `<td class="res-dash">-</td>`;
         } else if (item.result === "Won") {
-          row.push("V");
+          html += `<td class="res-v">V</td>`;
         } else if (item.result === "Drawn") {
-          row.push("N");
+          html += `<td class="res-n">N</td>`;
         } else if (item.result === "Lost") {
-          row.push("D");
+          html += `<td class="res-d">D</td>`;
         } else {
-          row.push("-");
+          html += `<td class="res-dash">-</td>`;
         }
       });
 
-      rows.push(row);
+      html += `\n    </tr>`;
     });
 
-    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+    html += `
+  </tbody>
+</table>
 
-    // Set column widths
-    ws["!cols"] = [
-      { wch: 8 },  // RANG
-      { wch: 22 }, // EQUIPE
-      { wch: 7 },  // PTS
-      { wch: 6 },  // MJ
-      { wch: 5 },  // V
-      { wch: 5 },  // N
-      { wch: 5 },  // D
-      { wch: 6 },  // BP
-      { wch: 6 },  // BC
-      { wch: 7 },  // DIFF
-      ...roundsArray.map(() => ({ wch: 5 })), // J1...Jn
-    ];
+<div class="section-header">2. DÉTAILS COMPLETS DE TOUS LES MATCHS PAR JOURNÉE</div>
 
-    const wb = XLSX.utils.book_new();
+<table class="matches-table">
+  <thead>
+    <tr>
+      <th>JOURNÉE</th>
+      <th>ID EVENT CATEGORY</th>
+      <th>MATCH (DOMICILE vs EXTÉRIEUR)</th>
+      <th>SCORE FIN</th>
+      <th>MI-TEMPS</th>
+      <th>RÉSULTAT (1X2)</th>
+      <th>TOTAL BUTS</th>
+      <th>PLUS 2.5 BUTS</th>
+    </tr>
+  </thead>
+  <tbody>
+`;
+
+    // Flatten all matches from resultsRounds or rawRoundsData
+    let matchCount = 0;
+    const sortedRounds = [...(resultsRounds || [])].sort((a, b) => (a.roundNumber || 0) - (b.roundNumber || 0));
+
+    sortedRounds.forEach((rObj) => {
+      const rn = rObj.roundNumber || rObj.round;
+      const matches = rObj.matches || [];
+
+      matches.forEach((m: any) => {
+        matchCount++;
+        const homeName = m.homeTeam?.name || m.homeTeamName || m.name?.split(" vs ")[0]?.trim() || "Équipe 1";
+        const awayName = m.awayTeam?.name || m.awayTeamName || m.name?.split(" vs ")[1]?.trim() || "Équipe 2";
+        const scoreStr = m.score || (m.homeScore !== undefined && m.awayScore !== undefined ? `${m.homeScore} - ${m.awayScore}` : "-");
+        const htStr = m.halfTimeScore || (m.homeHalfTimeScore !== undefined && m.awayHalfTimeScore !== undefined ? `${m.homeHalfTimeScore} - ${m.awayHalfTimeScore}` : "-");
+
+        let outcome = "-";
+        let totalGoals = "-";
+        let over25 = "-";
+
+        if (scoreStr && scoreStr.includes("-")) {
+          const parts = scoreStr.split("-").map((p: string) => parseInt(p.trim(), 10));
+          if (!isNaN(parts[0]) && !isNaN(parts[1])) {
+            const hG = parts[0];
+            const aG = parts[1];
+            const sum = hG + aG;
+            totalGoals = String(sum);
+            over25 = sum > 2.5 ? "OUI" : "NON";
+            if (hG > aG) outcome = "1 (Dom)";
+            else if (hG < aG) outcome = "2 (Ext)";
+            else outcome = "X (Nul)";
+          }
+        }
+
+        html += `
+    <tr>
+      <td style="font-weight:bold; color:#f59e0b;">J${rn}</td>
+      <td style="font-mono; font-weight:bold; color:#38bdf8;">${eventCatId}</td>
+      <td style="font-weight:bold; color:#ffffff; text-align:left;">${homeName} <span style="color:#64748b;">vs</span> ${awayName}</td>
+      <td style="font-weight:bold; color:#10b981;">${scoreStr}</td>
+      <td style="color:#94a3b8;">${htStr}</td>
+      <td style="font-weight:bold; color:${outcome.startsWith("1") ? "#34d399" : outcome.startsWith("2") ? "#38bdf8" : "#fbbf24"};">${outcome}</td>
+      <td style="font-weight:bold;">${totalGoals}</td>
+      <td style="font-weight:bold; color:${over25 === "OUI" ? "#34d399" : "#f87171"};">${over25}</td>
+    </tr>
+`;
+      });
+    });
+
+    if (matchCount === 0) {
+      html += `
+    <tr>
+      <td colspan="8" style="padding:15px; color:#94a3b8;">Aucun détail de match individuel chargé. Chargez les résultats dans l'onglet Match|Résultat pour exporter les scores.</td>
+    </tr>
+`;
+    }
+
+    html += `
+  </tbody>
+</table>
+
+</body>
+</html>
+`;
+
+    // Download formatted HTML file as .xls spreadsheet
+    const blob = new Blob(["\ufeff" + html], { type: "application/vnd.ms-excel;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
     const catClean = (categoryName || "Championnat").replace(/[^a-zA-Z0-9]/g, "_");
-    XLSX.utils.book_append_sheet(wb, ws, "Classement Matrix");
-    XLSX.writeFile(wb, `Bet261_Matrice_Classement_${catClean}_J1-J${maxRounds}.xlsx`);
+    link.href = url;
+    link.download = `Bet261_Classement_${catClean}_EventCategory_${eventCatId}.xls`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
+
+  const activeSeasonId = useMemo(() => {
+    if (resultsRounds && resultsRounds.length > 0) {
+      for (const r of resultsRounds) {
+        const s = r.seasonNumber || r.seasonId || (r as any).season || r.matches?.[0]?.seasonNumber || r.matches?.[0]?.seasonId;
+        if (s) return s;
+        const ref = r.matches?.[0]?.sourceRef || (r.matches?.[0] as any)?.rawMatch?.sourceRef;
+        if (ref) {
+          const parts = String(ref).split("-");
+          const last = parts[parts.length - 1];
+          if (last && /^\d+$/.test(last)) return last;
+        }
+      }
+    }
+    if (rawRoundsData && rawRoundsData.length > 0) {
+      for (const r of rawRoundsData) {
+        const s = r.seasonNumber || r.seasonId || (r as any).season || r.matches?.[0]?.seasonNumber || r.matches?.[0]?.seasonId;
+        if (s) return s;
+        const ref = r.matches?.[0]?.sourceRef || (r.matches?.[0] as any)?.rawMatch?.sourceRef;
+        if (ref) {
+          const parts = String(ref).split("-");
+          const last = parts[parts.length - 1];
+          if (last && /^\d+$/.test(last)) return last;
+        }
+      }
+    }
+    return categoryName ? categoryName.toUpperCase() : "1";
+  }, [resultsRounds, rawRoundsData, categoryName]);
 
   return (
     <div className="space-y-6">
@@ -412,6 +593,12 @@ export const RankingView: React.FC<RankingViewProps> = ({
               <p className="text-xs text-slate-400 font-medium">
                 {categoryName} • Direct & Historique Complet (J1 → J{maxRounds})
               </p>
+              <div className="mt-2 inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-slate-950 border border-red-500/40 text-red-400 text-xs font-black tracking-wider uppercase shadow-inner">
+                <Calendar className="w-3.5 h-3.5 text-red-500 shrink-0" />
+                <span>
+                  SAISON : {(categoryName || "CHAMPIONNAT").toUpperCase()} - SAISON ({categoryId || activeSeasonId}) - {new Date().toLocaleDateString("fr-FR")}
+                </span>
+              </div>
             </div>
           </div>
         </div>
@@ -444,16 +631,23 @@ export const RankingView: React.FC<RankingViewProps> = ({
             </button>
           </div>
 
-          {/* Search Bar */}
-          <div className="relative flex-1 md:w-56">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              placeholder="Rechercher une équipe..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-2 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-amber-500/60 transition-colors"
-            />
+          {/* Search Bar with Event Category ID Badge */}
+          <div className="flex items-center gap-2 flex-1 md:w-auto">
+            {categoryId && (
+              <span className="px-2.5 py-1.5 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400 text-[11px] font-black font-mono shrink-0 shadow-sm" title="Event Category ID">
+                ID: {categoryId}
+              </span>
+            )}
+            <div className="relative flex-1 md:w-56">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Rechercher une équipe..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-2 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-amber-500/60 transition-colors"
+              />
+            </div>
           </div>
 
           <button
