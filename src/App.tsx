@@ -251,12 +251,29 @@ export default function App() {
         });
       }
 
+      // Also check instantMatches (results / live matches fetched from instant leagues)
+      if (instantMatches && Array.isArray(instantMatches)) {
+        instantMatches.forEach((m: any) => {
+          if (m.entryPointId === ep.id || m.eventCategoryId === ep.id) {
+            const existing = matchSet.get(m.id) || {};
+            matchSet.set(m.id, {
+              ...existing,
+              ...m,
+              entryPointId: ep.id,
+              eventCategoryId: m.eventCategoryId || ep.id,
+            });
+          }
+        });
+      }
+
       // Also check fetchedRoundMatches
       Object.entries(fetchedRoundMatches).forEach(([key, val]) => {
         if (key.startsWith(`${ep.id}_`)) {
           const mList = Array.isArray(val) ? val : (val as any)?.matches || [];
           mList.forEach((m: any) => {
+            const existing = matchSet.get(m.id) || {};
             matchSet.set(m.id, {
+              ...existing,
               ...m,
               entryPointId: ep.id,
               eventCategoryId: m.eventCategoryId || m.categoryId || (m as any).rawMatch?.eventCategoryId,
@@ -265,6 +282,21 @@ export default function App() {
         }
       });
 
+      // Also check standard live/upcoming events
+      if (events && Array.isArray(events)) {
+        events.forEach((ev: any) => {
+          if (ev.entryPointId === ep.id || ev.categoryId === ep.id) {
+            const existing = matchSet.get(ev.id) || {};
+            matchSet.set(ev.id, {
+              ...existing,
+              ...ev,
+              entryPointId: ep.id,
+              eventCategoryId: ev.eventCategoryId || ev.categoryId || ep.id,
+            });
+          }
+        });
+      }
+
       map[ep.id] = {
         matches: Array.from(matchSet.values()),
         categoryName: ep.name,
@@ -272,7 +304,7 @@ export default function App() {
     });
 
     return map;
-  }, [entryPoints, rawInstantResponses, fetchedRoundMatches]);
+  }, [entryPoints, rawInstantResponses, fetchedRoundMatches, instantMatches, events]);
 
   // Specific eventCategoryId (e.g. 159864 for Spanish League, 159866 for English League)
   const activeEventCategoryId = useMemo(() => {

@@ -147,6 +147,116 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
   const [duplicatesAvoided, setDuplicatesAvoided] = useState<number>(0);
   const [currentRoundProgress, setCurrentRoundProgress] = useState<number>(1);
 
+  // Helper to resolve exact score from match payload provided by Bet261 / Sporty API
+  const getExactMatchScore = (m: any): { finalScore: string; halfTimeScore: string; hasScore: boolean } => {
+    const raw = m?.rawMatch || {};
+
+    const scoreCandidates = [
+      m?.score,
+      raw?.score,
+      m?.finalScore,
+      raw?.finalScore,
+      m?.matchScore,
+      raw?.matchScore,
+      m?.result,
+      raw?.result,
+    ];
+
+    let resolvedScore: string | null = null;
+    for (const sc of scoreCandidates) {
+      if (sc !== undefined && sc !== null && typeof sc === "string" && sc.trim().length > 0) {
+        const norm = sc.replace(":", "-").trim();
+        if (/^\d+\s*-\s*\d+$/.test(norm)) {
+          resolvedScore = norm;
+          break;
+        }
+      }
+    }
+
+    if (!resolvedScore) {
+      const h = m?.homeScore ?? raw?.homeScore ?? m?.homeTeamScore ?? raw?.homeTeamScore;
+      const a = m?.awayScore ?? raw?.awayScore ?? m?.awayTeamScore ?? raw?.awayTeamScore;
+      if (h !== undefined && h !== null && a !== undefined && a !== null) {
+        const numH = Number(h);
+        const numA = Number(a);
+        if (!isNaN(numH) && !isNaN(numA)) {
+          resolvedScore = `${numH}-${numA}`;
+        }
+      }
+    }
+
+    const scoresArr = (Array.isArray(m?.scores) && m.scores.length > 0) ? m.scores
+      : (Array.isArray(raw?.scores) && raw.scores.length > 0) ? raw.scores
+      : [];
+
+    let resolvedHtScore: string | null = null;
+
+    if (scoresArr.length > 0) {
+      scoresArr.forEach((s: any) => {
+        const typeStr = String(s.type || s.period || s.name || "").toUpperCase();
+        let valStr = s.score || s.value || (s.homeScore !== undefined && s.awayScore !== undefined ? `${s.homeScore}-${s.awayScore}` : null);
+        if (valStr) valStr = String(valStr).replace(":", "-").trim();
+
+        if (typeStr.includes("HALF") || typeStr.includes("HT") || typeStr === "1ST" || typeStr === "1") {
+          if (valStr && /^\d+\s*-\s*\d+$/.test(valStr)) {
+            resolvedHtScore = valStr;
+          }
+        } else if (typeStr.includes("FULL") || typeStr.includes("FT") || typeStr === "2ND" || typeStr === "MAIN" || typeStr === "FINAL") {
+          if (valStr && /^\d+\s*-\s*\d+$/.test(valStr) && !resolvedScore) {
+            resolvedScore = valStr;
+          }
+        } else if (!resolvedScore && valStr && /^\d+\s*-\s*\d+$/.test(valStr)) {
+          resolvedScore = valStr;
+        }
+      });
+    }
+
+    const rawGoals =
+      (Array.isArray(m?.goals) && m.goals.length > 0) ? m.goals
+        : (Array.isArray(m?.goalsDetail) && m.goalsDetail.length > 0) ? m.goalsDetail
+        : (Array.isArray(raw?.goals) && raw.goals.length > 0) ? raw.goals
+        : (Array.isArray(raw?.goalsDetail) && raw.goalsDetail.length > 0) ? raw.goalsDetail
+        : [];
+
+    if (!resolvedScore && rawGoals.length > 0) {
+      const lastGoal = rawGoals[rawGoals.length - 1];
+      if (lastGoal && lastGoal.homeScore !== undefined && lastGoal.awayScore !== undefined) {
+        resolvedScore = `${lastGoal.homeScore}-${lastGoal.awayScore}`;
+      } else {
+        let hCount = 0;
+        let aCount = 0;
+        rawGoals.forEach((g: any) => {
+          const rawTeam = String(g.team ?? g.side ?? g.teamType ?? "").toLowerCase();
+          if (rawTeam === "home" || rawTeam === "1" || g.homeTeam === true || g.isHome === true) {
+            hCount++;
+          } else if (rawTeam === "away" || rawTeam === "2" || g.homeTeam === false || g.isHome === false) {
+            aCount++;
+          }
+        });
+        resolvedScore = `${hCount}-${aCount}`;
+      }
+    }
+
+    if (!resolvedHtScore) {
+      const htCandidates = [m?.halfTimeScore, raw?.halfTimeScore, m?.htScore, raw?.htScore];
+      for (const ht of htCandidates) {
+        if (ht !== undefined && ht !== null && typeof ht === "string" && ht.trim().length > 0) {
+          const norm = ht.replace(":", "-").trim();
+          if (/^\d+\s*-\s*\d+$/.test(norm)) {
+            resolvedHtScore = norm;
+            break;
+          }
+        }
+      }
+    }
+
+    const hasScore = resolvedScore !== null;
+    const finalScore = resolvedScore || "";
+    const halfTimeScore = resolvedHtScore || "";
+
+    return { finalScore, halfTimeScore, hasScore };
+  };
+
   // Perform extraction logic (Phase 1: Past matches from Round 1 -> Phase 2: Live Stream)
   const performExtractionStep = React.useCallback(() => {
     const newExtracted: ExtractedMatchRecord[] = [];
@@ -200,14 +310,18 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
         return;
       }
 
-      // Guaranteed score & halftime score
-      const finalScore = m.score && m.score !== "" && m.score !== "0-0"
-        ? m.score
-        : `${Math.floor(Math.random() * 3 + 1)}-${Math.floor(Math.random() * 2)}`;
+      // Extract exact score & halftime score from API payload (Bet261)
+      const { finalScore, halfTimeScore, hasScore } = getExactMatchScore(m);
 
-      const halfTimeScore = m.halfTimeScore || `${Math.floor(parseInt(finalScore.split("-")[0]) / 2)}-${Math.floor(parseInt(finalScore.split("-")[1]) / 2)}`;
+      const matchStatusStr = String(m.state || m.preEventOrLive || m.status || "").toLowerCase();
+      const isPreEvent = matchStatusStr.includes("preevent") || matchStatusStr.includes("upcoming") || matchStatusStr.includes("notstarted");
 
-      // Extract ALL Odds
+      // Strict check: DO NOT extract unplayed / pre-event matches or matches without a real result when strict score filter is active
+      if (strictScoreOnly && (!hasScore || !finalScore || isPreEvent)) {
+        return;
+      }
+
+      // Extract Odds directly from API payload
       let hOdds = 0, dOdds = 0, aOdds = 0;
       let dc1X = 0, dc12 = 0, dcX2 = 0;
       let over25 = 0, under25 = 0;
@@ -248,127 +362,10 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
         });
       }
 
-      // Generate realistic fallback odds if API betTypes missing
-      if (!hOdds) hOdds = Number((1.65 + (m.homeTeam?.position || 5) * 0.1).toFixed(2));
-      if (!dOdds) dOdds = Number((3.1 + Math.random() * 0.4).toFixed(2));
-      if (!aOdds) aOdds = Number((2.8 + (m.awayTeam?.position || 8) * 0.15).toFixed(2));
-      if (!dc1X) dc1X = Number((1.2 + Math.random() * 0.15).toFixed(2));
-      if (!dc12) dc12 = Number((1.28 + Math.random() * 0.1).toFixed(2));
-      if (!dcX2) dcX2 = Number((1.55 + Math.random() * 0.2).toFixed(2));
-      if (!over25) over25 = Number((1.85 + Math.random() * 0.2).toFixed(2));
-      if (!under25) under25 = Number((1.95 + Math.random() * 0.2).toFixed(2));
-
       const homeName = m.homeTeam?.name || "Dom";
       const awayName = m.awayTeam?.name || "Ext";
 
-      // Helper function to derive realistic goal minutes if API payload does not include raw goals array
-      const deriveGoalsFromScores = (
-        fScore: string,
-        htScore: string,
-        hName: string,
-        aName: string
-      ) => {
-        let ftH = 0, ftA = 0;
-        let htH = 0, htA = 0;
-
-        if (fScore) {
-          const parts = fScore.replace(":", "-").split("-").map((p) => parseInt(p.trim(), 10));
-          if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
-            ftH = parts[0];
-            ftA = parts[1];
-          }
-        }
-
-        if (htScore) {
-          const parts = htScore.replace(":", "-").split("-").map((p) => parseInt(p.trim(), 10));
-          if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
-            htH = parts[0];
-            htA = parts[1];
-          }
-        }
-
-        htH = Math.min(htH, ftH);
-        htA = Math.min(htA, ftA);
-
-        const htTotal = htH + htA;
-        const ft2ndH = ftH - htH;
-        const ft2ndA = ftA - htA;
-        const ft2ndTotal = ft2ndH + ft2ndA;
-
-        const totalGoals = ftH + ftA;
-        if (totalGoals === 0) {
-          return { goalsList: [], goalMinsStr: "Aucun but (0-0)" };
-        }
-
-        const genGoals: Array<{ minute: number; team: string; player: string; homeScore: number; awayScore: number }> = [];
-
-        let currentHome = 0;
-        let currentAway = 0;
-
-        let htStep = htTotal > 0 ? Math.floor(34 / (htTotal + 1)) : 12;
-        let cMin = 10;
-
-        for (let i = 0; i < htH; i++) {
-          cMin += htStep + (i % 2 === 0 ? 3 : 1);
-          currentHome++;
-          genGoals.push({
-            minute: Math.min(44, cMin),
-            team: "home",
-            player: "But",
-            homeScore: currentHome,
-            awayScore: currentAway,
-          });
-        }
-
-        for (let i = 0; i < htA; i++) {
-          cMin += htStep + (i % 2 === 0 ? 2 : 4);
-          currentAway++;
-          genGoals.push({
-            minute: Math.min(45, cMin),
-            team: "away",
-            player: "But",
-            homeScore: currentHome,
-            awayScore: currentAway,
-          });
-        }
-
-        let ft2ndStep = ft2ndTotal > 0 ? Math.floor(36 / (ft2ndTotal + 1)) : 12;
-        cMin = 48;
-
-        for (let i = 0; i < ft2ndH; i++) {
-          cMin += ft2ndStep + (i % 2 === 0 ? 4 : 2);
-          currentHome++;
-          genGoals.push({
-            minute: Math.min(89, cMin),
-            team: "home",
-            player: "But",
-            homeScore: currentHome,
-            awayScore: currentAway,
-          });
-        }
-
-        for (let i = 0; i < ft2ndA; i++) {
-          cMin += ft2ndStep + (i % 2 === 0 ? 3 : 5);
-          currentAway++;
-          genGoals.push({
-            minute: Math.min(90, cMin),
-            team: "away",
-            player: "But",
-            homeScore: currentHome,
-            awayScore: currentAway,
-          });
-        }
-
-        genGoals.sort((a, b) => a.minute - b.minute);
-
-        const str = genGoals
-          .map((g) => `${g.minute}' (${g.team === "home" ? hName : aName})`)
-          .join(", ");
-
-        return { goalsList: genGoals, goalMinsStr: str };
-      };
-
-      // Goals & Goal minutes extraction from Bet261 / Sporty API payload
+      // Goals & Goal minutes extraction from Bet261 / Sporty API payload ONLY
       let goalMinsStr = "";
       let goalsList: any[] = [];
 
@@ -432,17 +429,8 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
       } else if (m.rawMatch?.goalMinutes && typeof m.rawMatch.goalMinutes === "string" && m.rawMatch.goalMinutes.trim().length > 0) {
         goalMinsStr = m.rawMatch.goalMinutes;
       } else {
-        const derived = deriveGoalsFromScores(finalScore, halfTimeScore, homeName, awayName);
-        goalsList = derived.goalsList;
-        goalMinsStr = derived.goalMinsStr;
+        goalMinsStr = finalScore === "0-0" ? "Aucun but (0-0)" : "Minutes non transmises";
       }
-
-      // H2H history
-      const h2h = [
-        `2025-11-12: ${homeName} 2 - 1 ${awayName}`,
-        `2025-04-03: ${awayName} 0 - 0 ${homeName}`,
-        `2024-10-22: ${homeName} 1 - 3 ${awayName}`,
-      ];
 
       // Robust Season Extraction
       const rawSeason =
@@ -460,8 +448,8 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
       const sName = (m as any).seasonName || (m as any).rawMatch?.seasonName || `Saison ${sNum}`;
       const sId = (m as any).seasonId || (m as any).rawMatch?.seasonId || sNum;
 
-      const homeRankVal = m.homeTeam?.position || Math.floor(Math.random() * 12 + 1);
-      const awayRankVal = m.awayTeam?.position || Math.floor(Math.random() * 12 + 1);
+      const homeRankVal = m.homeTeam?.position || 0;
+      const awayRankVal = m.awayTeam?.position || 0;
 
       const eventCatId =
         (m as any).eventCategoryId ||
@@ -481,8 +469,8 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
         awayRank: awayRankVal,
         homeRankAtRound: homeRankVal,
         awayRankAtRound: awayRankVal,
-        homePoints: m.homeTeam?.points || 24,
-        awayPoints: m.awayTeam?.points || 18,
+        homePoints: m.homeTeam?.points || 0,
+        awayPoints: m.awayTeam?.points || 0,
         competitionId: compId,
         eventCategoryId: eventCatId,
         competitionName: categoryName || `Ligue #${compId}`,
@@ -494,17 +482,17 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
         expectedStart: m.expectedStart,
         score: finalScore,
         halfTimeScore: halfTimeScore,
-        goalsCount: m.goals?.length || 1,
-        goalMinutes: goalMinsStr || "Non spécifié",
+        goalsCount: goalsList.length || (finalScore !== "0-0" && finalScore ? finalScore.split("-").reduce((a, b) => Number(a) + Number(b), 0) : 0),
+        goalMinutes: goalMinsStr,
         goalsDetail: goalsList,
         homeOdds: hOdds,
         drawOdds: dOdds,
         awayOdds: aOdds,
         doubleChanceOdds: { dc1X, dc12, dcX2 },
         overUnderOdds: { over25, under25 },
-        bothTeamsScoreOdds: { yes: gg || 1.8, no: ng || 1.95 },
-        allOddsSummary: `1X2: ${hOdds}/${dOdds}/${aOdds} | DC: ${dc1X}/${dcX2} | O2.5: ${over25}`,
-        headToHeadHistory: h2h,
+        bothTeamsScoreOdds: { yes: gg, no: ng },
+        allOddsSummary: hOdds ? `1X2: ${hOdds}/${dOdds}/${aOdds}` : "Cotes non disponibles",
+        headToHeadHistory: [],
         extractedAt: timestamp,
         source: "Live Extraction",
       });
