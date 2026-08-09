@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import * as XLSX from "xlsx";
+import { parseMatchScoreDetails } from "../utils/scoreUtils";
 import {
   Trophy,
   Calendar,
@@ -317,16 +318,14 @@ export const MatchResultsView: React.FC<MatchResultsViewProps> = ({
         const dateTime = `${formatMatchDate(roundObj.expectedStart)} ${formatMatchTime(roundObj.expectedStart)}`.trim();
         const homeName = m.homeTeam?.name || m.name?.split(" vs ")[0] || "Home";
         const awayName = m.awayTeam?.name || m.name?.split(" vs ")[1] || "Away";
-        const ftScore = m.score || "0:0";
-        const htScore = m.halfTimeScore || "0:0";
 
-        const [hNum, aNum] = ftScore.split(":").map((s) => parseInt(s, 10) || 0);
-        const totalGoals = hNum + aNum;
-        const over25 = totalGoals > 2.5 ? "OUI" : "NON";
+        const scoreDetails = parseMatchScoreDetails(m);
 
-        let res1x2 = "Nul (X)";
-        if (hNum > aNum) res1x2 = "Domicile (1)";
-        else if (aNum > hNum) res1x2 = "Extérieur (2)";
+        const ftScore = scoreDetails.scoreStr;
+        const htScore = scoreDetails.htStr;
+        const res1x2 = scoreDetails.outcome1X2;
+        const totalGoals = scoreDetails.totalGoalsStr;
+        const over25 = scoreDetails.over25Str;
 
         const goalsDetailStr = (m.goals || [])
           .map((g: any) => `${g.minute}' (${g.team === "Home" ? homeName : awayName})`)

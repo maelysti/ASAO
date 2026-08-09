@@ -2,6 +2,7 @@ import React, { useState, useMemo } from "react";
 import * as XLSX from "xlsx";
 import { RankingTeam, getTeamLogoUrl } from "../services/sportyApi";
 import { computeSeasonRoundRankings } from "../utils/standingsEngine";
+import { parseMatchScoreDetails } from "../utils/scoreUtils";
 import {
   Trophy,
   Search,
@@ -135,47 +136,46 @@ export const RankingView: React.FC<RankingViewProps> = ({
         if (!map[home]) map[home] = {};
         if (!map[away]) map[away] = {};
 
-        if (m.score) {
-          const parts = m.score.split(":").map(Number);
-          if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
-            const [hScore, aScore] = parts;
-            let homeRes: "Won" | "Lost" | "Draw" = "Draw";
-            let awayRes: "Won" | "Lost" | "Draw" = "Draw";
+        const scoreDetails = parseMatchScoreDetails(m);
+        if (scoreDetails.hasScore && scoreDetails.hG !== null && scoreDetails.aG !== null) {
+          const hScore = scoreDetails.hG;
+          const aScore = scoreDetails.aG;
+          let homeRes: "Won" | "Lost" | "Draw" = "Draw";
+          let awayRes: "Won" | "Lost" | "Draw" = "Draw";
 
-            if (hScore > aScore) {
-              homeRes = "Won";
-              awayRes = "Lost";
-            } else if (aScore > hScore) {
-              homeRes = "Lost";
-              awayRes = "Won";
-            }
-
-            map[home][roundNum] = {
-              roundNumber: roundNum,
-              result: homeRes,
-              opponent: away,
-              score: m.score,
-              halfTimeScore: m.halfTimeScore,
-              isHome: true,
-              teamScore: hScore,
-              oppScore: aScore,
-              status: "Finished",
-              goals: m.goals,
-            };
-
-            map[away][roundNum] = {
-              roundNumber: roundNum,
-              result: awayRes,
-              opponent: home,
-              score: m.score,
-              halfTimeScore: m.halfTimeScore,
-              isHome: false,
-              teamScore: aScore,
-              oppScore: hScore,
-              status: "Finished",
-              goals: m.goals,
-            };
+          if (hScore > aScore) {
+            homeRes = "Won";
+            awayRes = "Lost";
+          } else if (aScore > hScore) {
+            homeRes = "Lost";
+            awayRes = "Won";
           }
+
+          map[home][roundNum] = {
+            roundNumber: roundNum,
+            result: homeRes,
+            opponent: away,
+            score: scoreDetails.scoreStr,
+            halfTimeScore: scoreDetails.htStr !== "-" ? scoreDetails.htStr : m.halfTimeScore,
+            isHome: true,
+            teamScore: hScore,
+            oppScore: aScore,
+            status: "Finished",
+            goals: m.goals,
+          };
+
+          map[away][roundNum] = {
+            roundNumber: roundNum,
+            result: awayRes,
+            opponent: home,
+            score: scoreDetails.scoreStr,
+            halfTimeScore: scoreDetails.htStr !== "-" ? scoreDetails.htStr : m.halfTimeScore,
+            isHome: false,
+            teamScore: aScore,
+            oppScore: hScore,
+            status: "Finished",
+            goals: m.goals,
+          };
         }
       });
     });
@@ -469,38 +469,24 @@ export const RankingView: React.FC<RankingViewProps> = ({
   <tbody>
 `;
 
-    // Flatten all matches from resultsRounds or rawRoundsData
+    // Flatten all matches across all rounds using roundsArray and getRoundMatchesForModal
     let matchCount = 0;
-    const sortedRounds = [...(resultsRounds || [])].sort((a, b) => (a.roundNumber || 0) - (b.roundNumber || 0));
 
-    sortedRounds.forEach((rObj) => {
-      const rn = rObj.roundNumber || rObj.round;
-      const matches = rObj.matches || [];
+    roundsArray.forEach((rn) => {
+      const roundMatches = getRoundMatchesForModal(rn);
 
-      matches.forEach((m: any) => {
+      roundMatches.forEach((m: any) => {
         matchCount++;
-        const homeName = m.homeTeam?.name || m.homeTeamName || m.name?.split(" vs ")[0]?.trim() || "Équipe 1";
-        const awayName = m.awayTeam?.name || m.awayTeamName || m.name?.split(" vs ")[1]?.trim() || "Équipe 2";
-        const scoreStr = m.score || (m.homeScore !== undefined && m.awayScore !== undefined ? `${m.homeScore} - ${m.awayScore}` : "-");
-        const htStr = m.halfTimeScore || (m.homeHalfTimeScore !== undefined && m.awayHalfTimeScore !== undefined ? `${m.homeHalfTimeScore} - ${m.awayHalfTimeScore}` : "-");
+        const homeName = m.homeTeam?.name || m.homeTeamName || (typeof m.homeTeam === "string" ? m.homeTeam : "") || m.name?.split(" vs ")[0]?.trim() || "Équipe 1";
+        const awayName = m.awayTeam?.name || m.awayTeamName || (typeof m.awayTeam === "string" ? m.awayTeam : "") || m.name?.split(" vs ")[1]?.trim() || "Équipe 2";
 
-        let outcome = "-";
-        let totalGoals = "-";
-        let over25 = "-";
+        const scoreDetails = parseMatchScoreDetails(m);
 
-        if (scoreStr && scoreStr.includes("-")) {
-          const parts = scoreStr.split("-").map((p: string) => parseInt(p.trim(), 10));
-          if (!isNaN(parts[0]) && !isNaN(parts[1])) {
-            const hG = parts[0];
-            const aG = parts[1];
-            const sum = hG + aG;
-            totalGoals = String(sum);
-            over25 = sum > 2.5 ? "OUI" : "NON";
-            if (hG > aG) outcome = "1 (Dom)";
-            else if (hG < aG) outcome = "2 (Ext)";
-            else outcome = "X (Nul)";
-          }
-        }
+        const scoreStr = scoreDetails.scoreStr;
+        const htStr = scoreDetails.htStr;
+        const outcome = scoreDetails.outcome1X2;
+        const totalGoals = scoreDetails.totalGoalsStr;
+        const over25 = scoreDetails.over25Str;
 
         html += `
     <tr>
@@ -509,9 +495,9 @@ export const RankingView: React.FC<RankingViewProps> = ({
       <td style="font-weight:bold; color:#ffffff; text-align:left;">${homeName} <span style="color:#64748b;">vs</span> ${awayName}</td>
       <td style="font-weight:bold; color:#10b981;">${scoreStr}</td>
       <td style="color:#94a3b8;">${htStr}</td>
-      <td style="font-weight:bold; color:${outcome.startsWith("1") ? "#34d399" : outcome.startsWith("2") ? "#38bdf8" : "#fbbf24"};">${outcome}</td>
+      <td style="font-weight:bold; color:${outcome.startsWith("1") ? "#34d399" : outcome.startsWith("2") ? "#38bdf8" : outcome.startsWith("X") ? "#fbbf24" : "#64748b"};">${outcome}</td>
       <td style="font-weight:bold;">${totalGoals}</td>
-      <td style="font-weight:bold; color:${over25 === "OUI" ? "#34d399" : "#f87171"};">${over25}</td>
+      <td style="font-weight:bold; color:${over25 === "OUI" ? "#34d399" : over25 === "NON" ? "#f87171" : "#64748b"};">${over25}</td>
     </tr>
 `;
       });

@@ -43,7 +43,7 @@ import { RuleItem, AIRecapPrediction, ExtractedMatchRecord } from "./types";
 import { DEFAULT_RULES, processAllRules, runAIModeAnalysis } from "./utils/ruleEngine";
 import { getH2HAnalysisForMatch } from "./utils/globalAnalysisEngine";
 
-import { AlertTriangle, Key, RefreshCw, Trophy, Layers, Activity, Database, Download, ListOrdered, Sliders, Zap, BarChart3, PanelLeftClose, PanelLeftOpen, ChevronLeft, ChevronRight, Wrench, Clock, Flame, Lock } from "lucide-react";
+import { AlertTriangle, Key, RefreshCw, Trophy, Layers, Activity, Database, Download, ListOrdered, Sliders, Zap, BarChart3, PanelLeftClose, PanelLeftOpen, ChevronLeft, ChevronRight, Wrench, Clock, Flame, Lock, Eye, BellRing, X } from "lucide-react";
 
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
@@ -439,6 +439,16 @@ export default function App() {
   const hasInitializedRoundRef = useRef<boolean>(false);
   const autoAdvancedRoundsRef = useRef<Set<string>>(new Set());
 
+  // Notification state when new round results arrive from Bet261
+  const [newResultNotification, setNewResultNotification] = useState<{
+    roundNumber: number;
+    categoryId: number;
+    categoryName: string;
+    matchedCount: number;
+    sampleScore?: string;
+  } | null>(null);
+  const initializedResultRoundsRef = useRef<Set<string>>(new Set());
+
   // Construct full list of rounds for active competition dynamically
   const availableRoundsList = useMemo(() => {
     const rawRounds = activeRawData?.rounds || [];
@@ -690,39 +700,106 @@ export default function App() {
     (!Array.isArray(cachedRoundData) ? cachedRoundData?.expectedStart : undefined) ||
     matchedResultRound?.expectedStart;
 
-  // Auto-switch to NEXT round when current round start time has elapsed by 1 min 15 sec (+75000 ms) AND auto-redirection (Cloche) is ACTIVE (!silentUpdates)
+  // Auto-switch to NEXT round PILE POIL at the exact start time of the next round (e.g. 13:47:00)
   useEffect(() => {
-    if (silentUpdates || !roundStartTime) return;
+    if (availableRoundsList.length === 0) return;
 
-    const interval = setInterval(() => {
+    const timer = setInterval(() => {
       try {
-        const startMs = new Date(roundStartTime).getTime();
-        if (isNaN(startMs)) return;
-
         const now = Date.now();
-        // 1 minute 15 seconds = 75,000 milliseconds
-        if (now >= startMs + 75000) {
-          const advanceKey = `${activeCategoryId}_${selectedRoundNumber}_${roundStartTime}`;
-          if (!autoAdvancedRoundsRef.current.has(advanceKey)) {
-            autoAdvancedRoundsRef.current.add(advanceKey);
-            const curIdx = availableRoundsList.findIndex(
-              (r) => Number(r.roundNumber) === Number(selectedRoundNumber)
-            );
-            if (curIdx >= 0 && curIdx < availableRoundsList.length - 1) {
-              const nextRound = availableRoundsList[curIdx + 1];
-              if (nextRound && Number(nextRound.roundNumber) !== Number(selectedRoundNumber)) {
-                setSelectedRoundNumber(Number(nextRound.roundNumber));
-              }
+        let activeRoundNumByTime: number | null = null;
+
+        // Find the latest round in availableRoundsList whose expectedStart <= now
+        for (let i = 0; i < availableRoundsList.length; i++) {
+          const r = availableRoundsList[i];
+          if (r.expectedStart) {
+            const startMs = new Date(r.expectedStart).getTime();
+            if (!isNaN(startMs) && now >= startMs) {
+              activeRoundNumByTime = Number(r.roundNumber);
+            }
+          }
+        }
+
+        if (activeRoundNumByTime !== null && activeRoundNumByTime !== selectedRoundNumber) {
+          const currentSelectedIdx = availableRoundsList.findIndex(
+            (r) => Number(r.roundNumber) === Number(selectedRoundNumber)
+          );
+          const timeActiveIdx = availableRoundsList.findIndex(
+            (r) => Number(r.roundNumber) === Number(activeRoundNumByTime)
+          );
+
+          // Advance immediately when start time of the next round is reached
+          if (timeActiveIdx > currentSelectedIdx || !silentUpdates) {
+            const key = `${activeCategoryId}_R${activeRoundNumByTime}`;
+            if (!autoAdvancedRoundsRef.current.has(key)) {
+              autoAdvancedRoundsRef.current.add(key);
+              setSelectedRoundNumber(activeRoundNumByTime);
             }
           }
         }
       } catch (err) {
-        console.error("Auto round switch error:", err);
+        console.error("Round clock timer error:", err);
       }
     }, 1000);
 
-    return () => clearInterval(interval);
-  }, [silentUpdates, roundStartTime, activeCategoryId, selectedRoundNumber, availableRoundsList]);
+    return () => clearInterval(timer);
+  }, [availableRoundsList, selectedRoundNumber, silentUpdates, activeCategoryId]);
+
+  // Monitor competitionResults for newly published round results to alert the user
+  useEffect(() => {
+    if (!activeCategoryId) return;
+    const resultsRounds = competitionResults[activeCategoryId] || [];
+    if (!resultsRounds || resultsRounds.length === 0) return;
+
+    let hasNewResult = false;
+    let newlyFinishedRound: any = null;
+
+    resultsRounds.forEach((r: any) => {
+      const rNum = Number(r.roundNumber);
+      if (isNaN(rNum)) return;
+
+      const hasScores = Array.isArray(r.matches) && r.matches.some((m: any) => Boolean(m.score || m.result));
+      if (!hasScores) return;
+
+      const key = `${activeCategoryId}_R${rNum}`;
+      if (!initializedResultRoundsRef.current.has(key)) {
+        if (initializedResultRoundsRef.current.size === 0) {
+          // Initialize existing result rounds on initial fetch without alerting
+          initializedResultRoundsRef.current.add(key);
+        } else {
+          // A brand new round result has just landed from API!
+          initializedResultRoundsRef.current.add(key);
+          hasNewResult = true;
+          newlyFinishedRound = r;
+        }
+      }
+    });
+
+    if (hasNewResult && newlyFinishedRound) {
+      const rNum = Number(newlyFinishedRound.roundNumber);
+      const sampleMatch = newlyFinishedRound.matches?.find((m: any) => m.score);
+      const sampleScore = sampleMatch
+        ? `${sampleMatch.homeTeam?.name || sampleMatch.name?.split(" vs ")[0] || "Eq1"} ${sampleMatch.score} ${sampleMatch.awayTeam?.name || sampleMatch.name?.split(" vs ")[1] || "Eq2"}`
+        : undefined;
+
+      setNewResultNotification({
+        roundNumber: rNum,
+        categoryId: activeCategoryId,
+        categoryName: currentEntryPoint?.name || "Ligue Virtuelle",
+        matchedCount: newlyFinishedRound.matches?.length || 0,
+        sampleScore,
+      });
+    }
+  }, [competitionResults, activeCategoryId, currentEntryPoint]);
+
+  // Auto-dismiss result notification after 15 seconds
+  useEffect(() => {
+    if (!newResultNotification) return;
+    const timer = setTimeout(() => {
+      setNewResultNotification(null);
+    }, 15000);
+    return () => clearTimeout(timer);
+  }, [newResultNotification]);
 
   // Calculate round-by-round entering rankings for the active category
   const activeResultsRounds = competitionResults[activeCategoryId] || [];
@@ -1413,6 +1490,65 @@ export default function App() {
             onCreateRuleFromDb={handleCreateRule}
           />
         </main>
+      )}
+
+      {/* Toast Notification for New Round Results */}
+      {newResultNotification && (
+        <div className="fixed bottom-6 right-6 z-50 max-w-md w-full px-4 animate-bounce-short">
+          <div className="bg-slate-900/95 border border-emerald-500/50 shadow-2xl shadow-emerald-950/60 rounded-2xl p-4 backdrop-blur-md text-white flex flex-col gap-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                  <BellRing className="w-5 h-5 animate-pulse" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-black text-emerald-400 uppercase tracking-wider">
+                    Résultat Disponible !
+                  </h4>
+                  <p className="text-xs font-bold text-slate-200">
+                    Journée {newResultNotification.roundNumber} ({newResultNotification.categoryName})
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setNewResultNotification(null)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors"
+                title="Ignorer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {newResultNotification.sampleScore && (
+              <p className="text-[11px] text-slate-400 bg-slate-950/60 px-3 py-1.5 rounded-lg font-mono border border-slate-800/80">
+                Score: <span className="text-emerald-300 font-bold">{newResultNotification.sampleScore}</span>
+              </p>
+            )}
+
+            <div className="flex items-center gap-2 pt-1">
+              <button
+                onClick={() => {
+                  setSelectedRoundNumber(newResultNotification.roundNumber);
+                  setNewResultNotification(null);
+                  setTimeout(() => {
+                    const gridEl = document.getElementById("match-grid-container");
+                    if (gridEl) gridEl.scrollIntoView({ behavior: "smooth", block: "start" });
+                  }, 100);
+                }}
+                className="flex-1 py-2 px-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs shadow-lg shadow-emerald-500/20 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <Eye className="w-3.5 h-3.5" />
+                <span>Voir la Journée {newResultNotification.roundNumber}</span>
+              </button>
+              <button
+                onClick={() => setNewResultNotification(null)}
+                className="py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs border border-slate-700 transition-colors cursor-pointer"
+              >
+                Ignorer
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Footer */}
