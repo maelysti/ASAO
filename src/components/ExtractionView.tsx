@@ -608,27 +608,117 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
     }, 700);
   };
 
-  // Export JSON / CSV
+  // Compute Ribbon Statistics for Imported / Extracted Database
+  const dbRibbonStats = useMemo(() => {
+    const total = extractedDatabase.length;
+    if (total === 0) {
+      return {
+        total: 0,
+        uniqueLeaguesCount: 0,
+        uniqueSeasonsCount: 0,
+        eventCategoryIds: [] as string[],
+        totalGoals: 0,
+        avgGoals: "0.00",
+        over25Count: 0,
+        over25Percent: "0.0",
+        homeWins: 0,
+        draws: 0,
+        awayWins: 0,
+        homeWinPct: "0.0",
+        drawPct: "0.0",
+        awayWinPct: "0.0",
+      };
+    }
+
+    const leaguesSet = new Set<number>();
+    const seasonsSet = new Set<string>();
+    const eventCatSet = new Set<string>();
+
+    let totalGoals = 0;
+    let matchesWithScoreCount = 0;
+    let over25Count = 0;
+    let homeWins = 0;
+    let draws = 0;
+    let awayWins = 0;
+
+    extractedDatabase.forEach((m) => {
+      if (m.competitionId) leaguesSet.add(m.competitionId);
+      const s = m.seasonNumber || m.seasonId || 1;
+      seasonsSet.add(String(s));
+
+      const catId = m.eventCategoryId || m.competitionId || activeEventCategoryId || activeCategoryId || 8035;
+      if (catId) eventCatSet.add(String(catId));
+
+      if (m.score && m.score.includes("-")) {
+        const parts = m.score.split("-").map((p) => parseInt(p.trim(), 10));
+        if (!isNaN(parts[0]) && !isNaN(parts[1])) {
+          const hG = parts[0];
+          const aG = parts[1];
+          const sum = hG + aG;
+          totalGoals += sum;
+          matchesWithScoreCount++;
+
+          if (sum > 2.5) over25Count++;
+          if (hG > aG) homeWins++;
+          else if (hG < aG) awayWins++;
+          else draws++;
+        }
+      }
+    });
+
+    const validCount = matchesWithScoreCount || 1;
+
+    return {
+      total,
+      uniqueLeaguesCount: leaguesSet.size,
+      uniqueSeasonsCount: seasonsSet.size,
+      eventCategoryIds: Array.from(eventCatSet),
+      totalGoals,
+      avgGoals: (totalGoals / validCount).toFixed(2),
+      over25Count,
+      over25Percent: ((over25Count / validCount) * 100).toFixed(1),
+      homeWins,
+      draws,
+      awayWins,
+      homeWinPct: ((homeWins / validCount) * 100).toFixed(1),
+      drawPct: ((draws / validCount) * 100).toFixed(1),
+      awayWinPct: ((awayWins / validCount) * 100).toFixed(1),
+    };
+  }, [extractedDatabase, activeEventCategoryId, activeCategoryId]);
+
+  // Export JSON / CSV / XLSX with Event Category ID explicitly included
   const handleExportJSON = () => {
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(extractedDatabase, null, 2));
+    if (extractedDatabase.length === 0) {
+      addLog("WARN", "[EXPORT] Aucune donnée à exporter. La BDD est vide.");
+      alert("Base de données vide. Veuillez d'abord effectuer une extraction ou importer des données.");
+      return;
+    }
+    const exportData = extractedDatabase.map((m) => ({
+      ...m,
+      eventCategoryId: m.eventCategoryId || m.competitionId || activeEventCategoryId || activeCategoryId || 8035,
+    }));
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportData, null, 2));
     const downloadAnchor = document.createElement("a");
     downloadAnchor.setAttribute("href", dataStr);
-    downloadAnchor.setAttribute("download", `sporty_extraction_database_${new Date().toISOString().slice(0, 10)}.json`);
+    downloadAnchor.setAttribute("download", `sporty_database_eventCat_${activeEventCategoryId || activeCategoryId || 8035}_${new Date().toISOString().slice(0, 10)}.json`);
     document.body.appendChild(downloadAnchor);
     downloadAnchor.click();
     downloadAnchor.remove();
-    addLog("SUCCESS", `[EXPORT] ${extractedDatabase.length} enregistrements exportés en JSON.`);
+    addLog("SUCCESS", `[EXPORT JSON] ${extractedDatabase.length} enregistrements exportés en JSON avec ID Event Category.`);
   };
 
   const handleExportCSV = () => {
     if (extractedDatabase.length === 0) return;
     const headers = [
-      "ID",
+      "ID Match",
+      "ID Event Category (Carte d'Identité)",
       "Match",
       "Ligue",
+      "ID Ligue (Compétition)",
       "Saison",
       "Round",
-      "Score",
+      "Score Final",
+      "Score Mi-Temps",
       "Statut",
       "Rang Dom (Round)",
       "Rang Ext (Round)",
@@ -645,11 +735,14 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
 
     const rows = extractedDatabase.map((m) => [
       m.id,
+      m.eventCategoryId || m.competitionId || activeEventCategoryId || activeCategoryId || 8035,
       `"${m.matchName.replace(/"/g, '""')}"`,
       `"${m.competitionName.replace(/"/g, '""')}"`,
+      m.competitionId,
       `"Saison ${m.seasonNumber || 1}"`,
       m.roundNumber,
       `"${m.score || ""}"`,
+      `"${m.halfTimeScore || ""}"`,
       `"${m.status}"`,
       m.homeRankAtRound ?? m.homeRank,
       m.awayRankAtRound ?? m.awayRank,
@@ -668,11 +761,11 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `sporty_extraction_database_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.setAttribute("download", `sporty_database_eventCat_${activeEventCategoryId || activeCategoryId || 8035}_${new Date().toISOString().slice(0, 10)}.csv`);
     document.body.appendChild(link);
     link.click();
     link.remove();
-    addLog("SUCCESS", `[EXPORT CSV] ${extractedDatabase.length} enregistrements exportés en CSV.`);
+    addLog("SUCCESS", `[EXPORT CSV] ${extractedDatabase.length} enregistrements exportés en CSV avec ID Event Category.`);
   };
 
   const handleExportXLSX = () => {
@@ -684,10 +777,12 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
 
     const exportRows = extractedDatabase.map((m) => ({
       "ID Match": m.id,
+      "ID Event Category (Carte d'Identité)": m.eventCategoryId || m.competitionId || activeEventCategoryId || activeCategoryId || 8035,
       "Nom Match": m.matchName,
       "Équipe Domicile": m.homeTeamName,
       "Équipe Extérieur": m.awayTeamName,
       "Compétition": m.competitionName,
+      "ID Ligue (Compétition)": m.competitionId,
       "Saison": m.seasonNumber ? `Saison ${m.seasonNumber}` : (m.seasonName || "Saison 1"),
       "Journée / Round": m.roundNumber,
       "Rang Domicile (Au Round)": m.homeRankAtRound ?? m.homeRank,
@@ -730,12 +825,12 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
 
     XLSX.writeFile(
       workbook,
-      `bdd_sporty_matches_${new Date().toISOString().slice(0, 10)}.xlsx`
+      `bdd_sporty_matches_eventCat_${activeEventCategoryId || activeCategoryId || 8035}_${new Date().toISOString().slice(0, 10)}.xlsx`
     );
 
     addLog(
       "SUCCESS",
-      `[EXPORT XLSX] 📊 ${extractedDatabase.length} enregistrements exportés avec succès dans le fichier Excel (.xlsx).`
+      `[EXPORT XLSX] 📊 ${extractedDatabase.length} enregistrements exportés en Excel (.xlsx) avec ID Event Category.`
     );
   };
 
@@ -763,7 +858,10 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
       totalRecords: extractedDatabase.length,
       sourceApp: "Sporty Virtual Archive Engine",
       geminiApiKeyProvided: !!geminiApiKey,
-      records: extractedDatabase,
+      records: extractedDatabase.map((m) => ({
+        ...m,
+        eventCategoryId: m.eventCategoryId || m.competitionId || activeEventCategoryId || activeCategoryId || 8035,
+      })),
     };
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(drivePayload, null, 2));
     const downloadAnchor = document.createElement("a");
@@ -788,21 +886,91 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
     return Array.from(set).sort();
   }, [extractedDatabase]);
 
-  const handleImportJSON = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const fileReader = new FileReader();
-    if (e.target.files && e.target.files[0]) {
-      fileReader.readAsText(e.target.files[0], "UTF-8");
-      fileReader.onload = (event) => {
+  // Unified File Import Handler (JSON, Excel .xlsx / .xls, CSV)
+  const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const fileName = file.name.toLowerCase();
+    const reader = new FileReader();
+
+    const processRawList = (rawList: any[]) => {
+      if (!rawList || rawList.length === 0) {
+        alert("Aucun match valide trouvé dans le fichier d'importation.");
+        return;
+      }
+
+      const formatted: ExtractedMatchRecord[] = rawList.map((item: any, idx: number) => {
+        const rawS = item.seasonNumber || item.seasonId || item.season || item.rawMatch?.seasonNumber || item.rawMatch?.seasonId || item["Saison"] || 1;
+        const sNum = typeof rawS === "number" ? rawS : (parseInt(String(rawS).replace(/\D/g, ""), 10) || 1);
+        const sId = item.seasonId || sNum;
+
+        const eventCat =
+          item.eventCategoryId ||
+          item["ID Event Category (Carte d'Identité)"] ||
+          item["ID Event Category"] ||
+          item.categoryId ||
+          item.competitionId ||
+          item.entryPointId ||
+          activeEventCategoryId ||
+          activeCategoryId ||
+          8035;
+
+        return {
+          ...item,
+          id: typeof item.id === "number" ? item.id : Date.now() + idx,
+          matchName: item.matchName || item["Nom Match"] || item.match || `${item.homeTeamName || item["Équipe Domicile"] || "Dom"} vs ${item.awayTeamName || item["Équipe Extérieur"] || "Ext"}`,
+          homeTeamName: item.homeTeamName || item["Équipe Domicile"] || item.homeTeam?.name || "Dom",
+          awayTeamName: item.awayTeamName || item["Équipe Extérieur"] || item.awayTeam?.name || "Ext",
+          homeRank: item.homeRank ?? item.homeTeam?.position ?? 1,
+          awayRank: item.awayRank ?? item.awayTeam?.position ?? 2,
+          competitionId: item.competitionId || item["ID Ligue (Compétition)"] || item.entryPointId || 8035,
+          eventCategoryId: eventCat,
+          competitionName: item.competitionName || item["Compétition"] || item.categoryName || "Ligue",
+          roundNumber: item.roundNumber || item["Journée / Round"] || item.round || 1,
+          seasonNumber: sNum,
+          seasonId: sId,
+          seasonName: item.seasonName || `Saison ${sNum}`,
+          status: item.status || item["Statut Match"] || (item.score ? "Finished" : "PreEvent"),
+          score: item.score || item["Score Final"] || "",
+          halfTimeScore: item.halfTimeScore || item["Score Mi-Temps"] || "",
+          homeOdds: typeof item.homeOdds === "number" ? item.homeOdds : parseFloat(item["Cote 1"] || item.homeOdds || "1.80"),
+          drawOdds: typeof item.drawOdds === "number" ? item.drawOdds : parseFloat(item["Cote X"] || item.drawOdds || "3.20"),
+          awayOdds: typeof item.awayOdds === "number" ? item.awayOdds : parseFloat(item["Cote 2"] || item.awayOdds || "4.10"),
+          doubleChanceOdds: item.doubleChanceOdds || {
+            dc1X: parseFloat(item["Cote 1X"] || "1.25"),
+            dc12: parseFloat(item["Cote 12"] || "1.30"),
+            dcX2: parseFloat(item["Cote X2"] || "1.55"),
+          },
+          overUnderOdds: item.overUnderOdds || {
+            over25: parseFloat(item["Cote Over 2.5"] || "1.85"),
+            under25: parseFloat(item["Cote Under 2.5"] || "1.95"),
+          },
+          bothTeamsScoreOdds: item.bothTeamsScoreOdds || {
+            yes: parseFloat(item["Cote GG (Oui)"] || "1.80"),
+            no: parseFloat(item["Cote NG (Non)"] || "1.95"),
+          },
+          goalMinutes: item.goalMinutes || item["Minutes Buts"] || "Aucun goal",
+          extractedAt: item.extractedAt || item["Date Extraite"] || new Date().toLocaleTimeString("fr-FR"),
+          source: item.source || `Import ${file.name}`,
+        };
+      });
+
+      onAddExtractedRecords(formatted);
+      addLog("SUCCESS", `[IMPORT_BDD] 📥 ${formatted.length} enregistrements avec ID Event Category importés depuis "${file.name}".`);
+      alert(`Succès : ${formatted.length} enregistrements importés dans la BDD avec leur ID Event Category !`);
+    };
+
+    if (fileName.endsWith(".json")) {
+      reader.readAsText(file, "UTF-8");
+      reader.onload = (event) => {
         try {
           const parsedData = JSON.parse(event.target?.result as string);
           let rawList: any[] = [];
-          if (Array.isArray(parsedData)) {
-            rawList = parsedData;
-          } else if (parsedData && Array.isArray(parsedData.records)) {
-            rawList = parsedData.records;
-          } else if (parsedData && Array.isArray(parsedData.matches)) {
-            rawList = parsedData.matches;
-          } else if (parsedData && Array.isArray(parsedData.rounds)) {
+          if (Array.isArray(parsedData)) rawList = parsedData;
+          else if (parsedData && Array.isArray(parsedData.records)) rawList = parsedData.records;
+          else if (parsedData && Array.isArray(parsedData.matches)) rawList = parsedData.matches;
+          else if (parsedData && Array.isArray(parsedData.rounds)) {
             parsedData.rounds.forEach((r: any) => {
               const rSeason = r.seasonNumber || r.seasonId || r.season;
               (r.matches || []).forEach((m: any) => {
@@ -812,49 +980,34 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
                   seasonNumber: m.seasonNumber || m.season || m.seasonId || rSeason || 1,
                   seasonId: m.seasonId || rSeason || 1,
                   seasonName: m.seasonName || r.seasonName || `Saison ${rSeason || 1}`,
+                  eventCategoryId: m.eventCategoryId || r.eventCategoryId || m.categoryId || 8035,
                 });
               });
             });
           }
-
-          if (rawList.length > 0) {
-            const formatted: ExtractedMatchRecord[] = rawList.map((item: any, idx: number) => {
-              const rawS = item.seasonNumber || item.seasonId || item.season || item.rawMatch?.seasonNumber || item.rawMatch?.seasonId || 1;
-              const sNum = typeof rawS === "number" ? rawS : (parseInt(String(rawS).replace(/\D/g, ""), 10) || 1);
-              const sId = item.seasonId || sNum;
-              return {
-                ...item,
-                id: typeof item.id === "number" ? item.id : Date.now() + idx,
-                matchName: item.matchName || item.match || `${item.homeTeamName || item.homeTeam?.name || "Dom"} vs ${item.awayTeamName || item.awayTeam?.name || "Ext"}`,
-                homeTeamName: item.homeTeamName || item.homeTeam?.name || "Dom",
-                awayTeamName: item.awayTeamName || item.awayTeam?.name || "Ext",
-                homeRank: item.homeRank ?? item.homeTeam?.position ?? 1,
-                awayRank: item.awayRank ?? item.awayTeam?.position ?? 2,
-                competitionId: item.competitionId || item.entryPointId || 8035,
-                eventCategoryId: item.eventCategoryId || item.categoryId || item.competitionId || item.entryPointId || 8035,
-                competitionName: item.competitionName || item.categoryName || "Ligue",
-                roundNumber: item.roundNumber || item.round || 1,
-                seasonNumber: sNum,
-                seasonId: sId,
-                seasonName: item.seasonName || `Saison ${sNum}`,
-                status: item.status || (item.score ? "Finished" : "PreEvent"),
-                score: item.score || "",
-                halfTimeScore: item.halfTimeScore || "",
-                source: item.source || "Imported JSON",
-                extractedAt: item.extractedAt || new Date().toLocaleTimeString("fr-FR"),
-              };
-            });
-            onAddExtractedRecords(formatted);
-            addLog("SUCCESS", `[IMPORT] ${formatted.length} enregistrements importés dans la base de données.`);
-            alert(`Succès : ${formatted.length} enregistrements importés !`);
-          } else {
-            alert("Aucun match valide trouvé dans le fichier JSON.");
-          }
+          processRawList(rawList);
         } catch (err) {
           addLog("WARN", "[IMPORT_ERROR] Fichier JSON invalide.");
           alert("Erreur lors de la lecture du fichier JSON.");
         }
       };
+    } else if (fileName.endsWith(".xlsx") || fileName.endsWith(".xls") || fileName.endsWith(".csv")) {
+      reader.readAsArrayBuffer(file);
+      reader.onload = (event) => {
+        try {
+          const data = new Uint8Array(event.target?.result as ArrayBuffer);
+          const workbook = XLSX.read(data, { type: "array" });
+          const firstSheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[firstSheetName];
+          const jsonRows: any[] = XLSX.utils.sheet_to_json(worksheet);
+          processRawList(jsonRows);
+        } catch (err) {
+          addLog("WARN", "[IMPORT_ERROR] Fichier Excel/CSV invalide.");
+          alert("Erreur lors de la lecture du fichier Excel/CSV.");
+        }
+      };
+    } else {
+      alert("Format de fichier non pris en charge. Veuillez fournir un fichier .json, .xlsx, .xls ou .csv.");
     }
   };
 
@@ -1310,16 +1463,118 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
       {/* TAB 2: BASE DE DONNÉES (ARCHIVE & EXPORT) */}
       {activeTab === "database" && (
         <div className="space-y-6">
+          {/* RUBAN DE CONTRÔLE ET D'OBSERVATION DE LA BDD IMPORTÉE/EXTRAITE */}
+          <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 border-2 border-emerald-500/40 rounded-3xl p-5 shadow-2xl space-y-4 relative overflow-hidden">
+            {/* Top Badge & Title Bar */}
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3 pb-3 border-b border-slate-800/90">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-500 text-slate-950 font-black shadow-lg shadow-emerald-500/20 shrink-0">
+                  <Layers className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-base font-black text-white uppercase tracking-tight">
+                      Ruban de Contrôle & Analyse BDD Importée / Extraite
+                    </h3>
+                    <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 text-[10px] font-mono font-black uppercase tracking-wider">
+                      Live BDD Ribbon
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Observatoire temps-réel : ID Event Category (Carte d'Identité), volume, buts & tendances 1X2.
+                  </p>
+                </div>
+              </div>
+
+              {/* Event Category ID Active Badge */}
+              <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-2xl bg-slate-900 border border-cyan-500/40 text-cyan-300 font-mono text-xs font-black shadow-inner shrink-0">
+                <Key className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                <span>Carte d'Identité (ID Event Category) :</span>
+                <span className="px-2 py-0.5 rounded-lg bg-cyan-500/20 text-cyan-300 border border-cyan-500/50">
+                  {activeEventCategoryId || activeCategoryId || (dbRibbonStats.eventCategoryIds.length > 0 ? dbRibbonStats.eventCategoryIds.join(", ") : "8035")}
+                </span>
+              </div>
+            </div>
+
+            {/* 4 Stat Cards Grid on Ribbon */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {/* Card 1: Volumétrie */}
+              <div className="bg-slate-900/90 border border-slate-800/90 rounded-2xl p-3.5 space-y-1">
+                <div className="flex items-center justify-between text-slate-400 text-[10px] font-extrabold uppercase tracking-wider">
+                  <span>Volumétrie BDD</span>
+                  <Database className="w-3.5 h-3.5 text-cyan-400" />
+                </div>
+                <div className="text-xl font-black text-white font-mono">
+                  {dbRibbonStats.total} <span className="text-xs font-normal text-slate-400">matchs</span>
+                </div>
+                <div className="text-[10px] text-slate-400 flex items-center gap-1.5 font-bold">
+                  <span className="text-cyan-300">{dbRibbonStats.uniqueLeaguesCount} ligue(s)</span>
+                  <span>&bull;</span>
+                  <span className="text-amber-300">{dbRibbonStats.uniqueSeasonsCount} saison(s)</span>
+                </div>
+              </div>
+
+              {/* Card 2: Carte d'Identité (ID Event Category) */}
+              <div className="bg-slate-900/90 border border-slate-800/90 rounded-2xl p-3.5 space-y-1">
+                <div className="flex items-center justify-between text-slate-400 text-[10px] font-extrabold uppercase tracking-wider">
+                  <span>ID Event Category</span>
+                  <Award className="w-3.5 h-3.5 text-amber-400" />
+                </div>
+                <div className="text-sm font-black text-amber-300 font-mono truncate" title={dbRibbonStats.eventCategoryIds.join(", ")}>
+                  {dbRibbonStats.eventCategoryIds.length > 0
+                    ? `IDs: ${dbRibbonStats.eventCategoryIds.slice(0, 3).join(", ")}${dbRibbonStats.eventCategoryIds.length > 3 ? "..." : ""}`
+                    : `ID: ${activeEventCategoryId || 8035}`}
+                </div>
+                <div className="text-[10px] text-slate-400 font-bold truncate">
+                  {selectedLeagueFilter === "ALL" ? "Toutes compétitions" : `Compétition #${selectedLeagueFilter}`}
+                </div>
+              </div>
+
+              {/* Card 3: Bilan Buts & Attaque */}
+              <div className="bg-slate-900/90 border border-slate-800/90 rounded-2xl p-3.5 space-y-1">
+                <div className="flex items-center justify-between text-slate-400 text-[10px] font-extrabold uppercase tracking-wider">
+                  <span>Moy. Buts (+2.5)</span>
+                  <Zap className="w-3.5 h-3.5 text-emerald-400" />
+                </div>
+                <div className="text-xl font-black text-emerald-400 font-mono">
+                  {dbRibbonStats.totalGoals} <span className="text-xs font-bold text-slate-400">buts ({dbRibbonStats.avgGoals}/m)</span>
+                </div>
+                <div className="text-[10px] text-emerald-300 font-extrabold">
+                  Over 2.5 : {dbRibbonStats.over25Percent}% ({dbRibbonStats.over25Count} matchs)
+                </div>
+              </div>
+
+              {/* Card 4: Répartition 1X2 */}
+              <div className="bg-slate-900/90 border border-slate-800/90 rounded-2xl p-3.5 space-y-1">
+                <div className="flex items-center justify-between text-slate-400 text-[10px] font-extrabold uppercase tracking-wider">
+                  <span>Tendances 1X2</span>
+                  <Activity className="w-3.5 h-3.5 text-purple-400" />
+                </div>
+                <div className="text-xs font-mono font-black text-slate-200 flex items-center justify-between">
+                  <span className="text-emerald-400" title="Victoire Domicile">1: {dbRibbonStats.homeWinPct}%</span>
+                  <span className="text-amber-400" title="Match Nul">X: {dbRibbonStats.drawPct}%</span>
+                  <span className="text-cyan-400" title="Victoire Extérieur">2: {dbRibbonStats.awayWinPct}%</span>
+                </div>
+                {/* Visual Bar */}
+                <div className="h-2 w-full bg-slate-950 rounded-full overflow-hidden flex mt-1 border border-slate-800">
+                  <div style={{ width: `${dbRibbonStats.homeWinPct}%` }} className="bg-emerald-500" title={`Domicile (1): ${dbRibbonStats.homeWinPct}%`} />
+                  <div style={{ width: `${dbRibbonStats.drawPct}%` }} className="bg-amber-500" title={`Nul (X): ${dbRibbonStats.drawPct}%`} />
+                  <div style={{ width: `${dbRibbonStats.awayWinPct}%` }} className="bg-cyan-500" title={`Extérieur (2): ${dbRibbonStats.awayWinPct}%`} />
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* Complete Database Table & Controls */}
           <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-4">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div>
                 <h3 className="text-lg font-extrabold text-white flex items-center gap-2">
                   <Database className="w-5 h-5 text-emerald-400" />
-                  <span>Base de Données Complète ({filteredDatabase.length} / {extractedDatabase.length})</span>
+                  <span>Base de Données Registre ({filteredDatabase.length} / {extractedDatabase.length})</span>
                 </h3>
                 <p className="text-xs text-slate-400">
-                  Exportez en JSON / CSV, supprimez des entrées ou consultez les détails complets de chaque match.
+                  Visualisez les entrées avec leur ID Event Category, exportez en Excel / JSON / CSV ou synchronisez avec Google Drive.
                 </p>
               </div>
 
@@ -1328,17 +1583,27 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
                 <button
                   onClick={() => fileInputRef.current?.click()}
                   className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-cyan-300 rounded-xl text-xs font-bold flex items-center gap-1.5 border border-slate-700 transition-all cursor-pointer"
+                  title="Importer des données depuis JSON, Excel (.xlsx/.xls) ou CSV"
                 >
                   <Upload className="w-3.5 h-3.5" />
-                  <span>Importer JSON</span>
+                  <span>Importer (JSON/Excel)</span>
                 </button>
                 <input
                   type="file"
                   ref={fileInputRef}
-                  onChange={handleImportJSON}
-                  accept=".json"
+                  onChange={handleImportFile}
+                  accept=".json,.xlsx,.xls,.csv"
                   className="hidden"
                 />
+
+                <button
+                  onClick={handleExportXLSX}
+                  className="px-3.5 py-2 bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-300 border border-emerald-500/60 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-md shadow-emerald-950/40 transition-all cursor-pointer"
+                  title="Exporter la BDD au format Excel (.xlsx) avec en-têtes et ID Event Category"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Exporter XLSX (Excel)</span>
+                </button>
 
                 <button
                   onClick={handleExportJSON}
@@ -1357,21 +1622,12 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
                 </button>
 
                 <button
-                  onClick={handleExportXLSX}
-                  className="px-3 py-2 bg-emerald-600/30 hover:bg-emerald-600/40 text-emerald-300 border border-emerald-500/50 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
-                  title="Exporter la BDD au format Excel (.xlsx)"
-                >
-                  <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Exporter XLSX (.xlsx)</span>
-                </button>
-
-                <button
                   onClick={handleExportGoogleDrive}
                   className="px-3 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md shadow-blue-500/20 transition-all cursor-pointer"
                   title={`Google Drive Sync (${driveUserEmail})`}
                 >
                   <CloudUpload className="w-3.5 h-3.5 text-blue-200" />
-                  <span>Google Drive ({driveUserEmail.split("@")[0]})</span>
+                  <span>Google Drive</span>
                 </button>
 
                 <button
@@ -1388,8 +1644,8 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 pt-2">
               <div className="flex items-center gap-2">
                 {(activeEventCategoryId || activeCategoryId) && (
-                  <span className="px-2.5 py-2 rounded-xl bg-cyan-500/15 border border-cyan-500/30 text-cyan-400 text-[11px] font-black font-mono shrink-0 shadow-sm" title="Event Category ID">
-                    ID: {activeEventCategoryId || activeCategoryId}
+                  <span className="px-2.5 py-2 rounded-xl bg-cyan-500/15 border border-cyan-500/30 text-cyan-400 text-[11px] font-black font-mono shrink-0 shadow-sm" title="ID Event Category Actif">
+                    ID Event Cat: {activeEventCategoryId || activeCategoryId}
                   </span>
                 )}
                 <input
@@ -1412,7 +1668,7 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
                 <option value="ALL">🌐 Toutes les compétitions</option>
                 {entryPoints.map((ep) => (
                   <option key={ep.id} value={ep.id.toString()}>
-                    🏆 {ep.name}
+                    🏆 {ep.name} (Cat ID: {ep.eventCategoryId || ep.id})
                   </option>
                 ))}
               </select>
@@ -1447,7 +1703,8 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
               <table className="w-full text-left text-xs border-collapse">
                 <thead className="sticky top-0 bg-slate-950 z-10 text-slate-400 uppercase font-bold text-[10px] tracking-wider border-b border-slate-800">
                   <tr>
-                    <th className="p-3">ID</th>
+                    <th className="p-3">ID Match</th>
+                    <th className="p-3">ID Event Category</th>
                     <th className="p-3">Match</th>
                     <th className="p-3">Ligue & Saison</th>
                     <th className="p-3 text-center">Journée</th>
@@ -1462,6 +1719,11 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
                   {filteredDatabase.map((m, i) => (
                     <tr key={i} className="hover:bg-slate-800/40 transition-colors">
                       <td className="p-3 font-mono text-slate-500 text-[10px]">#{m.id}</td>
+                      <td className="p-3 font-mono text-cyan-400 font-extrabold text-[11px]">
+                        <span className="px-2 py-0.5 rounded bg-cyan-500/10 border border-cyan-500/30">
+                          {m.eventCategoryId || m.competitionId || activeEventCategoryId || 8035}
+                        </span>
+                      </td>
                       <td className="p-3 font-extrabold text-white">{m.matchName}</td>
                       <td className="p-3">
                         <span className="px-2 py-0.5 rounded-md bg-slate-950 text-cyan-300 border border-slate-800 text-[10px] font-bold">
