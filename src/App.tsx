@@ -237,7 +237,15 @@ export default function App() {
         raw.rounds.forEach((r: any) => {
           if (r.matches && Array.isArray(r.matches)) {
             r.matches.forEach((m: any) => {
-              matchSet.set(m.id, { ...m, entryPointId: ep.id });
+              matchSet.set(m.id, {
+                ...m,
+                entryPointId: ep.id,
+                eventCategoryId: r.eventCategoryId || m.eventCategoryId || m.categoryId,
+                seasonNumber: r.seasonNumber || r.season || m.seasonNumber || m.season,
+                seasonName: r.seasonName || m.seasonName,
+                seasonId: r.seasonId || m.seasonId,
+                roundNumber: r.roundNumber || m.roundNumber || m.round,
+              });
             });
           }
         });
@@ -248,7 +256,11 @@ export default function App() {
         if (key.startsWith(`${ep.id}_`)) {
           const mList = Array.isArray(val) ? val : (val as any)?.matches || [];
           mList.forEach((m: any) => {
-            matchSet.set(m.id, { ...m, entryPointId: ep.id });
+            matchSet.set(m.id, {
+              ...m,
+              entryPointId: ep.id,
+              eventCategoryId: m.eventCategoryId || m.categoryId || (m as any).rawMatch?.eventCategoryId,
+            });
           });
         }
       });

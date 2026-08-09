@@ -83,7 +83,12 @@ export const MatchCard: React.FC<MatchCardProps> = ({ event, matchIndex, databas
   // Extract score data if available
   const rawScore = event.score || (event as any).rawMatch?.score;
   const rawHtScore = event.halfTimeScore || (event as any).rawMatch?.halfTimeScore;
-  const goalsList: any[] = event.goals || (event as any).rawMatch?.goals || [];
+  const goalsList: any[] =
+    event.goals ||
+    (event as any).rawMatch?.goals ||
+    (event as any).goalsDetail ||
+    (event as any).rawMatch?.goalsDetail ||
+    [];
   const scoresArr: any[] = event.scores || (event as any).rawMatch?.scores || [];
 
   // Separate goal minutes per team (Home vs Away)
@@ -94,20 +99,18 @@ export const MatchCard: React.FC<MatchCardProps> = ({ event, matchIndex, databas
     let prevHome = 0;
     let prevAway = 0;
     goalsList.forEach((g: any) => {
-      const min = g.minute ?? g.min;
-      if (g.team) {
-        const t = String(g.team).toLowerCase();
-        if (t === "home" || t === "1") {
-          if (min !== undefined) homeGoals.push(min);
-        } else if (t === "away" || t === "2") {
-          if (min !== undefined) awayGoals.push(min);
-        }
+      const min = g.minute ?? g.min ?? g.time;
+      const rawTeam = String(g.team ?? g.side ?? g.teamType ?? "").toLowerCase();
+      if (rawTeam === "home" || rawTeam === "1" || g.homeTeam === true || g.isHome === true) {
+        if (min !== undefined && min !== null) homeGoals.push(min);
+      } else if (rawTeam === "away" || rawTeam === "2" || g.homeTeam === false || g.isHome === false) {
+        if (min !== undefined && min !== null) awayGoals.push(min);
       } else {
-        const curHome = g.homeScore ?? prevHome;
-        const curAway = g.awayScore ?? prevAway;
-        if (curHome > prevHome && min !== undefined) {
+        const curHome = g.homeScore !== undefined ? Number(g.homeScore) : prevHome;
+        const curAway = g.awayScore !== undefined ? Number(g.awayScore) : prevAway;
+        if (curHome > prevHome && min !== undefined && min !== null) {
           homeGoals.push(min);
-        } else if (curAway > prevAway && min !== undefined) {
+        } else if (curAway > prevAway && min !== undefined && min !== null) {
           awayGoals.push(min);
         }
         prevHome = curHome;
@@ -270,7 +273,7 @@ export const MatchCard: React.FC<MatchCardProps> = ({ event, matchIndex, databas
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5 flex-wrap">
           <span className="px-2 py-0.5 bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 font-mono font-black text-[11px] rounded-lg shadow-sm" title="ID Event Category (Carte d'Identité)">
-            ID Cat: {(event as any).eventCategoryId || (event as any).competitionId || (event as any).entryPointId || 8035}
+            ID Cat: {(event as any).eventCategoryId || (event as any).rawMatch?.eventCategoryId || (event as any).categoryId || 8035}
           </span>
           <span className="px-2 py-0.5 bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 font-extrabold text-[11px] rounded-lg shadow-sm">
             SAISON {seasonNum}

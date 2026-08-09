@@ -1012,8 +1012,12 @@ export const MatchResultsView: React.FC<MatchResultsViewProps> = ({
                               ) : (
                                 <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1 scrollbar-thin">
                                   {goals.map((g, gIdx) => {
-                                    const isHomeGoal = g.team === "Home";
-                                    const scorerName = isHomeGoal ? homeName : awayName;
+                                    const rawT = String(g.team ?? g.side ?? g.teamType ?? "").toLowerCase();
+                                    const isHomeGoal =
+                                      rawT === "home" || rawT === "1" || g.homeTeam === true || g.isHome === true;
+                                    const teamName = isHomeGoal ? homeName : awayName;
+                                    const playerName = g.player || g.playerName || g.scorer || g.scorerName;
+                                    const label = playerName && playerName !== "But" && playerName !== "Pénalty" ? `${teamName} (${playerName})` : teamName;
                                     return (
                                       <div
                                         key={gIdx}
@@ -1024,12 +1028,14 @@ export const MatchResultsView: React.FC<MatchResultsViewProps> = ({
                                             {g.minute}&apos;
                                           </span>
                                           <span className="text-slate-200 font-bold">
-                                            ⚽ {scorerName}
+                                            ⚽ {label}
                                           </span>
                                         </div>
-                                        <span className="font-mono font-black text-emerald-400 text-xs">
-                                          ({g.homeScore} - {g.awayScore})
-                                        </span>
+                                        {g.homeScore !== undefined && g.awayScore !== undefined && (
+                                          <span className="font-mono font-black text-emerald-400 text-xs">
+                                            ({g.homeScore} - {g.awayScore})
+                                          </span>
+                                        )}
                                       </div>
                                     );
                                   })}

@@ -384,14 +384,31 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
           : [];
 
       if (rawGoals.length > 0) {
+        let prevH = 0;
+        let prevA = 0;
         goalsList = rawGoals.map((g: any) => {
           const minVal = g.minute ?? g.min ?? g.time ?? 0;
-          const teamSide =
-            g.team === "Home" || g.team === "home" || g.team === 1 || g.team === "1"
-              ? "home"
-              : g.team === "Away" || g.team === "away" || g.team === 2 || g.team === "2"
-              ? "away"
-              : (g.team || "home");
+          let teamSide = "home";
+          const rawTeam = String(g.team ?? g.side ?? g.teamType ?? "").toLowerCase();
+
+          if (rawTeam === "home" || rawTeam === "1" || g.homeTeam === true || g.isHome === true) {
+            teamSide = "home";
+          } else if (rawTeam === "away" || rawTeam === "2" || g.homeTeam === false || g.isHome === false) {
+            teamSide = "away";
+          } else if (g.homeScore !== undefined && g.awayScore !== undefined) {
+            const curH = Number(g.homeScore);
+            const curA = Number(g.awayScore);
+            if (curH > prevH) {
+              teamSide = "home";
+            } else if (curA > prevA) {
+              teamSide = "away";
+            }
+            prevH = curH;
+            prevA = curA;
+          } else {
+            teamSide = g.team || "home";
+          }
+
           const playerName = g.player || g.playerName || g.scorer || g.scorerName || g.name || (g.type === "Penalty" ? "Pénalty" : "But");
           return {
             minute: minVal,
@@ -406,8 +423,8 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
           .map((g) => {
             const minText = g.minute !== undefined && g.minute !== null ? `${g.minute}'` : "?'";
             const teamText = g.team === "home" ? homeName : g.team === "away" ? awayName : g.team;
-            const playerText = g.player && g.player !== "But" ? `${g.player} - ` : "";
-            return `${minText} (${playerText}${teamText})`;
+            const playerText = g.player && g.player !== "But" && g.player !== "Pénalty" ? ` - ${g.player}` : "";
+            return `${minText} (${teamText}${playerText})`;
           })
           .join(", ");
       } else if (m.goalMinutes && typeof m.goalMinutes === "string" && m.goalMinutes.trim().length > 0 && !m.goalMinutes.includes("non transmises")) {
@@ -452,8 +469,8 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
         (m as any).round?.eventCategoryId ||
         (m as any).categoryId ||
         (m as any).rawMatch?.categoryId ||
-        (compId === activeCategoryId && activeEventCategoryId ? activeEventCategoryId : compId) ||
-        compId;
+        activeEventCategoryId ||
+        8035;
 
       newExtracted.push({
         id: m.id,
@@ -714,7 +731,7 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
       const s = m.seasonNumber || m.seasonId || 1;
       seasonsSet.add(String(s));
 
-      const catId = m.eventCategoryId || m.competitionId || activeEventCategoryId || activeCategoryId || 8035;
+      const catId = m.eventCategoryId || (m as any).rawMatch?.eventCategoryId || activeEventCategoryId || 8035;
       if (catId) eventCatSet.add(String(catId));
 
       if (m.score && m.score.includes("-")) {
@@ -763,7 +780,7 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
     }
     const exportData = extractedDatabase.map((m) => ({
       ...m,
-      eventCategoryId: m.eventCategoryId || m.competitionId || activeEventCategoryId || activeCategoryId || 8035,
+      eventCategoryId: m.eventCategoryId || (m as any).rawMatch?.eventCategoryId || activeEventCategoryId || 8035,
     }));
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportData, null, 2));
     const downloadAnchor = document.createElement("a");
@@ -803,7 +820,7 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
 
     const rows = extractedDatabase.map((m) => [
       m.id,
-      m.eventCategoryId || m.competitionId || activeEventCategoryId || activeCategoryId || 8035,
+      m.eventCategoryId || (m as any).rawMatch?.eventCategoryId || activeEventCategoryId || 8035,
       `"${m.matchName.replace(/"/g, '""')}"`,
       `"${m.competitionName.replace(/"/g, '""')}"`,
       m.competitionId,
@@ -845,7 +862,7 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
 
     const exportRows = extractedDatabase.map((m) => ({
       "ID Match": m.id,
-      "ID Event Category (Carte d'Identité)": m.eventCategoryId || m.competitionId || activeEventCategoryId || activeCategoryId || 8035,
+      "ID Event Category (Carte d'Identité)": m.eventCategoryId || (m as any).rawMatch?.eventCategoryId || activeEventCategoryId || 8035,
       "Nom Match": m.matchName,
       "Équipe Domicile": m.homeTeamName,
       "Équipe Extérieur": m.awayTeamName,
@@ -928,7 +945,7 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
       geminiApiKeyProvided: !!geminiApiKey,
       records: extractedDatabase.map((m) => ({
         ...m,
-        eventCategoryId: m.eventCategoryId || m.competitionId || activeEventCategoryId || activeCategoryId || 8035,
+        eventCategoryId: m.eventCategoryId || (m as any).rawMatch?.eventCategoryId || activeEventCategoryId || 8035,
       })),
     };
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(drivePayload, null, 2));
@@ -978,10 +995,7 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
           item["ID Event Category (Carte d'Identité)"] ||
           item["ID Event Category"] ||
           item.categoryId ||
-          item.competitionId ||
-          item.entryPointId ||
           activeEventCategoryId ||
-          activeCategoryId ||
           8035;
 
         return {
@@ -1474,7 +1488,7 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
                       <td className="p-3 font-extrabold text-white">{rec.matchName}</td>
                       <td className="p-3 font-mono text-cyan-400 font-extrabold text-[11px]">
                         <span className="px-2 py-0.5 rounded bg-cyan-500/10 border border-cyan-500/30">
-                          {rec.eventCategoryId || rec.competitionId || activeEventCategoryId || 8035}
+                          {rec.eventCategoryId || (rec as any).rawMatch?.eventCategoryId || activeEventCategoryId || 8035}
                         </span>
                       </td>
                       <td className="p-3">
@@ -1795,7 +1809,7 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
                       <td className="p-3 font-mono text-slate-500 text-[10px]">#{m.id}</td>
                       <td className="p-3 font-mono text-cyan-400 font-extrabold text-[11px]">
                         <span className="px-2 py-0.5 rounded bg-cyan-500/10 border border-cyan-500/30">
-                          {m.eventCategoryId || m.competitionId || activeEventCategoryId || 8035}
+                          {m.eventCategoryId || (m as any).rawMatch?.eventCategoryId || activeEventCategoryId || 8035}
                         </span>
                       </td>
                       <td className="p-3 font-extrabold text-white">{m.matchName}</td>
