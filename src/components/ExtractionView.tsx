@@ -314,10 +314,10 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
       const { finalScore, halfTimeScore, hasScore } = getExactMatchScore(m);
 
       const matchStatusStr = String(m.state || m.preEventOrLive || m.status || "").toLowerCase();
-      const isPreEvent = matchStatusStr.includes("preevent") || matchStatusStr.includes("upcoming") || matchStatusStr.includes("notstarted");
+      const isPreEvent = matchStatusStr.includes("preevent") || matchStatusStr.includes("upcoming") || matchStatusStr.includes("notstarted") || matchStatusStr.includes("scheduled");
 
-      // Strict check: DO NOT extract unplayed / pre-event matches or matches without a real result when strict score filter is active
-      if (strictScoreOnly && (!hasScore || !finalScore || isPreEvent)) {
+      // ABSOLUTE DIRECTIVE: DO NOT EXTRACT UNPLAYED / PRE-EVENT MATCHES OR MATCHES WITHOUT A REAL VALID SCORE FROM BET261
+      if (!hasScore || !finalScore || !/^\d+\s*-\s*\d+$/.test(finalScore) || isPreEvent) {
         return;
       }
 
@@ -633,45 +633,45 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
           conditionText: "IF Rank1 <= Rank2 - 3 AND HomeOdds <= 2.20 THEN 1 (Victoire Domicile)",
           betType: "1X2",
           occurrencesInDb: rankDiffMatches.length,
-          winRateInDb: rankDiffMatches.length > 0 ? parseFloat(((rankDiffWins.length / rankDiffMatches.length) * 100).toFixed(1)) : 88.5,
+          winRateInDb: rankDiffMatches.length > 0 ? parseFloat(((rankDiffWins.length / rankDiffMatches.length) * 100).toFixed(1)) : 0,
           confidenceScore: 94,
-          sampleMatches: rankDiffMatches.slice(0, 3).map((m) => `${m.matchName} (${m.score || "2-1"})`),
+          sampleMatches: rankDiffMatches.slice(0, 3).map((m) => `${m.matchName}${m.score ? ` (${m.score})` : ""}`),
         },
         {
           ruleTitle: "Dimension 2: Buts vs Cotes (+2.5 Buts sur Cote <= 1.85)",
           conditionText: "IF Over25Odds <= 1.85 AND Rank1 + Rank2 <= 16 THEN Over 2.5 Goals",
           betType: "Plus/Moins 2.5",
           occurrencesInDb: overOddsMatches.length,
-          winRateInDb: overOddsMatches.length > 0 ? parseFloat(((overOddsWins.length / overOddsMatches.length) * 100).toFixed(1)) : 83.3,
+          winRateInDb: overOddsMatches.length > 0 ? parseFloat(((overOddsWins.length / overOddsMatches.length) * 100).toFixed(1)) : 0,
           confidenceScore: 89,
-          sampleMatches: overOddsMatches.slice(0, 3).map((m) => `${m.matchName} (${m.score || "3-1"})`),
+          sampleMatches: overOddsMatches.slice(0, 3).map((m) => `${m.matchName}${m.score ? ` (${m.score})` : ""}`),
         },
         {
           ruleTitle: "Dimension 3: Minutes de Buts & Journée (Top Chrono J10+)",
           conditionText: "IF Round >= 10 AND FavoriteOdds <= 1.90 THEN Early Goal (1-30 min) / Over 1.5",
           betType: "Temps des Buts",
           occurrencesInDb: timingMatches.length,
-          winRateInDb: timingMatches.length > 0 ? parseFloat(((timingWins.length / timingMatches.length) * 100).toFixed(1)) : 86.7,
+          winRateInDb: timingMatches.length > 0 ? parseFloat(((timingWins.length / timingMatches.length) * 100).toFixed(1)) : 0,
           confidenceScore: 91,
-          sampleMatches: timingMatches.slice(0, 3).map((m) => `${m.matchName} (${m.score || "2-0"}) [${m.goalMinutes || "14', 67'"}]`),
+          sampleMatches: timingMatches.slice(0, 3).map((m) => `${m.matchName}${m.score ? ` (${m.score})` : ""}${m.goalMinutes ? ` [${m.goalMinutes}]` : ""}`),
         },
         {
           ruleTitle: "Dimension 4: Le Gagnant 1X2 (Match Nul sur Cotes Équilibrées)",
           conditionText: "IF |HomeOdds - AwayOdds| <= 0.40 AND DrawOdds <= 3.35 THEN X (Match Nul)",
           betType: "1X2",
           occurrencesInDb: tight1X2Matches.length,
-          winRateInDb: tight1X2Matches.length > 0 ? parseFloat(((tight1X2Draws.length / tight1X2Matches.length) * 100).toFixed(1)) : 76.2,
+          winRateInDb: tight1X2Matches.length > 0 ? parseFloat(((tight1X2Draws.length / tight1X2Matches.length) * 100).toFixed(1)) : 0,
           confidenceScore: 84,
-          sampleMatches: tight1X2Matches.slice(0, 3).map((m) => `${m.matchName} (${m.score || "1-1"})`),
+          sampleMatches: tight1X2Matches.slice(0, 3).map((m) => `${m.matchName}${m.score ? ` (${m.score})` : ""}`),
         },
         {
           ruleTitle: "Dimension 5: Les 2 Équipes Marquent (GG / Both Teams Score)",
           conditionText: "IF GGOdds <= 1.85 AND Rank1 <= 10 AND Rank2 <= 10 THEN GG (Les 2 Marquent)",
           betType: "GG/NG",
           occurrencesInDb: bttsMatches.length,
-          winRateInDb: bttsMatches.length > 0 ? parseFloat(((bttsWins.length / bttsMatches.length) * 100).toFixed(1)) : 81.0,
+          winRateInDb: bttsMatches.length > 0 ? parseFloat(((bttsWins.length / bttsMatches.length) * 100).toFixed(1)) : 0,
           confidenceScore: 88,
-          sampleMatches: bttsMatches.slice(0, 3).map((m) => `${m.matchName} (${m.score || "2-2"})`),
+          sampleMatches: bttsMatches.slice(0, 3).map((m) => `${m.matchName}${m.score ? ` (${m.score})` : ""}`),
         },
       ];
 

@@ -91,6 +91,7 @@ export default function App() {
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(8035);
   const [selectedRoundIndex, setSelectedRoundIndex] = useState<number>(0);
   const [fetchedRoundMatches, setFetchedRoundMatches] = useState<Record<string, any[]>>({});
+  const [competitionResults, setCompetitionResults] = useState<Record<number, any[]>>({});
   const [isRoundLoading, setIsRoundLoading] = useState<boolean>(false);
   const [currentTab, setCurrentTab] = useState<MatchTimeFilter>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
@@ -172,6 +173,21 @@ export default function App() {
             : `Erreur API Sporty-Tech (Code HTTP ${allData.status || epRes.status})`,
       });
     }
+
+    // 3. Fetch past results for all entry points (Round 1 to latest played round)
+    validEPs.forEach((ep) => {
+      fetchInstantLeagueResults(ep.id, 0, 100, currentToken).then((resResults) => {
+        if (resResults.data) {
+          const roundsList = Array.isArray(resResults.data)
+            ? resResults.data
+            : (resResults.data as any).rounds || [];
+          setCompetitionResults((prev) => ({
+            ...prev,
+            [ep.id]: roundsList,
+          }));
+        }
+      });
+    });
   }, []);
 
   // Initial load on mount or when token changes
@@ -282,6 +298,28 @@ export default function App() {
         }
       });
 
+      // Also check competitionResults (results rounds from Bet261 API, containing rounds 1 to current played round)
+      const resRounds = competitionResults[ep.id];
+      if (resRounds && Array.isArray(resRounds)) {
+        resRounds.forEach((r: any) => {
+          if (r.matches && Array.isArray(r.matches)) {
+            r.matches.forEach((m: any) => {
+              const existing = matchSet.get(m.id) || {};
+              matchSet.set(m.id, {
+                ...existing,
+                ...m,
+                entryPointId: ep.id,
+                eventCategoryId: r.eventCategoryId || m.eventCategoryId || ep.id,
+                seasonNumber: r.seasonNumber || r.season || m.seasonNumber || m.season,
+                seasonName: r.seasonName || m.seasonName,
+                seasonId: r.seasonId || m.seasonId,
+                roundNumber: r.roundNumber || m.roundNumber || m.round,
+              });
+            });
+          }
+        });
+      }
+
       // Also check standard live/upcoming events
       if (events && Array.isArray(events)) {
         events.forEach((ev: any) => {
@@ -304,7 +342,7 @@ export default function App() {
     });
 
     return map;
-  }, [entryPoints, rawInstantResponses, fetchedRoundMatches, instantMatches, events]);
+  }, [entryPoints, rawInstantResponses, fetchedRoundMatches, instantMatches, events, competitionResults]);
 
   // Specific eventCategoryId (e.g. 159864 for Spanish League, 159866 for English League)
   const activeEventCategoryId = useMemo(() => {
@@ -400,7 +438,6 @@ export default function App() {
   const prevCategoryRef = useRef<number | null>(null);
   const hasInitializedRoundRef = useRef<boolean>(false);
   const autoAdvancedRoundsRef = useRef<Set<string>>(new Set());
-  const [competitionResults, setCompetitionResults] = useState<Record<number, any[]>>({});
 
   // Construct full list of rounds for active competition dynamically
   const availableRoundsList = useMemo(() => {
