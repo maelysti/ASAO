@@ -341,37 +341,88 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
       if (Array.isArray(betTypes)) {
         betTypes.forEach((b: any) => {
           const name = (b.name || b.title || "").toUpperCase();
+          const bId = Number(b.betTypeId || b.id || 0);
           const items = b.eventBetTypeItems || b.odds || b.items || [];
 
-          if (name === "1X2" || b.betTypeId === 1 || b.betTypeId === 30001) {
+          // 1X2 Market (BetTypeId 30083, 1, 30001, or name 1X2 / Winner / Match Result)
+          if (
+            bId === 30083 || bId === 1 || bId === 30001 ||
+            name.includes("1X2") || name.includes("WINNER") || name.includes("RESULT")
+          ) {
             items.forEach((it: any) => {
-              const sName = (it.shortName || it.name || "").trim();
-              if (sName === "1") hOdds = Number(it.odds || it.price || 0);
-              else if (sName === "X" || sName === "x") dOdds = Number(it.odds || it.price || 0);
-              else if (sName === "2") aOdds = Number(it.odds || it.price || 0);
+              const sName = (it.shortName || it.name || it.title || "").trim().toUpperCase();
+              const val = Number(it.odds || it.price || it.value || 0);
+              if (sName === "1" || sName === "HOME") hOdds = val;
+              else if (sName === "X" || sName === "DRAW") dOdds = val;
+              else if (sName === "2" || sName === "AWAY") aOdds = val;
             });
-          } else if (name.includes("DOUBLE CHANCE") || b.betTypeId === 30002) {
+          }
+          // Double Chance Market (BetTypeId 30084, 30002, or name DOUBLE CHANCE / DC)
+          else if (
+            bId === 30084 || bId === 30002 ||
+            name.includes("DOUBLE") || name.includes("CHANCE") || name === "DC"
+          ) {
             items.forEach((it: any) => {
-              const sName = (it.shortName || it.name || "").trim();
-              if (sName === "1X") dc1X = Number(it.odds || it.price || 0);
-              else if (sName === "12") dc12 = Number(it.odds || it.price || 0);
-              else if (sName === "X2") dcX2 = Number(it.odds || it.price || 0);
+              const sName = (it.shortName || it.name || it.title || "").trim().toUpperCase();
+              const val = Number(it.odds || it.price || it.value || 0);
+              if (sName === "1X") dc1X = val;
+              else if (sName === "12") dc12 = val;
+              else if (sName === "X2") dcX2 = val;
             });
-          } else if (name.includes("OVER/UNDER") || name.includes("PLUS/MOINS") || name.includes("2.5")) {
+          }
+          // Over / Under 2.5 Market (BetTypeId 30085, 30003, or name OVER/UNDER, PLUS/MOINS, 2.5, TOTAL)
+          else if (
+            bId === 30085 || bId === 30003 ||
+            name.includes("OVER") || name.includes("UNDER") || name.includes("PLUS") || name.includes("MOINS") || name.includes("2.5") || name.includes("TOTAL")
+          ) {
             items.forEach((it: any) => {
-              const sName = (it.shortName || it.name || "").trim().toLowerCase();
-              if (sName.includes("over") || sName.includes("plus")) over25 = Number(it.odds || it.price || 0);
-              else if (sName.includes("under") || sName.includes("moins")) under25 = Number(it.odds || it.price || 0);
+              const sName = (it.shortName || it.name || it.title || "").trim().toLowerCase();
+              const val = Number(it.odds || it.price || it.value || 0);
+              if (sName.includes("over") || sName.includes("plus")) over25 = val;
+              else if (sName.includes("under") || sName.includes("moins")) under25 = val;
             });
-          } else if (name.includes("BOTH TEAMS") || name.includes("GOAL/NO GOAL") || name.includes("GG")) {
+          }
+          // Both Teams To Score (GG/NG) Market (BetTypeId 30086, 30004, or name BOTH TEAMS, GOAL/NO GOAL, GG/NG, LES DEUX)
+          else if (
+            bId === 30086 || bId === 30004 ||
+            name.includes("BOTH") || name.includes("GOAL") || name.includes("GG") || name.includes("LES DEUX")
+          ) {
             items.forEach((it: any) => {
-              const sName = (it.shortName || it.name || "").trim().toLowerCase();
-              if (sName.includes("yes") || sName.includes("gg")) gg = Number(it.odds || it.price || 0);
-              else if (sName.includes("no") || sName.includes("ng")) ng = Number(it.odds || it.price || 0);
+              const sName = (it.shortName || it.name || it.title || "").trim().toLowerCase();
+              const val = Number(it.odds || it.price || it.value || 0);
+              if (sName.includes("yes") || sName.includes("oui") || sName.includes("gg")) gg = val;
+              else if (sName.includes("no") || sName.includes("non") || sName.includes("ng")) ng = val;
             });
           }
         });
       }
+
+      // Fallbacks if betTypes array was missing or incomplete
+      if (!hOdds && (m.homeOdds || m.drawOdds || m.awayOdds)) {
+        hOdds = Number(m.homeOdds) || 0;
+        dOdds = Number(m.drawOdds) || 0;
+        aOdds = Number(m.awayOdds) || 0;
+      }
+      if ((!dc1X || !dcX2) && m.doubleChanceOdds) {
+        dc1X = dc1X || Number(m.doubleChanceOdds.dc1X || m.doubleChanceOdds["1X"]) || 0;
+        dc12 = dc12 || Number(m.doubleChanceOdds.dc12 || m.doubleChanceOdds["12"]) || 0;
+        dcX2 = dcX2 || Number(m.doubleChanceOdds.dcX2 || m.doubleChanceOdds["X2"]) || 0;
+      }
+      if ((!over25 || !under25) && m.overUnderOdds) {
+        over25 = over25 || Number(m.overUnderOdds.over25 || m.overUnderOdds.over) || 0;
+        under25 = under25 || Number(m.overUnderOdds.under25 || m.overUnderOdds.under) || 0;
+      }
+      if ((!gg || !ng) && m.bothTeamsScoreOdds) {
+        gg = gg || Number(m.bothTeamsScoreOdds.yes || m.bothTeamsScoreOdds.gg) || 0;
+        ng = ng || Number(m.bothTeamsScoreOdds.no || m.bothTeamsScoreOdds.ng) || 0;
+      }
+
+      const summaryParts: string[] = [];
+      if (hOdds > 0 || dOdds > 0 || aOdds > 0) summaryParts.push(`1X2: ${hOdds.toFixed(2)}/${dOdds.toFixed(2)}/${aOdds.toFixed(2)}`);
+      if (dc1X > 0 || dc12 > 0 || dcX2 > 0) summaryParts.push(`DC: ${dc1X.toFixed(2)}/${dc12.toFixed(2)}/${dcX2.toFixed(2)}`);
+      if (over25 > 0 || under25 > 0) summaryParts.push(`O2.5: ${over25.toFixed(2)} | U2.5: ${under25.toFixed(2)}`);
+      if (gg > 0 || ng > 0) summaryParts.push(`GG: ${gg.toFixed(2)} | NG: ${ng.toFixed(2)}`);
+      const summaryStr = summaryParts.length > 0 ? summaryParts.join(" | ") : "Cotes non disponibles";
 
       // Goals & Goal minutes extraction from Bet261 / Sporty API payload ONLY
       let goalMinsStr = "";
@@ -497,14 +548,25 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
         m.rawMatch?.expectedStart ||
         "";
 
-      const eventCatId =
+      const matchRawCat =
         (m as any).eventCategoryId ||
         (m as any).rawMatch?.eventCategoryId ||
         (m as any).round?.eventCategoryId ||
         (m as any).categoryId ||
-        (m as any).rawMatch?.categoryId ||
-        activeEventCategoryId ||
-        8035;
+        (m as any).rawMatch?.categoryId;
+
+      const compRawCat =
+        allMatchesByComp?.[compId]?.matches?.[0]?.eventCategoryId ||
+        allMatchesByComp?.[compId]?.matches?.[0]?.rawMatch?.eventCategoryId;
+
+      const eventCatId =
+        matchRawCat && matchRawCat !== compId
+          ? matchRawCat
+          : compRawCat && compRawCat !== compId
+          ? compRawCat
+          : activeEventCategoryId && activeEventCategoryId !== compId
+          ? activeEventCategoryId
+          : matchRawCat || compRawCat || activeEventCategoryId || compId;
 
       newExtracted.push({
         id: matchId,
@@ -537,7 +599,7 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
         doubleChanceOdds: { dc1X, dc12, dcX2 },
         overUnderOdds: { over25, under25 },
         bothTeamsScoreOdds: { yes: gg, no: ng },
-        allOddsSummary: hOdds ? `1X2: ${hOdds}/${dOdds}/${aOdds}` : "Cotes non disponibles",
+        allOddsSummary: summaryStr,
         headToHeadHistory: [],
         extractedAt: timestamp,
         source: "Live Extraction",
@@ -2070,28 +2132,28 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
                 <div className="bg-slate-950 p-3 rounded-xl border border-slate-800">
                   <span className="text-[10px] text-slate-500 block font-sans">1X2 (Dom/Nul/Ext)</span>
                   <span className="text-emerald-400 font-black mt-1 block">
-                    {selectedDetailRecord.homeOdds?.toFixed(2)} | {selectedDetailRecord.drawOdds?.toFixed(2)} | {selectedDetailRecord.awayOdds?.toFixed(2)}
+                    {(selectedDetailRecord.homeOdds || 0).toFixed(2)} | {(selectedDetailRecord.drawOdds || 0).toFixed(2)} | {(selectedDetailRecord.awayOdds || 0).toFixed(2)}
                   </span>
                 </div>
 
                 <div className="bg-slate-950 p-3 rounded-xl border border-slate-800">
                   <span className="text-[10px] text-slate-500 block font-sans">Double Chance (1X/X2)</span>
                   <span className="text-cyan-400 font-black mt-1 block">
-                    1X: {selectedDetailRecord.doubleChanceOdds?.dc1X?.toFixed(2) || "1.25"} | X2: {selectedDetailRecord.doubleChanceOdds?.dcX2?.toFixed(2) || "1.55"}
+                    1X: {(selectedDetailRecord.doubleChanceOdds?.dc1X || 0).toFixed(2)} | X2: {(selectedDetailRecord.doubleChanceOdds?.dcX2 || 0).toFixed(2)}
                   </span>
                 </div>
 
                 <div className="bg-slate-950 p-3 rounded-xl border border-slate-800">
-                  <span className="text-[10px] text-slate-500 block font-sans">Plus/Moins 2.5</span>
+                  <span className="text-[10px] text-slate-500 block font-sans">Plus/Moins 2.5 (+/-)</span>
                   <span className="text-amber-400 font-black mt-1 block">
-                    +2.5: {selectedDetailRecord.overUnderOdds?.over25?.toFixed(2) || "1.85"}
+                    +2.5: {(selectedDetailRecord.overUnderOdds?.over25 || 0).toFixed(2)} | -2.5: {(selectedDetailRecord.overUnderOdds?.under25 || 0).toFixed(2)}
                   </span>
                 </div>
 
                 <div className="bg-slate-950 p-3 rounded-xl border border-slate-800">
                   <span className="text-[10px] text-slate-500 block font-sans">Les 2 Marquent (GG/NG)</span>
                   <span className="text-purple-400 font-black mt-1 block">
-                    GG: {selectedDetailRecord.bothTeamsScoreOdds?.yes?.toFixed(2) || "1.80"}
+                    GG: {(selectedDetailRecord.bothTeamsScoreOdds?.yes || 0).toFixed(2)} | NG: {(selectedDetailRecord.bothTeamsScoreOdds?.no || 0).toFixed(2)}
                   </span>
                 </div>
               </div>

@@ -263,12 +263,31 @@ export default function App() {
         return `${ep.id}_R${rn}_UNK`;
       };
 
+      const rawEventCatId =
+        raw?.eventCategoryId ||
+        raw?.rounds?.[0]?.eventCategoryId ||
+        (ep as any).eventCategoryId;
+
       const mergeMatch = (existing: any, incoming: any, epId: number, rNum: any) => {
+        const incCat =
+          incoming.eventCategoryId ||
+          incoming.categoryId ||
+          incoming.rawMatch?.eventCategoryId ||
+          incoming.rawMatch?.categoryId;
+
+        const extCat =
+          existing?.eventCategoryId && existing.eventCategoryId !== epId
+            ? existing.eventCategoryId
+            : undefined;
+
+        const resolvedCatId = incCat || extCat || rawEventCatId || epId;
+
         if (!existing) {
           return {
             ...incoming,
             id: incoming.id || getMatchKey(incoming, rNum),
             entryPointId: epId,
+            eventCategoryId: resolvedCatId,
             roundNumber: rNum || incoming.roundNumber || incoming.round || 1,
           };
         }
@@ -278,7 +297,7 @@ export default function App() {
         merged.id = incoming.id || existing.id || getMatchKey(incoming, rNum);
         merged.entryPointId = epId;
         merged.roundNumber = rNum || incoming.roundNumber || existing.roundNumber || 1;
-        merged.eventCategoryId = incoming.eventCategoryId || existing.eventCategoryId || epId;
+        merged.eventCategoryId = resolvedCatId;
 
         merged.seasonNumber = incoming.seasonNumber || existing.seasonNumber;
         merged.seasonName = incoming.seasonName || existing.seasonName;
