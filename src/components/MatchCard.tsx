@@ -269,6 +269,9 @@ export const MatchCard: React.FC<MatchCardProps> = ({ event, matchIndex, databas
       {/* Top Header: SEASON & ROUND Badge & Status */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="px-2 py-0.5 bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 font-mono font-black text-[11px] rounded-lg shadow-sm" title="ID Event Category (Carte d'Identité)">
+            ID Cat: {(event as any).eventCategoryId || (event as any).competitionId || (event as any).entryPointId || 8035}
+          </span>
           <span className="px-2 py-0.5 bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 font-extrabold text-[11px] rounded-lg shadow-sm">
             SAISON {seasonNum}
           </span>

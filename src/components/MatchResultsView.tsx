@@ -756,6 +756,9 @@ export const MatchResultsView: React.FC<MatchResultsViewProps> = ({
                       <span className="text-[11px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 rounded-lg">
                         {currentEntryPoint?.name || "Virtual League"}
                       </span>
+                      <span className="text-[11px] font-mono font-bold text-cyan-300 bg-cyan-500/10 border border-cyan-500/30 px-2.5 py-0.5 rounded-lg" title="ID Event Category">
+                        ID Event Cat: {roundObj.eventCategoryId || currentEntryPoint?.eventCategoryId || activeCategoryId || 8035}
+                      </span>
                     </h3>
                   </div>
                 </div>
