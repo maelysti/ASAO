@@ -179,7 +179,7 @@ export interface GoalDetails {
 }
 
 export interface ExtractedMatchRecord {
-  id: number;
+  id: number | string;
   matchName: string;
   homeTeamName: string;
   awayTeamName: string;

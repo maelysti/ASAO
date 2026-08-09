@@ -340,9 +340,10 @@ export const RankingView: React.FC<RankingViewProps> = ({
   
   .matches-table { border-collapse: collapse; width: 100%; font-size: 12px; margin-top: 10px; }
   .matches-table th { background-color: #1e293b; color: #a7f3d0; font-weight: bold; padding: 8px; border: 1px solid #334155; text-align: center; }
-  .matches-table td { padding: 6px 10px; border: 1px solid #1e293b; text-align: center; color: #cbd5e1; }
+  .matches-table td { padding: 6px 10px; border: 1px solid #1e293b; text-align: center; color: #cbd5e1; mso-number-format:'\@'; }
   .matches-table tr:nth-child(even) td { background-color: #0f172a; }
   .matches-table tr:nth-child(odd) td { background-color: #1e293b; }
+  .text-format { mso-number-format:'\@'; }
 </style>
 </head>
 <body>
@@ -490,14 +491,14 @@ export const RankingView: React.FC<RankingViewProps> = ({
 
         html += `
     <tr>
-      <td style="font-weight:bold; color:#f59e0b;">J${rn}</td>
-      <td style="font-mono; font-weight:bold; color:#38bdf8;">${eventCatId}</td>
-      <td style="font-weight:bold; color:#ffffff; text-align:left;">${homeName} <span style="color:#64748b;">vs</span> ${awayName}</td>
-      <td style="font-weight:bold; color:#10b981;">${scoreStr}</td>
-      <td style="color:#94a3b8;">${htStr}</td>
-      <td style="font-weight:bold; color:${outcome.startsWith("1") ? "#34d399" : outcome.startsWith("2") ? "#38bdf8" : outcome.startsWith("X") ? "#fbbf24" : "#64748b"};">${outcome}</td>
-      <td style="font-weight:bold;">${totalGoals}</td>
-      <td style="font-weight:bold; color:${over25 === "OUI" ? "#34d399" : over25 === "NON" ? "#f87171" : "#64748b"};">${over25}</td>
+      <td style="font-weight:bold; color:#f59e0b; mso-number-format:'\@';">J${rn}</td>
+      <td style="font-mono; font-weight:bold; color:#38bdf8; mso-number-format:'\@';">${eventCatId}</td>
+      <td style="font-weight:bold; color:#ffffff; text-align:left; mso-number-format:'\@';">${homeName} <span style="color:#64748b;">vs</span> ${awayName}</td>
+      <td style="font-weight:bold; color:#10b981; mso-number-format:'\@';" x:str="${scoreStr}">${scoreStr}</td>
+      <td style="color:#94a3b8; mso-number-format:'\@';" x:str="${htStr}">${htStr}</td>
+      <td style="font-weight:bold; color:${outcome.startsWith("1") ? "#34d399" : outcome.startsWith("2") ? "#38bdf8" : outcome.startsWith("X") ? "#fbbf24" : "#64748b"}; mso-number-format:'\@';">${outcome}</td>
+      <td style="font-weight:bold; mso-number-format:'\@';">${totalGoals}</td>
+      <td style="font-weight:bold; color:${over25 === "OUI" ? "#34d399" : over25 === "NON" ? "#f87171" : "#64748b"}; mso-number-format:'\@';">${over25}</td>
     </tr>
 `;
       });

@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo } from "react";
 import * as XLSX from "xlsx";
 import { GoogleDriveModal } from "./GoogleDriveModal";
+import { parseMatchScoreDetails } from "../utils/scoreUtils";
 import {
   Download,
   Upload,
@@ -304,22 +305,30 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
       const roundNum = m.round || m.roundNumber || 1;
       if (roundNum > maxRoundProcessed) maxRoundProcessed = roundNum;
 
+      const homeName = m.homeTeam?.name || m.homeTeamName || (typeof m.homeTeam === "string" ? m.homeTeam : "") || m.name?.split(" vs ")[0]?.trim() || "Dom";
+      const awayName = m.awayTeam?.name || m.awayTeamName || (typeof m.awayTeam === "string" ? m.awayTeam : "") || m.name?.split(" vs ")[1]?.trim() || "Ext";
+
+      const matchId = String(m.id || `${compId}_R${roundNum}_${homeName}_${awayName}`);
+
       // Deduplication check: if match is already in BDD, count as avoided duplicate
-      if (existingIds.has(m.id)) {
+      if (existingIds.has(matchId)) {
         dupCount++;
         return;
       }
 
-      // Extract exact score & halftime score from API payload (Bet261)
-      const { finalScore, halfTimeScore, hasScore } = getExactMatchScore(m);
+      // Extract exact score & halftime score from API payload (Bet261) using parseMatchScoreDetails
+      const scoreDetails = parseMatchScoreDetails(m);
 
       const matchStatusStr = String(m.state || m.preEventOrLive || m.status || "").toLowerCase();
       const isPreEvent = matchStatusStr.includes("preevent") || matchStatusStr.includes("upcoming") || matchStatusStr.includes("notstarted") || matchStatusStr.includes("scheduled");
 
       // ABSOLUTE DIRECTIVE: DO NOT EXTRACT UNPLAYED / PRE-EVENT MATCHES OR MATCHES WITHOUT A REAL VALID SCORE FROM BET261
-      if (!hasScore || !finalScore || !/^\d+\s*-\s*\d+$/.test(finalScore) || isPreEvent) {
+      if (!scoreDetails.hasScore || !scoreDetails.scoreStr || scoreDetails.scoreStr === "-" || isPreEvent) {
         return;
       }
+
+      const finalScore = scoreDetails.scoreStr;
+      const halfTimeScore = scoreDetails.htStr !== "-" ? scoreDetails.htStr : (m.halfTimeScore || "0 - 0");
 
       // Extract Odds directly from API payload
       let hOdds = 0, dOdds = 0, aOdds = 0;
@@ -327,43 +336,42 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
       let over25 = 0, under25 = 0;
       let gg = 0, ng = 0;
 
-      if (m.eventBetTypes && Array.isArray(m.eventBetTypes)) {
-        m.eventBetTypes.forEach((b: any) => {
-          const name = (b.name || "").toUpperCase();
-          const items = b.eventBetTypeItems || [];
+      const betTypes = m.eventBetTypes || m.odds || m.markets || m.rawMatch?.eventBetTypes || m.rawMatch?.odds || [];
+
+      if (Array.isArray(betTypes)) {
+        betTypes.forEach((b: any) => {
+          const name = (b.name || b.title || "").toUpperCase();
+          const items = b.eventBetTypeItems || b.odds || b.items || [];
 
           if (name === "1X2" || b.betTypeId === 1 || b.betTypeId === 30001) {
             items.forEach((it: any) => {
-              const sName = (it.shortName || "").trim();
-              if (sName === "1") hOdds = it.odds;
-              else if (sName === "X" || sName === "x") dOdds = it.odds;
-              else if (sName === "2") aOdds = it.odds;
+              const sName = (it.shortName || it.name || "").trim();
+              if (sName === "1") hOdds = Number(it.odds || it.price || 0);
+              else if (sName === "X" || sName === "x") dOdds = Number(it.odds || it.price || 0);
+              else if (sName === "2") aOdds = Number(it.odds || it.price || 0);
             });
           } else if (name.includes("DOUBLE CHANCE") || b.betTypeId === 30002) {
             items.forEach((it: any) => {
-              const sName = (it.shortName || "").trim();
-              if (sName === "1X") dc1X = it.odds;
-              else if (sName === "12") dc12 = it.odds;
-              else if (sName === "X2") dcX2 = it.odds;
+              const sName = (it.shortName || it.name || "").trim();
+              if (sName === "1X") dc1X = Number(it.odds || it.price || 0);
+              else if (sName === "12") dc12 = Number(it.odds || it.price || 0);
+              else if (sName === "X2") dcX2 = Number(it.odds || it.price || 0);
             });
           } else if (name.includes("OVER/UNDER") || name.includes("PLUS/MOINS") || name.includes("2.5")) {
             items.forEach((it: any) => {
-              const sName = (it.shortName || "").trim().toLowerCase();
-              if (sName.includes("over") || sName.includes("plus")) over25 = it.odds;
-              else if (sName.includes("under") || sName.includes("moins")) under25 = it.odds;
+              const sName = (it.shortName || it.name || "").trim().toLowerCase();
+              if (sName.includes("over") || sName.includes("plus")) over25 = Number(it.odds || it.price || 0);
+              else if (sName.includes("under") || sName.includes("moins")) under25 = Number(it.odds || it.price || 0);
             });
           } else if (name.includes("BOTH TEAMS") || name.includes("GOAL/NO GOAL") || name.includes("GG")) {
             items.forEach((it: any) => {
-              const sName = (it.shortName || "").trim().toLowerCase();
-              if (sName.includes("yes") || sName.includes("gg")) gg = it.odds;
-              else if (sName.includes("no") || sName.includes("ng")) ng = it.odds;
+              const sName = (it.shortName || it.name || "").trim().toLowerCase();
+              if (sName.includes("yes") || sName.includes("gg")) gg = Number(it.odds || it.price || 0);
+              else if (sName.includes("no") || sName.includes("ng")) ng = Number(it.odds || it.price || 0);
             });
           }
         });
       }
-
-      const homeName = m.homeTeam?.name || "Dom";
-      const awayName = m.awayTeam?.name || "Ext";
 
       // Goals & Goal minutes extraction from Bet261 / Sporty API payload ONLY
       let goalMinsStr = "";
@@ -448,8 +456,46 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
       const sName = (m as any).seasonName || (m as any).rawMatch?.seasonName || `Saison ${sNum}`;
       const sId = (m as any).seasonId || (m as any).rawMatch?.seasonId || sNum;
 
-      const homeRankVal = m.homeTeam?.position || 0;
-      const awayRankVal = m.awayTeam?.position || 0;
+      const homeRankVal =
+        m.homeTeam?.position ??
+        m.homeTeam?.rank ??
+        m.homeRank ??
+        m.homePosition ??
+        m.rawMatch?.homeTeam?.position ??
+        m.rawMatch?.homeRank ??
+        0;
+
+      const awayRankVal =
+        m.awayTeam?.position ??
+        m.awayTeam?.rank ??
+        m.awayRank ??
+        m.awayPosition ??
+        m.rawMatch?.awayTeam?.position ??
+        m.rawMatch?.awayRank ??
+        0;
+
+      const homePointsVal =
+        m.homeTeam?.points ??
+        m.homePoints ??
+        m.homePts ??
+        m.rawMatch?.homeTeam?.points ??
+        m.rawMatch?.homePoints ??
+        0;
+
+      const awayPointsVal =
+        m.awayTeam?.points ??
+        m.awayPoints ??
+        m.awayPts ??
+        m.rawMatch?.awayTeam?.points ??
+        m.rawMatch?.awayPoints ??
+        0;
+
+      const matchTimeVal =
+        m.expectedStart ||
+        m.startTime ||
+        m.time ||
+        m.rawMatch?.expectedStart ||
+        "";
 
       const eventCatId =
         (m as any).eventCategoryId ||
@@ -461,7 +507,7 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
         8035;
 
       newExtracted.push({
-        id: m.id,
+        id: matchId,
         matchName: m.name || `${homeName} vs ${awayName}`,
         homeTeamName: homeName,
         awayTeamName: awayName,
@@ -469,8 +515,8 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
         awayRank: awayRankVal,
         homeRankAtRound: homeRankVal,
         awayRankAtRound: awayRankVal,
-        homePoints: m.homeTeam?.points || 0,
-        awayPoints: m.awayTeam?.points || 0,
+        homePoints: homePointsVal,
+        awayPoints: awayPointsVal,
         competitionId: compId,
         eventCategoryId: eventCatId,
         competitionName: categoryName || `Ligue #${compId}`,
@@ -479,7 +525,7 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
         seasonName: sName,
         seasonId: sId,
         status: m.state || m.preEventOrLive || "Terminé",
-        expectedStart: m.expectedStart,
+        expectedStart: matchTimeVal,
         score: finalScore,
         halfTimeScore: halfTimeScore,
         goalsCount: goalsList.length || (finalScore !== "0-0" && finalScore ? finalScore.split("-").reduce((a, b) => Number(a) + Number(b), 0) : 0),
@@ -498,7 +544,7 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
       });
 
       // Track extracted IDs dynamically
-      existingIds.add(m.id);
+      existingIds.add(matchId);
     });
 
     if (dupCount > 0) {
@@ -1872,7 +1918,7 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
                     Analyseur IA & Découverte de Règles sur Base de Données
                   </h3>
                   <p className="text-xs text-slate-400">
-                    L'IA analyse la base de données ({extractedDatabase.length} matchs) pour extraire les patterns répétitifs et formuler des règles de prédiction.
+                    L'IA analyse la base de données ({extractedDatabase.length} matchs réels) pour extraire les tendances et statistiques exactes des résultats collectés.
                   </p>
                 </div>
               </div>

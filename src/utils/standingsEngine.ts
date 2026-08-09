@@ -249,6 +249,13 @@ export function enrichRecordsWithRoundRanks(
         match.awayRankAtRound = aRank !== undefined ? aRank : match.awayRank;
         if (match.homeRankAtRound) match.homeRank = match.homeRankAtRound;
         if (match.awayRankAtRound) match.awayRank = match.awayRankAtRound;
+
+        if (teamStatsMap[homeName]) {
+          match.homePoints = teamStatsMap[homeName].points;
+        }
+        if (teamStatsMap[awayName]) {
+          match.awayPoints = teamStatsMap[awayName].points;
+        }
       });
 
       roundMatches.forEach((match) => {

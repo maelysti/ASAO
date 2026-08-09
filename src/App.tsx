@@ -241,27 +241,92 @@ export default function App() {
   // Extract rounds for active competition directly from API response
   const activeRawData = rawInstantResponses[activeCategoryId];
 
-  // Gather all matches across all competitions for rule evaluation
+  // Gather all matches across all competitions for rule evaluation & extraction
   const allMatchesByComp = useMemo(() => {
     const map: Record<number, { matches: any[]; categoryName: string }> = {};
 
     entryPoints.forEach((ep) => {
       const raw = rawInstantResponses[ep.id];
-      const matchSet = new Map<number, any>();
+      const matchSet = new Map<string, any>();
+
+      const getMatchKey = (m: any, rNum?: any) => {
+        const hName = (m.homeTeam?.name || m.homeTeamName || (typeof m.homeTeam === "string" ? m.homeTeam : "") || m.name?.split(" vs ")[0]?.trim() || "").toUpperCase().replace(/\s+/g, "");
+        const aName = (m.awayTeam?.name || m.awayTeamName || (typeof m.awayTeam === "string" ? m.awayTeam : "") || m.name?.split(" vs ")[1]?.trim() || "").toUpperCase().replace(/\s+/g, "");
+        const rn = rNum || m.roundNumber || m.round || 1;
+
+        if (hName && aName) {
+          return `${ep.id}_R${rn}_${hName}_${aName}`;
+        }
+        if (m.id !== undefined && m.id !== null && String(m.id).trim() !== "") {
+          return `${ep.id}_ID_${m.id}`;
+        }
+        return `${ep.id}_R${rn}_UNK`;
+      };
+
+      const mergeMatch = (existing: any, incoming: any, epId: number, rNum: any) => {
+        if (!existing) {
+          return {
+            ...incoming,
+            id: incoming.id || getMatchKey(incoming, rNum),
+            entryPointId: epId,
+            roundNumber: rNum || incoming.roundNumber || incoming.round || 1,
+          };
+        }
+
+        const merged = { ...existing, ...incoming };
+
+        merged.id = incoming.id || existing.id || getMatchKey(incoming, rNum);
+        merged.entryPointId = epId;
+        merged.roundNumber = rNum || incoming.roundNumber || existing.roundNumber || 1;
+        merged.eventCategoryId = incoming.eventCategoryId || existing.eventCategoryId || epId;
+
+        merged.seasonNumber = incoming.seasonNumber || existing.seasonNumber;
+        merged.seasonName = incoming.seasonName || existing.seasonName;
+        merged.seasonId = incoming.seasonId || existing.seasonId;
+
+        merged.homeTeam = (incoming.homeTeam && typeof incoming.homeTeam === "object")
+          ? { ...(existing.homeTeam || {}), ...incoming.homeTeam }
+          : (existing.homeTeam || incoming.homeTeam);
+        merged.awayTeam = (incoming.awayTeam && typeof incoming.awayTeam === "object")
+          ? { ...(existing.awayTeam || {}), ...incoming.awayTeam }
+          : (existing.awayTeam || incoming.awayTeam);
+
+        const incGoals = incoming.goals || incoming.goalsDetail || incoming.rawMatch?.goals;
+        const extGoals = existing.goals || existing.goalsDetail || existing.rawMatch?.goals;
+        if ((!incGoals || !Array.isArray(incGoals) || incGoals.length === 0) && (extGoals && Array.isArray(extGoals) && extGoals.length > 0)) {
+          merged.goals = extGoals;
+        }
+
+        if ((!merged.score || merged.score === "-") && (existing.score && existing.score !== "-")) {
+          merged.score = existing.score;
+        }
+        if ((!merged.halfTimeScore || merged.halfTimeScore === "-") && (existing.halfTimeScore && existing.halfTimeScore !== "-")) {
+          merged.halfTimeScore = existing.halfTimeScore;
+        }
+
+        const incBetTypes = incoming.eventBetTypes || incoming.odds || incoming.markets || incoming.rawMatch?.eventBetTypes;
+        const extBetTypes = existing.eventBetTypes || existing.odds || existing.markets || existing.rawMatch?.eventBetTypes;
+        if ((!incBetTypes || !Array.isArray(incBetTypes) || incBetTypes.length === 0) && (extBetTypes && Array.isArray(extBetTypes) && extBetTypes.length > 0)) {
+          merged.eventBetTypes = extBetTypes;
+        }
+
+        return merged;
+      };
 
       if (raw && raw.rounds && Array.isArray(raw.rounds)) {
         raw.rounds.forEach((r: any) => {
           if (r.matches && Array.isArray(r.matches)) {
             r.matches.forEach((m: any) => {
-              matchSet.set(m.id, {
+              const rNum = r.roundNumber || m.roundNumber || m.round;
+              const key = getMatchKey(m, rNum);
+              const existing = matchSet.get(key);
+              matchSet.set(key, mergeMatch(existing, {
                 ...m,
-                entryPointId: ep.id,
                 eventCategoryId: r.eventCategoryId || m.eventCategoryId || m.categoryId,
                 seasonNumber: r.seasonNumber || r.season || m.seasonNumber || m.season,
                 seasonName: r.seasonName || m.seasonName,
                 seasonId: r.seasonId || m.seasonId,
-                roundNumber: r.roundNumber || m.roundNumber || m.round,
-              });
+              }, ep.id, rNum));
             });
           }
         });
@@ -271,13 +336,9 @@ export default function App() {
       if (instantMatches && Array.isArray(instantMatches)) {
         instantMatches.forEach((m: any) => {
           if (m.entryPointId === ep.id || m.eventCategoryId === ep.id) {
-            const existing = matchSet.get(m.id) || {};
-            matchSet.set(m.id, {
-              ...existing,
-              ...m,
-              entryPointId: ep.id,
-              eventCategoryId: m.eventCategoryId || ep.id,
-            });
+            const key = getMatchKey(m);
+            const existing = matchSet.get(key);
+            matchSet.set(key, mergeMatch(existing, m, ep.id, m.roundNumber || m.round));
           }
         });
       }
@@ -287,13 +348,9 @@ export default function App() {
         if (key.startsWith(`${ep.id}_`)) {
           const mList = Array.isArray(val) ? val : (val as any)?.matches || [];
           mList.forEach((m: any) => {
-            const existing = matchSet.get(m.id) || {};
-            matchSet.set(m.id, {
-              ...existing,
-              ...m,
-              entryPointId: ep.id,
-              eventCategoryId: m.eventCategoryId || m.categoryId || (m as any).rawMatch?.eventCategoryId,
-            });
+            const mKey = getMatchKey(m);
+            const existing = matchSet.get(mKey);
+            matchSet.set(mKey, mergeMatch(existing, m, ep.id, m.roundNumber || m.round));
           });
         }
       });
@@ -304,17 +361,16 @@ export default function App() {
         resRounds.forEach((r: any) => {
           if (r.matches && Array.isArray(r.matches)) {
             r.matches.forEach((m: any) => {
-              const existing = matchSet.get(m.id) || {};
-              matchSet.set(m.id, {
-                ...existing,
+              const rNum = r.roundNumber || m.roundNumber || m.round;
+              const key = getMatchKey(m, rNum);
+              const existing = matchSet.get(key);
+              matchSet.set(key, mergeMatch(existing, {
                 ...m,
-                entryPointId: ep.id,
                 eventCategoryId: r.eventCategoryId || m.eventCategoryId || ep.id,
                 seasonNumber: r.seasonNumber || r.season || m.seasonNumber || m.season,
                 seasonName: r.seasonName || m.seasonName,
                 seasonId: r.seasonId || m.seasonId,
-                roundNumber: r.roundNumber || m.roundNumber || m.round,
-              });
+              }, ep.id, rNum));
             });
           }
         });
@@ -324,13 +380,9 @@ export default function App() {
       if (events && Array.isArray(events)) {
         events.forEach((ev: any) => {
           if (ev.entryPointId === ep.id || ev.categoryId === ep.id) {
-            const existing = matchSet.get(ev.id) || {};
-            matchSet.set(ev.id, {
-              ...existing,
-              ...ev,
-              entryPointId: ep.id,
-              eventCategoryId: ev.eventCategoryId || ev.categoryId || ep.id,
-            });
+            const key = getMatchKey(ev);
+            const existing = matchSet.get(key);
+            matchSet.set(key, mergeMatch(existing, ev, ep.id, ev.roundNumber || ev.round));
           }
         });
       }
@@ -413,7 +465,7 @@ export default function App() {
 
   const handleAddExtractedRecords = useCallback((newRecords: ExtractedMatchRecord[]) => {
     setExtractedDatabase((prev) => {
-      const map = new Map<number, ExtractedMatchRecord>();
+      const map = new Map<number | string, ExtractedMatchRecord>();
       // Preserve existing
       prev.forEach((rec) => map.set(rec.id, rec));
       // Update/insert new
