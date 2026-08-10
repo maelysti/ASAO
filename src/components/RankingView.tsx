@@ -306,7 +306,7 @@ export const RankingView: React.FC<RankingViewProps> = ({
   const exportRankingToExcel = () => {
     if (!filteredTeams || filteredTeams.length === 0) return;
 
-    const eventCatId = categoryId || "8035";
+    const eventCatId = categoryId || "export";
     const exportDate = new Date().toLocaleDateString("fr-FR") + " " + new Date().toLocaleTimeString("fr-FR");
 
     // Build HTML spreadsheet representation with full site styling (dark slate background, emerald green, amber accents, colored result pills)

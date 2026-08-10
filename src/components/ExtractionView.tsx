@@ -308,7 +308,8 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
       const homeName = m.homeTeam?.name || m.homeTeamName || (typeof m.homeTeam === "string" ? m.homeTeam : "") || m.name?.split(" vs ")[0]?.trim() || "Dom";
       const awayName = m.awayTeam?.name || m.awayTeamName || (typeof m.awayTeam === "string" ? m.awayTeam : "") || m.name?.split(" vs ")[1]?.trim() || "Ext";
 
-      const matchId = String(m.id || `${compId}_R${roundNum}_${homeName}_${awayName}`);
+      const rawMatchId = m.id || m.eventId || m.matchId || m.rawMatch?.id;
+      const matchId = String(rawMatchId || `R${roundNum}_${homeName.toUpperCase().replace(/\s+/g, '')}_${awayName.toUpperCase().replace(/\s+/g, '')}`);
 
       // Deduplication check: if match is already in BDD, count as avoided duplicate
       if (existingIds.has(matchId)) {
@@ -827,7 +828,7 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
       const s = m.seasonNumber || m.seasonId || 1;
       seasonsSet.add(String(s));
 
-      const catId = m.eventCategoryId || (m as any).rawMatch?.eventCategoryId || activeEventCategoryId || 8035;
+      const catId = m.eventCategoryId || (m as any).rawMatch?.eventCategoryId || (activeEventCategoryId && activeEventCategoryId !== activeCategoryId ? activeEventCategoryId : undefined);
       if (catId) eventCatSet.add(String(catId));
 
       if (m.score && m.score.includes("-")) {
@@ -876,12 +877,12 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
     }
     const exportData = extractedDatabase.map((m) => ({
       ...m,
-      eventCategoryId: m.eventCategoryId || (m as any).rawMatch?.eventCategoryId || activeEventCategoryId || 8035,
+      eventCategoryId: m.eventCategoryId || (m as any).rawMatch?.eventCategoryId || activeEventCategoryId,
     }));
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportData, null, 2));
     const downloadAnchor = document.createElement("a");
     downloadAnchor.setAttribute("href", dataStr);
-    downloadAnchor.setAttribute("download", `sporty_database_eventCat_${activeEventCategoryId || activeCategoryId || 8035}_${new Date().toISOString().slice(0, 10)}.json`);
+    downloadAnchor.setAttribute("download", `sporty_database_eventCat_${activeEventCategoryId || "export"}_${new Date().toISOString().slice(0, 10)}.json`);
     document.body.appendChild(downloadAnchor);
     downloadAnchor.click();
     downloadAnchor.remove();
@@ -916,7 +917,7 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
 
     const rows = extractedDatabase.map((m) => [
       m.id,
-      m.eventCategoryId || (m as any).rawMatch?.eventCategoryId || activeEventCategoryId || 8035,
+      m.eventCategoryId || (m as any).rawMatch?.eventCategoryId || activeEventCategoryId || "",
       `"${m.matchName.replace(/"/g, '""')}"`,
       `"${m.competitionName.replace(/"/g, '""')}"`,
       m.competitionId,
@@ -942,7 +943,7 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `sporty_database_eventCat_${activeEventCategoryId || activeCategoryId || 8035}_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.setAttribute("download", `sporty_database_eventCat_${activeEventCategoryId || "export"}_${new Date().toISOString().slice(0, 10)}.csv`);
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -958,7 +959,7 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
 
     const exportRows = extractedDatabase.map((m) => ({
       "ID Match": m.id,
-      "ID Event Category (Carte d'Identité)": m.eventCategoryId || (m as any).rawMatch?.eventCategoryId || activeEventCategoryId || 8035,
+      "ID Event Category (Carte d'Identité)": m.eventCategoryId || (m as any).rawMatch?.eventCategoryId || activeEventCategoryId || "",
       "Nom Match": m.matchName,
       "Équipe Domicile": m.homeTeamName,
       "Équipe Extérieur": m.awayTeamName,
@@ -1006,7 +1007,7 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
 
     XLSX.writeFile(
       workbook,
-      `bdd_sporty_matches_eventCat_${activeEventCategoryId || activeCategoryId || 8035}_${new Date().toISOString().slice(0, 10)}.xlsx`
+      `bdd_sporty_matches_eventCat_${activeEventCategoryId || "export"}_${new Date().toISOString().slice(0, 10)}.xlsx`
     );
 
     addLog(
@@ -1041,7 +1042,7 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
       geminiApiKeyProvided: !!geminiApiKey,
       records: extractedDatabase.map((m) => ({
         ...m,
-        eventCategoryId: m.eventCategoryId || (m as any).rawMatch?.eventCategoryId || activeEventCategoryId || 8035,
+        eventCategoryId: m.eventCategoryId || (m as any).rawMatch?.eventCategoryId || activeEventCategoryId,
       })),
     };
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(drivePayload, null, 2));
@@ -1090,19 +1091,18 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
           item.eventCategoryId ||
           item["ID Event Category (Carte d'Identité)"] ||
           item["ID Event Category"] ||
-          item.categoryId ||
-          activeEventCategoryId ||
-          8035;
+          (item.categoryId && item.categoryId !== activeCategoryId ? item.categoryId : undefined) ||
+          activeEventCategoryId;
 
         return {
           ...item,
-          id: typeof item.id === "number" ? item.id : Date.now() + idx,
+          id: item.id !== undefined && item.id !== null ? item.id : Date.now() + idx,
           matchName: item.matchName || item["Nom Match"] || item.match || `${item.homeTeamName || item["Équipe Domicile"] || "Dom"} vs ${item.awayTeamName || item["Équipe Extérieur"] || "Ext"}`,
           homeTeamName: item.homeTeamName || item["Équipe Domicile"] || item.homeTeam?.name || "Dom",
           awayTeamName: item.awayTeamName || item["Équipe Extérieur"] || item.awayTeam?.name || "Ext",
           homeRank: item.homeRank ?? item.homeTeam?.position ?? 1,
           awayRank: item.awayRank ?? item.awayTeam?.position ?? 2,
-          competitionId: item.competitionId || item["ID Ligue (Compétition)"] || item.entryPointId || 8035,
+          competitionId: item.competitionId || item["ID Ligue (Compétition)"] || item.entryPointId || activeCategoryId,
           eventCategoryId: eventCat,
           competitionName: item.competitionName || item["Compétition"] || item.categoryName || "Ligue",
           roundNumber: item.roundNumber || item["Journée / Round"] || item.round || 1,
@@ -1158,7 +1158,7 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
                   seasonNumber: m.seasonNumber || m.season || m.seasonId || rSeason || 1,
                   seasonId: m.seasonId || rSeason || 1,
                   seasonName: m.seasonName || r.seasonName || `Saison ${rSeason || 1}`,
-                  eventCategoryId: m.eventCategoryId || r.eventCategoryId || m.categoryId || 8035,
+                  eventCategoryId: m.eventCategoryId || r.eventCategoryId || (m.categoryId && m.categoryId !== activeCategoryId ? m.categoryId : undefined) || activeEventCategoryId,
                 });
               });
             });
@@ -1584,7 +1584,7 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
                       <td className="p-3 font-extrabold text-white">{rec.matchName}</td>
                       <td className="p-3 font-mono text-cyan-400 font-extrabold text-[11px]">
                         <span className="px-2 py-0.5 rounded bg-cyan-500/10 border border-cyan-500/30">
-                          {rec.eventCategoryId || (rec as any).rawMatch?.eventCategoryId || activeEventCategoryId || 8035}
+                          {rec.eventCategoryId || (rec as any).rawMatch?.eventCategoryId || activeEventCategoryId || "N/A"}
                         </span>
                       </td>
                       <td className="p-3">
@@ -1675,7 +1675,7 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
                 <Key className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
                 <span>Carte d'Identité (ID Event Category) :</span>
                 <span className="px-2 py-0.5 rounded-lg bg-cyan-500/20 text-cyan-300 border border-cyan-500/50">
-                  {activeEventCategoryId || activeCategoryId || (dbRibbonStats.eventCategoryIds.length > 0 ? dbRibbonStats.eventCategoryIds.join(", ") : "8035")}
+                  {activeEventCategoryId || (dbRibbonStats.eventCategoryIds.length > 0 ? dbRibbonStats.eventCategoryIds.join(", ") : "N/A")}
                 </span>
               </div>
             </div>
@@ -1707,7 +1707,7 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
                 <div className="text-sm font-black text-amber-300 font-mono truncate" title={dbRibbonStats.eventCategoryIds.join(", ")}>
                   {dbRibbonStats.eventCategoryIds.length > 0
                     ? `IDs: ${dbRibbonStats.eventCategoryIds.slice(0, 3).join(", ")}${dbRibbonStats.eventCategoryIds.length > 3 ? "..." : ""}`
-                    : `ID: ${activeEventCategoryId || 8035}`}
+                    : `ID: ${activeEventCategoryId || "N/A"}`}
                 </div>
                 <div className="text-[10px] text-slate-400 font-bold truncate">
                   {selectedLeagueFilter === "ALL" ? "Toutes compétitions" : `Compétition #${selectedLeagueFilter}`}
@@ -1905,7 +1905,7 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
                       <td className="p-3 font-mono text-slate-500 text-[10px]">#{m.id}</td>
                       <td className="p-3 font-mono text-cyan-400 font-extrabold text-[11px]">
                         <span className="px-2 py-0.5 rounded bg-cyan-500/10 border border-cyan-500/30">
-                          {m.eventCategoryId || (m as any).rawMatch?.eventCategoryId || activeEventCategoryId || 8035}
+                          {m.eventCategoryId || (m as any).rawMatch?.eventCategoryId || activeEventCategoryId || "N/A"}
                         </span>
                       </td>
                       <td className="p-3 font-extrabold text-white">{m.matchName}</td>

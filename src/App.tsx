@@ -250,17 +250,18 @@ export default function App() {
       const matchSet = new Map<string, any>();
 
       const getMatchKey = (m: any, rNum?: any) => {
+        const realId = m.id || m.eventId || m.matchId || m.rawMatch?.id;
+        if (realId !== undefined && realId !== null && String(realId).trim() !== "") {
+          return String(realId);
+        }
         const hName = (m.homeTeam?.name || m.homeTeamName || (typeof m.homeTeam === "string" ? m.homeTeam : "") || m.name?.split(" vs ")[0]?.trim() || "").toUpperCase().replace(/\s+/g, "");
         const aName = (m.awayTeam?.name || m.awayTeamName || (typeof m.awayTeam === "string" ? m.awayTeam : "") || m.name?.split(" vs ")[1]?.trim() || "").toUpperCase().replace(/\s+/g, "");
         const rn = rNum || m.roundNumber || m.round || 1;
 
         if (hName && aName) {
-          return `${ep.id}_R${rn}_${hName}_${aName}`;
+          return `R${rn}_${hName}_${aName}`;
         }
-        if (m.id !== undefined && m.id !== null && String(m.id).trim() !== "") {
-          return `${ep.id}_ID_${m.id}`;
-        }
-        return `${ep.id}_R${rn}_UNK`;
+        return `R${rn}_UNK`;
       };
 
       const rawEventCatId =
@@ -271,21 +272,31 @@ export default function App() {
       const mergeMatch = (existing: any, incoming: any, epId: number, rNum: any) => {
         const incCat =
           incoming.eventCategoryId ||
-          incoming.categoryId ||
           incoming.rawMatch?.eventCategoryId ||
-          incoming.rawMatch?.categoryId;
+          (incoming.categoryId && incoming.categoryId !== epId ? incoming.categoryId : undefined);
 
         const extCat =
           existing?.eventCategoryId && existing.eventCategoryId !== epId
             ? existing.eventCategoryId
             : undefined;
 
-        const resolvedCatId = incCat || extCat || rawEventCatId || epId;
+        const resolvedCatId = incCat || extCat || (rawEventCatId !== epId ? rawEventCatId : undefined) || epId;
+
+        const realMatchId =
+          incoming.id ||
+          incoming.eventId ||
+          incoming.matchId ||
+          incoming.rawMatch?.id ||
+          existing?.id;
+
+        const matchIdVal = (realMatchId !== undefined && realMatchId !== null && String(realMatchId).trim() !== "")
+          ? realMatchId
+          : getMatchKey(incoming, rNum);
 
         if (!existing) {
           return {
             ...incoming,
-            id: incoming.id || getMatchKey(incoming, rNum),
+            id: matchIdVal,
             entryPointId: epId,
             eventCategoryId: resolvedCatId,
             roundNumber: rNum || incoming.roundNumber || incoming.round || 1,
@@ -294,7 +305,7 @@ export default function App() {
 
         const merged = { ...existing, ...incoming };
 
-        merged.id = incoming.id || existing.id || getMatchKey(incoming, rNum);
+        merged.id = matchIdVal;
         merged.entryPointId = epId;
         merged.roundNumber = rNum || incoming.roundNumber || existing.roundNumber || 1;
         merged.eventCategoryId = resolvedCatId;
