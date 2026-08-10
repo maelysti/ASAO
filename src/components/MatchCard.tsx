@@ -272,6 +272,9 @@ export const MatchCard: React.FC<MatchCardProps> = ({ event, matchIndex, databas
       {/* Top Header: SEASON & ROUND Badge & Status */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="px-2 py-0.5 bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 font-mono font-black text-[11px] rounded-lg shadow-sm" title="ID Match (Bet261)">
+            ID Match: #{event.id}
+          </span>
           <span className="px-2 py-0.5 bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 font-mono font-black text-[11px] rounded-lg shadow-sm" title="ID Event Category (Carte d'Identité)">
             ID Cat: {(event as any).eventCategoryId || (event as any).rawMatch?.eventCategoryId || (event as any).seasonId || "N/A"}
           </span>

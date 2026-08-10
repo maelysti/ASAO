@@ -779,6 +779,7 @@ export const MatchResultsView: React.FC<MatchResultsViewProps> = ({
                   <table className="w-full text-left border-collapse">
                     <thead>
                       <tr className="bg-slate-950/80 text-[11px] font-black uppercase text-slate-400 border-b border-slate-800">
+                        <th className="py-2.5 px-3 text-center">ID Match</th>
                         <th className="py-2.5 px-4">Domicile</th>
                         <th className="py-2.5 px-4 text-center">Score FT</th>
                         <th className="py-2.5 px-4 text-center">Mi-Temps</th>
@@ -805,8 +806,13 @@ export const MatchResultsView: React.FC<MatchResultsViewProps> = ({
                           outcomeBg = "bg-cyan-500/20 text-cyan-300 border-cyan-500/30";
                         }
 
+                        const matchIdVal = m.id || (m as any).eventId || (m as any).matchId || (m as any).rawMatch?.id;
+
                         return (
                           <tr key={matchIdx} className="hover:bg-slate-800/40 transition-colors">
+                            <td className="py-2.5 px-3 text-center font-mono font-bold text-[10px] text-cyan-400">
+                              #{matchIdVal || "N/A"}
+                            </td>
                             <td className={`py-2.5 px-4 font-bold ${hNum > aNum ? "text-emerald-300 font-black" : "text-slate-200"}`}>
                               {homeName}
                             </td>
@@ -890,6 +896,9 @@ export const MatchResultsView: React.FC<MatchResultsViewProps> = ({
 
                         {/* Score Card Badge */}
                         <div className="flex flex-col items-center justify-center px-3 sm:px-4 py-1.5 bg-slate-950 border border-slate-800 rounded-2xl min-w-[100px] sm:min-w-[120px] shrink-0 shadow-inner">
+                          <span className="text-[10px] font-mono font-bold text-cyan-400 bg-cyan-500/10 px-1.5 py-0.5 rounded border border-cyan-500/20 mb-0.5">
+                            ID: #{m.id || (m as any).eventId || (m as any).matchId || "N/A"}
+                          </span>
                           <div className="text-base sm:text-lg font-black text-emerald-400 font-mono tracking-wider">
                             {homeFT} - {awayFT}
                           </div>
@@ -928,7 +937,7 @@ export const MatchResultsView: React.FC<MatchResultsViewProps> = ({
                           <button
                             onClick={() => {
                               setSelectedAnalyzerMatch({
-                                id: m.id || matchKey,
+                                id: m.id || (m as any).eventId || (m as any).matchId || (m as any).rawMatch?.id || matchKey,
                                 homeTeamName: homeName,
                                 awayTeamName: awayName,
                                 homeStats: m.homeTeam ? { position: m.homeTeam.position, points: m.homeTeam.points } : undefined,
@@ -964,7 +973,7 @@ export const MatchResultsView: React.FC<MatchResultsViewProps> = ({
                         />
                         <MatchRuleAnalysisBlock
                           event={{
-                            id: m.id || 0,
+                            id: m.id || (m as any).eventId || (m as any).matchId || (m as any).rawMatch?.id || 0,
                             homeTeamName: homeName,
                             awayTeamName: awayName,
                             homeStats: m.homeTeam ? { position: m.homeTeam.position, points: m.homeTeam.points } : undefined,

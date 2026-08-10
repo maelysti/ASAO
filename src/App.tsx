@@ -242,6 +242,39 @@ export default function App() {
   const activeRawData = rawInstantResponses[activeCategoryId];
 
   // Gather all matches across all competitions for rule evaluation & extraction
+  // Extract real match ID from any deep or shallow structure
+  const extractRealMatchId = (m: any): string | number | undefined => {
+    if (!m) return undefined;
+    const direct = m.id ?? m.eventId ?? m.matchId ?? m.gameId ?? m.code ?? m.eventCode;
+    if (direct !== undefined && direct !== null && String(direct).trim() !== "" && String(direct) !== "0") {
+      return direct;
+    }
+    if (m.rawMatch) {
+      const raw = extractRealMatchId(m.rawMatch);
+      if (raw !== undefined) return raw;
+    }
+    if (m.event) {
+      const ev = extractRealMatchId(m.event);
+      if (ev !== undefined) return ev;
+    }
+    if (Array.isArray(m.eventBetTypes) && m.eventBetTypes.length > 0) {
+      for (const bt of m.eventBetTypes) {
+        if (bt && bt.eventId) return bt.eventId;
+      }
+    }
+    return undefined;
+  };
+
+  const getNumericFallbackId = (rn: any, hName: string, aName: string): number => {
+    let hash = 0;
+    const str = `R${rn}_${hName}_${aName}`;
+    for (let i = 0; i < str.length; i++) {
+      hash = (hash << 5) - hash + str.charCodeAt(i);
+      hash |= 0;
+    }
+    return Math.abs(hash) + 100000;
+  };
+
   const allMatchesByComp = useMemo(() => {
     const map: Record<number, { matches: any[]; categoryName: string }> = {};
 
@@ -250,16 +283,16 @@ export default function App() {
       const matchSet = new Map<string, any>();
 
       const getMatchKey = (m: any, rNum?: any) => {
-        const realId = m.id || m.eventId || m.matchId || m.rawMatch?.id;
-        if (realId !== undefined && realId !== null && String(realId).trim() !== "") {
-          return String(realId);
-        }
         const hName = (m.homeTeam?.name || m.homeTeamName || (typeof m.homeTeam === "string" ? m.homeTeam : "") || m.name?.split(" vs ")[0]?.trim() || "").toUpperCase().replace(/\s+/g, "");
         const aName = (m.awayTeam?.name || m.awayTeamName || (typeof m.awayTeam === "string" ? m.awayTeam : "") || m.name?.split(" vs ")[1]?.trim() || "").toUpperCase().replace(/\s+/g, "");
         const rn = rNum || m.roundNumber || m.round || 1;
 
         if (hName && aName) {
           return `R${rn}_${hName}_${aName}`;
+        }
+        const realId = extractRealMatchId(m);
+        if (realId !== undefined) {
+          return `ID_${realId}`;
         }
         return `R${rn}_UNK`;
       };
@@ -282,16 +315,15 @@ export default function App() {
 
         const resolvedCatId = incCat || extCat || (rawEventCatId !== epId ? rawEventCatId : undefined) || epId;
 
-        const realMatchId =
-          incoming.id ||
-          incoming.eventId ||
-          incoming.matchId ||
-          incoming.rawMatch?.id ||
-          existing?.id;
+        const realMatchId = extractRealMatchId(incoming) ?? extractRealMatchId(existing);
+
+        const hName = (incoming.homeTeam?.name || incoming.homeTeamName || (typeof incoming.homeTeam === "string" ? incoming.homeTeam : "") || incoming.name?.split(" vs ")[0]?.trim() || existing?.homeTeam?.name || "DOM");
+        const aName = (incoming.awayTeam?.name || incoming.awayTeamName || (typeof incoming.awayTeam === "string" ? incoming.awayTeam : "") || incoming.name?.split(" vs ")[1]?.trim() || existing?.awayTeam?.name || "EXT");
+        const resolvedRNum = rNum || incoming.roundNumber || incoming.round || existing?.roundNumber || 1;
 
         const matchIdVal = (realMatchId !== undefined && realMatchId !== null && String(realMatchId).trim() !== "")
           ? realMatchId
-          : getMatchKey(incoming, rNum);
+          : getNumericFallbackId(resolvedRNum, hName, aName);
 
         if (!existing) {
           return {
@@ -299,7 +331,7 @@ export default function App() {
             id: matchIdVal,
             entryPointId: epId,
             eventCategoryId: resolvedCatId,
-            roundNumber: rNum || incoming.roundNumber || incoming.round || 1,
+            roundNumber: resolvedRNum,
           };
         }
 
@@ -307,7 +339,7 @@ export default function App() {
 
         merged.id = matchIdVal;
         merged.entryPointId = epId;
-        merged.roundNumber = rNum || incoming.roundNumber || existing.roundNumber || 1;
+        merged.roundNumber = resolvedRNum;
         merged.eventCategoryId = resolvedCatId;
 
         merged.seasonNumber = incoming.seasonNumber || existing.seasonNumber;
@@ -923,8 +955,13 @@ export default function App() {
     const homeRankAtRound = seasonRankings.getEnteringRank(selectedRoundNumber, homeName);
     const awayRankAtRound = seasonRankings.getEnteringRank(selectedRoundNumber, awayName);
 
+    const realMatchId = extractRealMatchId(m) ?? extractRealMatchId(resultMatch);
+    const resolvedMatchId = realMatchId !== undefined && realMatchId !== null && String(realMatchId).trim() !== ""
+      ? realMatchId
+      : getNumericFallbackId(selectedRoundNumber, homeName, awayName);
+
     return {
-      id: m.id || resultMatch?.id,
+      id: resolvedMatchId,
       entryPointId: activeCategoryId,
       eventCategoryId: activeRawRoundObj?.eventCategoryId || activeCategoryId,
       categoryName: currentEntryPoint?.name || "Compétition",

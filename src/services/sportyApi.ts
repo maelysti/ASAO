@@ -525,8 +525,10 @@ export async function fetchAllDataForCompetitions(
               (m as any).seasonName ||
               `Saison ${sNum}`;
 
+            const realMatchId = m.id ?? m.eventId ?? m.matchId ?? m.gameId ?? m.code ?? m.eventCode ?? (m.rawMatch && (m.rawMatch.id ?? m.rawMatch.eventId ?? m.rawMatch.matchId));
+
             combinedList.push({
-              id: m.id,
+              id: realMatchId,
               entryPointId: entryPoint.id,
               eventCategoryId: round.eventCategoryId || entryPoint.id,
               categoryName: entryPoint.name,

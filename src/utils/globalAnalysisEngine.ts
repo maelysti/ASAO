@@ -16,7 +16,8 @@ export function convertRoundResultsToExtractedRecords(
       const homeName = m.homeTeam?.name || m.name?.split(" vs ")[0] || "Home";
       const awayName = m.awayTeam?.name || m.name?.split(" vs ")[1] || "Away";
 
-      const matchId = m.id || competitionId * 100000 + (r.roundNumber || 1) * 100 + idx;
+      const realMatchId = m.id || (m as any).eventId || (m as any).matchId || (m as any).rawMatch?.id || (m as any).rawMatch?.eventId || (m as any).rawMatch?.matchId;
+      const matchId = realMatchId !== undefined && realMatchId !== null ? realMatchId : Date.now() + idx;
 
       const scoreStr = m.score || "0:0";
       const [h, a] = scoreStr.split(":").map((s) => parseInt(s, 10) || 0);

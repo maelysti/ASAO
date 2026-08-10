@@ -308,8 +308,42 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
       const homeName = m.homeTeam?.name || m.homeTeamName || (typeof m.homeTeam === "string" ? m.homeTeam : "") || m.name?.split(" vs ")[0]?.trim() || "Dom";
       const awayName = m.awayTeam?.name || m.awayTeamName || (typeof m.awayTeam === "string" ? m.awayTeam : "") || m.name?.split(" vs ")[1]?.trim() || "Ext";
 
-      const rawMatchId = m.id || m.eventId || m.matchId || m.rawMatch?.id;
-      const matchId = String(rawMatchId || `R${roundNum}_${homeName.toUpperCase().replace(/\s+/g, '')}_${awayName.toUpperCase().replace(/\s+/g, '')}`);
+      const extractRealMatchId = (matchObj: any): string | number | undefined => {
+        if (!matchObj) return undefined;
+        const direct = matchObj.id ?? matchObj.eventId ?? matchObj.matchId ?? matchObj.gameId ?? matchObj.code ?? matchObj.eventCode;
+        if (direct !== undefined && direct !== null && String(direct).trim() !== "" && String(direct) !== "0") {
+          return direct;
+        }
+        if (matchObj.rawMatch) {
+          const raw = extractRealMatchId(matchObj.rawMatch);
+          if (raw !== undefined) return raw;
+        }
+        if (matchObj.event) {
+          const ev = extractRealMatchId(matchObj.event);
+          if (ev !== undefined) return ev;
+        }
+        if (Array.isArray(matchObj.eventBetTypes) && matchObj.eventBetTypes.length > 0) {
+          for (const bt of matchObj.eventBetTypes) {
+            if (bt && bt.eventId) return bt.eventId;
+          }
+        }
+        return undefined;
+      };
+
+      const getNumericFallbackId = (rn: any, hName: string, aName: string): number => {
+        let hash = 0;
+        const str = `R${rn}_${hName}_${aName}`;
+        for (let i = 0; i < str.length; i++) {
+          hash = (hash << 5) - hash + str.charCodeAt(i);
+          hash |= 0;
+        }
+        return Math.abs(hash) + 100000;
+      };
+
+      const rawMatchId = extractRealMatchId(m);
+      const matchId = rawMatchId !== undefined && rawMatchId !== null && String(rawMatchId).trim() !== ""
+        ? (typeof rawMatchId === "number" ? rawMatchId : String(rawMatchId))
+        : getNumericFallbackId(roundNum, homeName, awayName);
 
       // Deduplication check: if match is already in BDD, count as avoided duplicate
       if (existingIds.has(matchId)) {
