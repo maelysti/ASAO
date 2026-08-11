@@ -885,14 +885,45 @@ export default function App() {
     ? cachedRoundData
     : cachedRoundData?.matches;
 
-  const rawMatchesForActiveRound =
-    activeRawRoundObj?.matches && activeRawRoundObj.matches.length > 0
-      ? activeRawRoundObj.matches
-      : cachedMatchesArray && cachedMatchesArray.length > 0
-      ? cachedMatchesArray
-      : matchedResultRound?.matches && matchedResultRound.matches.length > 0
-      ? matchedResultRound.matches
-      : [];
+  const rawMatchesForActiveRound = useMemo(() => {
+    // 1. Prefer cachedMatchesArray if available (from fetchInstantLeagueRound with playout & real IDs)
+    if (cachedMatchesArray && cachedMatchesArray.length > 0) {
+      if (activeRawRoundObj?.matches && activeRawRoundObj.matches.length > 0) {
+        return cachedMatchesArray.map((cMatch: any, idx: number) => {
+          const rawM = activeRawRoundObj.matches.find(
+            (rm: any) =>
+              (rm.id && String(rm.id) === String(cMatch.id)) ||
+              (rm.homeTeam?.name && cMatch.homeTeam?.name && rm.homeTeam.name === cMatch.homeTeam.name)
+          ) || activeRawRoundObj.matches[idx];
+          return {
+            ...(rawM || {}),
+            ...cMatch,
+            id: cMatch.id && cMatch.id !== 0 ? cMatch.id : (rawM?.id && rawM.id !== 0 ? rawM.id : cMatch.id),
+          };
+        });
+      }
+      return cachedMatchesArray;
+    }
+
+    // 2. Prefer matchedResultRound if it has non-zero real IDs
+    if (matchedResultRound?.matches && matchedResultRound.matches.length > 0) {
+      const resultHasRealIds = matchedResultRound.matches.some((m: any) => m.id && m.id !== 0);
+      if (resultHasRealIds) {
+        return matchedResultRound.matches;
+      }
+    }
+
+    // 3. Fallback to activeRawRoundObj.matches
+    if (activeRawRoundObj?.matches && activeRawRoundObj.matches.length > 0) {
+      return activeRawRoundObj.matches;
+    }
+
+    if (matchedResultRound?.matches && matchedResultRound.matches.length > 0) {
+      return matchedResultRound.matches;
+    }
+
+    return [];
+  }, [cachedMatchesArray, activeRawRoundObj, matchedResultRound]);
 
   const roundStartTime =
     activeRawRoundObj?.expectedStart ||

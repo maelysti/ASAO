@@ -235,7 +235,8 @@ export async function fetchInstantLeagueResults(
   entryPointId: number,
   skip = 0,
   take = 10,
-  token?: string
+  token?: string,
+  providedEventCategoryId?: number
 ): Promise<{ data: InstantLeagueRoundResult[] | null; hasMore?: boolean; status: number; error?: string }> {
   const activeToken = token || getStoredToken();
   const url = `https://hg-event-api-prod.sporty-tech.net/api/instantleagues/${entryPointId}/results?skip=${skip}&take=${take}`;
@@ -256,8 +257,73 @@ export async function fetchInstantLeagueResults(
     }
 
     const raw = await res.json();
+    const rounds: InstantLeagueRoundResult[] = raw.rounds || [];
+
+    if (rounds.length > 0) {
+      // Resolve season eventCategoryId (e.g. 160332) if not explicitly provided
+      let seasonCatId = providedEventCategoryId;
+      if (!seasonCatId || seasonCatId === entryPointId) {
+        const detailsRes = await fetchCategoryDetails(entryPointId, activeToken);
+        seasonCatId = detailsRes.data?.subCategories?.[0]?.id || entryPointId;
+      }
+
+      // Enrich result rounds with playout data (real IDs, goals, scores) in parallel
+      await Promise.all(
+        rounds.map(async (r) => {
+          try {
+            const rCatId = r.seasonId ? Number(r.seasonId) : (seasonCatId || entryPointId);
+            const playoutRes = await fetchInstantLeaguePlayout(
+              r.roundNumber,
+              rCatId,
+              entryPointId,
+              activeToken
+            );
+            const playouts = playoutRes.data || [];
+
+            if (r.matches && Array.isArray(r.matches)) {
+              r.matches = r.matches.map((m: any, idx: number) => {
+                const playoutItem = playouts[idx] || playouts.find((p: any) => p.id === m.id);
+                const realId = m.id && m.id !== 0 ? m.id : playoutItem?.id;
+
+                let goals = m.goals || playoutItem?.goals || [];
+                let score = m.score;
+                let halfTimeScore = m.halfTimeScore;
+
+                if (playoutItem && playoutItem.goals && Array.isArray(playoutItem.goals) && playoutItem.goals.length > 0) {
+                  goals = playoutItem.goals;
+                  const lastG = goals[goals.length - 1];
+                  score = `${Math.round(lastG.homeScore ?? 0)}:${Math.round(lastG.awayScore ?? 0)}`;
+
+                  const htGoals = goals.filter((g: any) => (g.minute ?? 0) <= 45);
+                  if (htGoals.length > 0) {
+                    const lastHt = htGoals[htGoals.length - 1];
+                    halfTimeScore = `${Math.round(lastHt.homeScore ?? 0)}:${Math.round(lastHt.awayScore ?? 0)}`;
+                  } else {
+                    halfTimeScore = "0:0";
+                  }
+                }
+
+                return {
+                  ...m,
+                  id: realId || m.id,
+                  entryPointId,
+                  eventCategoryId: rCatId,
+                  seasonNumber: r.seasonNumber || r.seasonId || 1,
+                  goals,
+                  score: score || m.score,
+                  halfTimeScore: halfTimeScore || m.halfTimeScore,
+                };
+              });
+            }
+          } catch (e) {
+            // Ignore single playout error gracefully
+          }
+        })
+      );
+    }
+
     return {
-      data: raw.rounds || [],
+      data: rounds,
       hasMore: raw.hasMore ?? false,
       status: 200,
     };
