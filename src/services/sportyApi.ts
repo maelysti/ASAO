@@ -260,30 +260,66 @@ export async function fetchInstantLeagueResults(
     const rounds: InstantLeagueRoundResult[] = raw.rounds || [];
 
     if (rounds.length > 0) {
-      // Resolve season eventCategoryId (e.g. 160332) if not explicitly provided
-      let seasonCatId = providedEventCategoryId;
-      if (!seasonCatId || seasonCatId === entryPointId) {
-        const detailsRes = await fetchCategoryDetails(entryPointId, activeToken);
-        seasonCatId = detailsRes.data?.subCategories?.[0]?.id || entryPointId;
+      // Resolve season eventCategoryIds (e.g. [160332, 160341])
+      const seasonCatIds: number[] = [];
+      if (providedEventCategoryId && providedEventCategoryId !== entryPointId) {
+        seasonCatIds.push(providedEventCategoryId);
       }
+      const detailsRes = await fetchCategoryDetails(entryPointId, activeToken);
+      if (detailsRes.data?.subCategories && Array.isArray(detailsRes.data.subCategories)) {
+        detailsRes.data.subCategories.forEach((sc: any) => {
+          if (sc.id && !seasonCatIds.includes(sc.id)) seasonCatIds.push(sc.id);
+        });
+      }
+      if (seasonCatIds.length === 0) seasonCatIds.push(entryPointId);
+
+      const primaryCatId = seasonCatIds[0] || entryPointId;
 
       // Enrich result rounds with playout data (real IDs, goals, scores) in parallel
       await Promise.all(
         rounds.map(async (r) => {
           try {
-            const rCatId = r.seasonId ? Number(r.seasonId) : (seasonCatId || entryPointId);
-            const playoutRes = await fetchInstantLeaguePlayout(
+            let rCatId = r.seasonId ? Number(r.seasonId) : primaryCatId;
+            let playoutRes = await fetchInstantLeaguePlayout(
               r.roundNumber,
               rCatId,
               entryPointId,
               activeToken
             );
-            const playouts = playoutRes.data || [];
+            let playouts = playoutRes.data || [];
+
+            // Fallback to alternate subCategory if first attempt returned empty
+            if (playouts.length === 0 && seasonCatIds.length > 1) {
+              for (const altCatId of seasonCatIds) {
+                if (altCatId === rCatId) continue;
+                const altRes = await fetchInstantLeaguePlayout(
+                  r.roundNumber,
+                  altCatId,
+                  entryPointId,
+                  activeToken
+                );
+                if (altRes.data && altRes.data.length > 0) {
+                  rCatId = altCatId;
+                  playouts = altRes.data;
+                  break;
+                }
+              }
+            }
 
             if (r.matches && Array.isArray(r.matches)) {
               r.matches = r.matches.map((m: any, idx: number) => {
-                const playoutItem = playouts[idx] || playouts.find((p: any) => p.id === m.id);
-                const realId = m.id && m.id !== 0 ? m.id : playoutItem?.id;
+                const norm = (s: string) => (s || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+                const hName = norm(m.homeTeam?.name || m.name?.split(" vs ")[0] || "");
+                const aName = norm(m.awayTeam?.name || m.name?.split(" vs ")[1] || "");
+
+                let playoutItem = playouts.find((p: any) => {
+                  if (m.id && m.id !== 0 && p.id === m.id) return true;
+                  const pH = norm(p.homeTeam?.name || p.name?.split(" vs ")[0] || "");
+                  const pA = norm(p.awayTeam?.name || p.name?.split(" vs ")[1] || "");
+                  return pH && pA && pH === hName && pA === aName;
+                }) || playouts[idx];
+
+                const realId = (m.id && m.id !== 0) ? m.id : (playoutItem?.id && playoutItem.id !== 0 ? playoutItem.id : undefined);
 
                 let goals = m.goals || playoutItem?.goals || [];
                 let score = m.score;

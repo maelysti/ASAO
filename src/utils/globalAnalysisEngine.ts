@@ -3,6 +3,171 @@ import { CombinedMatchData, InstantLeagueRoundResult } from "../services/sportyA
 import { enrichRecordsWithRoundRanks } from "./standingsEngine";
 
 /**
+ * Extracts real Bet261 match ID from various structures, avoiding 0 or missing values
+ */
+export function getRealMatchId(m: any): number | string | undefined {
+  if (!m) return undefined;
+
+  const candidates = [
+    m.id,
+    m.eventId,
+    m.matchId,
+    m.gameId,
+    m.code,
+    m.eventCode,
+    m.rawMatch?.id,
+    m.rawMatch?.eventId,
+    m.rawMatch?.matchId,
+    m.event?.id,
+    m.event?.eventId,
+  ];
+
+  for (const c of candidates) {
+    if (c !== undefined && c !== null && String(c).trim() !== "" && String(c) !== "0") {
+      const num = Number(c);
+      if (!isNaN(num) && num > 0) return num;
+      return String(c);
+    }
+  }
+
+  const betTypes = m.eventBetTypes || m.odds || m.markets || m.rawMatch?.eventBetTypes || [];
+  if (Array.isArray(betTypes) && betTypes.length > 0) {
+    for (const bt of betTypes) {
+      if (bt && bt.eventId && String(bt.eventId) !== "0") {
+        const num = Number(bt.eventId);
+        if (!isNaN(num) && num > 0) return num;
+      }
+    }
+  }
+
+  return undefined;
+}
+
+/**
+ * Checks whether a given match ID is a temporary fallback or timestamp ID
+ */
+export function isTemporaryId(id: number | string | undefined | null): boolean {
+  if (id === undefined || id === null || id === 0 || id === "0" || id === "") return true;
+  const num = Number(id);
+  if (isNaN(num)) return false;
+  if (num > 1000000000000) return true; // Date.now() timestamp
+  if (num >= 100000 && num <= 999999) return true; // Fallback hash ID
+  return false;
+}
+
+/**
+ * Generates a consistent numeric fallback ID if no real ID is present
+ */
+export function getNumericFallbackId(rn: any, hName: string, aName: string): number {
+  let hash = 0;
+  const str = `R${rn}_${hName}_${aName}`;
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash << 5) - hash + str.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash) + 100000;
+}
+
+/**
+ * Intelligently merges incoming records into existing database, automatically purging temporary IDs when real Bet261 IDs arrive
+ */
+export function mergeExtractedRecords(
+  existingList: ExtractedMatchRecord[],
+  incomingList: ExtractedMatchRecord[]
+): { merged: ExtractedMatchRecord[]; convertedCount: number } {
+  let convertedCount = 0;
+
+  const normalize = (str: string) =>
+    (str || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+
+  const makeMatchKey = (r: Partial<ExtractedMatchRecord>) => {
+    const comp = r.competitionId || r.eventCategoryId || 0;
+    const s = r.seasonNumber || 1;
+    const round = r.roundNumber || 1;
+    const h = normalize(r.homeTeamName || "");
+    const a = normalize(r.awayTeamName || "");
+    return `${comp}_S${s}_R${round}_${h}_${a}`;
+  };
+
+  const recordsMap = new Map<string, ExtractedMatchRecord>();
+  const keyToIdMap = new Map<string, string | number>();
+
+  // 1. Populate existing
+  existingList.forEach((rec) => {
+    const idKey = String(rec.id);
+    const matchKey = makeMatchKey(rec);
+    recordsMap.set(idKey, rec);
+    keyToIdMap.set(matchKey, rec.id);
+  });
+
+  // 2. Merge incoming
+  incomingList.forEach((inc) => {
+    const matchKey = makeMatchKey(inc);
+    const existingId = keyToIdMap.get(matchKey);
+
+    if (existingId !== undefined) {
+      const existingRec = recordsMap.get(String(existingId));
+
+      const existingIsTemp = isTemporaryId(existingRec?.id);
+      const incomingIsTemp = isTemporaryId(inc.id);
+
+      if (existingIsTemp && !incomingIsTemp) {
+        // Upgrade temporary ID to real Bet261 ID!
+        recordsMap.delete(String(existingId));
+        convertedCount++;
+
+        const mergedRec: ExtractedMatchRecord = {
+          ...(existingRec || {}),
+          ...inc,
+          id: inc.id, // Real Bet261 ID
+          score: inc.score || existingRec?.score,
+          halfTimeScore: inc.halfTimeScore || existingRec?.halfTimeScore,
+          goalsCount: inc.goalsCount ?? existingRec?.goalsCount,
+          goalMinutes: inc.goalMinutes || existingRec?.goalMinutes,
+          goalsDetail: (inc.goalsDetail && inc.goalsDetail.length > 0) ? inc.goalsDetail : existingRec?.goalsDetail,
+          homeOdds: inc.homeOdds || existingRec?.homeOdds,
+          drawOdds: inc.drawOdds || existingRec?.drawOdds,
+          awayOdds: inc.awayOdds || existingRec?.awayOdds,
+          doubleChanceOdds: inc.doubleChanceOdds || existingRec?.doubleChanceOdds,
+          overUnderOdds: inc.overUnderOdds || existingRec?.overUnderOdds,
+          bothTeamsScoreOdds: inc.bothTeamsScoreOdds || existingRec?.bothTeamsScoreOdds,
+        };
+
+        recordsMap.set(String(inc.id), mergedRec);
+        keyToIdMap.set(matchKey, inc.id);
+      } else {
+        // Merge into existing ID slot
+        const targetId = existingIsTemp ? existingId : inc.id;
+        const targetRec = recordsMap.get(String(targetId)) || existingRec || inc;
+
+        const updated: ExtractedMatchRecord = {
+          ...targetRec,
+          ...inc,
+          id: targetRec.id,
+          score: inc.score || targetRec.score,
+          halfTimeScore: inc.halfTimeScore || targetRec.halfTimeScore,
+          goalsCount: inc.goalsCount ?? targetRec.goalsCount,
+          goalMinutes: inc.goalMinutes || targetRec.goalMinutes,
+          goalsDetail: (inc.goalsDetail && inc.goalsDetail.length > 0) ? inc.goalsDetail : targetRec.goalsDetail,
+        };
+
+        recordsMap.set(String(targetRec.id), updated);
+      }
+    } else {
+      // New record
+      recordsMap.set(String(inc.id), inc);
+      keyToIdMap.set(matchKey, inc.id);
+    }
+  });
+
+  const merged = Array.from(recordsMap.values());
+  return {
+    merged: enrichRecordsWithRoundRanks(merged),
+    convertedCount,
+  };
+}
+
+/**
  * Converts raw fetched Instant League round results into standardized ExtractedMatchRecords for database persistence
  */
 export function convertRoundResultsToExtractedRecords(
@@ -16,8 +181,9 @@ export function convertRoundResultsToExtractedRecords(
       const homeName = m.homeTeam?.name || m.name?.split(" vs ")[0] || "Home";
       const awayName = m.awayTeam?.name || m.name?.split(" vs ")[1] || "Away";
 
-      const realMatchId = m.id || (m as any).eventId || (m as any).matchId || (m as any).rawMatch?.id || (m as any).rawMatch?.eventId || (m as any).rawMatch?.matchId;
-      const matchId = realMatchId !== undefined && realMatchId !== null ? realMatchId : Date.now() + idx;
+      const rNum = r.roundNumber || (m as any).roundNumber || (m as any).round || 1;
+      const realMatchId = getRealMatchId(m);
+      const matchId = realMatchId !== undefined ? realMatchId : getNumericFallbackId(rNum, homeName, awayName);
 
       const scoreStr = m.score || "0:0";
       const [h, a] = scoreStr.split(":").map((s) => parseInt(s, 10) || 0);
@@ -32,7 +198,6 @@ export function convertRoundResultsToExtractedRecords(
         (m as any).seasonId ||
         (m as any).season ||
         1;
-      const sId = (r as any).seasonId || (m as any).seasonId || sNum;
       const sName =
         (r as any).seasonName ||
         (m as any).seasonName ||
@@ -59,7 +224,7 @@ export function convertRoundResultsToExtractedRecords(
         competitionId: competitionId,
         eventCategoryId: eventCatId,
         competitionName: categoryName,
-        roundNumber: r.roundNumber || 0,
+        roundNumber: rNum,
         seasonNumber: sNum,
         seasonName: sName,
         seasonId: (r as any).seasonId || sNum,

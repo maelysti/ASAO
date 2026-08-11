@@ -42,6 +42,7 @@ import {
   AIDatabaseRuleInsight,
   RuleItem,
 } from "../types";
+import { getRealMatchId, isTemporaryId, getNumericFallbackId } from "../utils/globalAnalysisEngine";
 
 interface ExtractionViewProps {
   entryPoints: SportyEntryPoint[];
@@ -319,9 +320,9 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
       const awayName = m.awayTeam?.name || m.awayTeamName || (typeof m.awayTeam === "string" ? m.awayTeam : "") || m.name?.split(" vs ")[1]?.trim() || "Ext";
 
       // 1. Match ID: direct ID from current match object or fallback
-      const directId = m.id ?? m.eventId ?? m.matchId ?? m.rawMatch?.id ?? m.rawMatch?.eventId;
-      const matchId = (directId !== undefined && directId !== null && String(directId).trim() !== "" && String(directId) !== "0")
-        ? (typeof directId === "number" ? directId : String(directId))
+      const realId = getRealMatchId(m);
+      const matchId = realId !== undefined
+        ? realId
         : getNumericFallbackId(roundNum, homeName, awayName);
 
       // Deduplication check
@@ -1829,7 +1830,19 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
                 <tbody className="divide-y divide-slate-800/60 font-semibold text-slate-200">
                   {filteredDatabase.map((m, i) => (
                     <tr key={i} className="hover:bg-slate-800/40 transition-colors">
-                      <td className="p-3 font-mono text-slate-500 text-[10px]">#{m.id}</td>
+                      <td className="p-3 font-mono text-[11px]">
+                        {isTemporaryId(m.id) ? (
+                          <span className="px-2 py-0.5 rounded bg-amber-500/15 border border-amber-500/40 text-amber-300 font-extrabold text-[10px] inline-flex items-center gap-1" title="ID temporaire : sera converti automatiquement en ID réel Bet261 dès réception des résultats">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                            Temp #{m.id}
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 font-extrabold text-[10px] inline-flex items-center gap-1" title="ID Réel Officiel Bet261">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                            #{m.id}
+                          </span>
+                        )}
+                      </td>
                       <td className="p-3 font-mono text-cyan-400 font-extrabold text-[11px]">
                         <span className="px-2 py-0.5 rounded bg-cyan-500/10 border border-cyan-500/30">
                           {m.eventCategoryId || (m as any).rawMatch?.eventCategoryId || activeEventCategoryId || "N/A"}

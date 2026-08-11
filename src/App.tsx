@@ -42,7 +42,7 @@ import { PasswordGateModal } from "./components/PasswordGateModal";
 
 import { RuleItem, AIRecapPrediction, ExtractedMatchRecord } from "./types";
 import { DEFAULT_RULES, processAllRules, runAIModeAnalysis } from "./utils/ruleEngine";
-import { getH2HAnalysisForMatch } from "./utils/globalAnalysisEngine";
+import { getH2HAnalysisForMatch, getRealMatchId, isTemporaryId, getNumericFallbackId, mergeExtractedRecords, convertRoundResultsToExtractedRecords } from "./utils/globalAnalysisEngine";
 
 import { AlertTriangle, Key, RefreshCw, Trophy, Layers, Activity, Database, Download, ListOrdered, Sliders, Zap, BarChart3, PanelLeftClose, PanelLeftOpen, ChevronLeft, ChevronRight, Wrench, Clock, Flame, Lock, Eye, BellRing, X } from "lucide-react";
 
@@ -186,6 +186,19 @@ export default function App() {
             ...prev,
             [ep.id]: roundsList,
           }));
+
+          // Automatically upgrade temporary IDs in extracted database with real Bet261 IDs
+          const newRecords = convertRoundResultsToExtractedRecords(
+            roundsList,
+            ep.id,
+            ep.name
+          );
+          if (newRecords.length > 0) {
+            setExtractedDatabase((prevDb) => {
+              const { merged } = mergeExtractedRecords(prevDb, newRecords);
+              return merged;
+            });
+          }
         }
       });
     });
@@ -244,32 +257,7 @@ export default function App() {
 
   // Extract real match ID from any deep or shallow structure (prioritizes real Bet261 event IDs)
   const extractRealMatchId = (m: any): string | number | undefined => {
-    if (!m) return undefined;
-    // 1. Check root level fields FIRST (e.g. m.id, m.eventId, m.matchId)
-    const rootId = m.id ?? m.eventId ?? m.matchId ?? m.gameId ?? m.code ?? m.eventCode ?? m.eventIdStr;
-    if (rootId !== undefined && rootId !== null && String(rootId).trim() !== "" && String(rootId) !== "0") {
-      return rootId;
-    }
-    // 2. Check rawMatch or event sub-objects
-    if (m.rawMatch) {
-      const raw = extractRealMatchId(m.rawMatch);
-      if (raw !== undefined && raw !== null && String(raw).trim() !== "" && String(raw) !== "0") {
-        return raw;
-      }
-    }
-    if (m.event) {
-      const ev = extractRealMatchId(m.event);
-      if (ev !== undefined && ev !== null && String(ev).trim() !== "" && String(ev) !== "0") {
-        return ev;
-      }
-    }
-    // 3. Bet types array
-    if (Array.isArray(m.eventBetTypes) && m.eventBetTypes.length > 0) {
-      for (const bt of m.eventBetTypes) {
-        if (bt && bt.eventId) return bt.eventId;
-      }
-    }
-    return undefined;
+    return getRealMatchId(m);
   };
 
   // Helper to extract season eventCategoryId (e.g. 160116) from any round/match payload
@@ -601,13 +589,8 @@ export default function App() {
 
   const handleAddExtractedRecords = useCallback((newRecords: ExtractedMatchRecord[]) => {
     setExtractedDatabase((prev) => {
-      const map = new Map<number | string, ExtractedMatchRecord>();
-      // Preserve existing
-      prev.forEach((rec) => map.set(rec.id, rec));
-      // Update/insert new
-      newRecords.forEach((rec) => map.set(rec.id, rec));
-      const combined = Array.from(map.values());
-      return enrichRecordsWithRoundRanks(combined);
+      const { merged } = mergeExtractedRecords(prev, newRecords);
+      return merged;
     });
   }, []);
 
