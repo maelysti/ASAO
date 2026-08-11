@@ -42,7 +42,7 @@ import {
   AIDatabaseRuleInsight,
   RuleItem,
 } from "../types";
-import { getRealMatchId, isTemporaryId, getNumericFallbackId } from "../utils/globalAnalysisEngine";
+import { getRealMatchId, isTemporaryId, getNumericFallbackId, extractAllOddsFromMatch } from "../utils/globalAnalysisEngine";
 
 interface ExtractionViewProps {
   entryPoints: SportyEntryPoint[];
@@ -346,90 +346,16 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
       const halfTimeScore = scoreDetails.htStr !== "-" ? scoreDetails.htStr : (m.halfTimeScore || "0 - 0");
 
       // 3. Extract Odds directly from current match payload
-      let hOdds = 0, dOdds = 0, aOdds = 0;
-      let dc1X = 0, dc12 = 0, dcX2 = 0;
-      let over25 = 0, under25 = 0;
-      let gg = 0, ng = 0;
-
-      const betTypes = m.eventBetTypes || m.odds || m.markets || m.rawMatch?.eventBetTypes || m.rawMatch?.odds || [];
-
-      if (Array.isArray(betTypes)) {
-        betTypes.forEach((b: any) => {
-          const name = (b.name || b.title || "").toUpperCase();
-          const bId = Number(b.betTypeId || b.id || 0);
-          const items = b.eventBetTypeItems || b.odds || b.items || [];
-
-          if (
-            bId === 30083 || bId === 1 || bId === 30001 ||
-            name.includes("1X2") || name.includes("WINNER") || name.includes("RESULT")
-          ) {
-            items.forEach((it: any) => {
-              const sName = (it.shortName || it.name || it.title || "").trim().toUpperCase();
-              const val = Number(it.odds || it.price || it.value || 0);
-              if (sName === "1" || sName === "HOME") hOdds = val;
-              else if (sName === "X" || sName === "DRAW") dOdds = val;
-              else if (sName === "2" || sName === "AWAY") aOdds = val;
-            });
-          } else if (
-            bId === 30084 || bId === 30002 ||
-            name.includes("DOUBLE") || name.includes("CHANCE") || name === "DC"
-          ) {
-            items.forEach((it: any) => {
-              const sName = (it.shortName || it.name || it.title || "").trim().toUpperCase();
-              const val = Number(it.odds || it.price || it.value || 0);
-              if (sName === "1X") dc1X = val;
-              else if (sName === "12") dc12 = val;
-              else if (sName === "X2") dcX2 = val;
-            });
-          } else if (
-            bId === 30085 || bId === 30003 ||
-            name.includes("OVER") || name.includes("UNDER") || name.includes("PLUS") || name.includes("MOINS") || name.includes("2.5") || name.includes("TOTAL")
-          ) {
-            items.forEach((it: any) => {
-              const sName = (it.shortName || it.name || it.title || "").trim().toLowerCase();
-              const val = Number(it.odds || it.price || it.value || 0);
-              if (sName.includes("over") || sName.includes("plus")) over25 = val;
-              else if (sName.includes("under") || sName.includes("moins")) under25 = val;
-            });
-          } else if (
-            bId === 30086 || bId === 30004 ||
-            name.includes("BOTH") || name.includes("GOAL") || name.includes("GG") || name.includes("LES DEUX")
-          ) {
-            items.forEach((it: any) => {
-              const sName = (it.shortName || it.name || it.title || "").trim().toLowerCase();
-              const val = Number(it.odds || it.price || it.value || 0);
-              if (sName.includes("yes") || sName.includes("oui") || sName.includes("gg")) gg = val;
-              else if (sName.includes("no") || sName.includes("non") || sName.includes("ng")) ng = val;
-            });
-          }
-        });
-      }
-
-      if (!hOdds && (m.homeOdds || m.drawOdds || m.awayOdds)) {
-        hOdds = Number(m.homeOdds) || 0;
-        dOdds = Number(m.drawOdds) || 0;
-        aOdds = Number(m.awayOdds) || 0;
-      }
-      if ((!dc1X || !dcX2) && m.doubleChanceOdds) {
-        dc1X = dc1X || Number(m.doubleChanceOdds.dc1X || m.doubleChanceOdds["1X"]) || 0;
-        dc12 = dc12 || Number(m.doubleChanceOdds.dc12 || m.doubleChanceOdds["12"]) || 0;
-        dcX2 = dcX2 || Number(m.doubleChanceOdds.dcX2 || m.doubleChanceOdds["X2"]) || 0;
-      }
-      if ((!over25 || !under25) && m.overUnderOdds) {
-        over25 = over25 || Number(m.overUnderOdds.over25 || m.overUnderOdds.over) || 0;
-        under25 = under25 || Number(m.overUnderOdds.under25 || m.overUnderOdds.under) || 0;
-      }
-      if ((!gg || !ng) && m.bothTeamsScoreOdds) {
-        gg = gg || Number(m.bothTeamsScoreOdds.yes || m.bothTeamsScoreOdds.gg) || 0;
-        ng = ng || Number(m.bothTeamsScoreOdds.no || m.bothTeamsScoreOdds.ng) || 0;
-      }
-
-      const summaryParts: string[] = [];
-      if (hOdds > 0 || dOdds > 0 || aOdds > 0) summaryParts.push(`1X2: ${hOdds.toFixed(2)}/${dOdds.toFixed(2)}/${aOdds.toFixed(2)}`);
-      if (dc1X > 0 || dc12 > 0 || dcX2 > 0) summaryParts.push(`DC: ${dc1X.toFixed(2)}/${dc12.toFixed(2)}/${dcX2.toFixed(2)}`);
-      if (over25 > 0 || under25 > 0) summaryParts.push(`O2.5: ${over25.toFixed(2)} | U2.5: ${under25.toFixed(2)}`);
-      if (gg > 0 || ng > 0) summaryParts.push(`GG: ${gg.toFixed(2)} | NG: ${ng.toFixed(2)}`);
-      const summaryStr = summaryParts.length > 0 ? summaryParts.join(" | ") : "Cotes non disponibles";
+      const extractedOdds = extractAllOddsFromMatch(m);
+      const {
+        homeOdds: hOdds,
+        drawOdds: dOdds,
+        awayOdds: aOdds,
+        doubleChanceOdds,
+        overUnderOdds,
+        bothTeamsScoreOdds,
+        allOddsSummary: summaryStr,
+      } = extractedOdds;
 
       // 4. Goals & Goal Minutes from current match data
       let goalMinsStr = "";
@@ -536,9 +462,9 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
         homeOdds: hOdds,
         drawOdds: dOdds,
         awayOdds: aOdds,
-        doubleChanceOdds: { dc1X, dc12, dcX2 },
-        overUnderOdds: { over25, under25 },
-        bothTeamsScoreOdds: { yes: gg, no: ng },
+        doubleChanceOdds,
+        overUnderOdds,
+        bothTeamsScoreOdds,
         allOddsSummary: summaryStr,
         headToHeadHistory: [],
         extractedAt: timestamp,

@@ -340,6 +340,7 @@ export async function fetchInstantLeagueResults(
                 }
 
                 return {
+                  ...playoutItem,
                   ...m,
                   id: realId || m.id,
                   entryPointId,
@@ -348,6 +349,13 @@ export async function fetchInstantLeagueResults(
                   goals,
                   score: score || m.score,
                   halfTimeScore: halfTimeScore || m.halfTimeScore,
+                  eventBetTypes: m.eventBetTypes || m.odds || playoutItem?.eventBetTypes || playoutItem?.odds || playoutItem?.markets || [],
+                  homeOdds: m.homeOdds || playoutItem?.homeOdds,
+                  drawOdds: m.drawOdds || playoutItem?.drawOdds,
+                  awayOdds: m.awayOdds || playoutItem?.awayOdds,
+                  doubleChanceOdds: m.doubleChanceOdds || playoutItem?.doubleChanceOdds,
+                  overUnderOdds: m.overUnderOdds || playoutItem?.overUnderOdds,
+                  bothTeamsScoreOdds: m.bothTeamsScoreOdds || playoutItem?.bothTeamsScoreOdds,
                 };
               });
             }

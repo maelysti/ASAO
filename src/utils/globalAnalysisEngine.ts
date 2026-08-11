@@ -69,6 +69,174 @@ export function getNumericFallbackId(rn: any, hName: string, aName: string): num
 }
 
 /**
+ * Universal helper to extract all odds (1X2, DC, Over/Under, BTTS/GG) from any match structure without inventing or losing data
+ */
+export function extractAllOddsFromMatch(m: any) {
+  let homeOdds = 0;
+  let drawOdds = 0;
+  let awayOdds = 0;
+  let dc1X = 0, dc12 = 0, dcX2 = 0;
+  let over25 = 0, under25 = 0;
+  let gg = 0, ng = 0;
+
+  if (!m) {
+    return {
+      homeOdds: 0,
+      drawOdds: 0,
+      awayOdds: 0,
+      doubleChanceOdds: { dc1X: 0, dc12: 0, dcX2: 0 },
+      overUnderOdds: { over25: 0, under25: 0 },
+      bothTeamsScoreOdds: { yes: 0, no: 0 },
+      allOddsSummary: "Cotes non disponibles",
+    };
+  }
+
+  // 1. Direct fields check
+  if (m.homeOdds || m.drawOdds || m.awayOdds) {
+    homeOdds = Number(m.homeOdds) || 0;
+    drawOdds = Number(m.drawOdds) || 0;
+    awayOdds = Number(m.awayOdds) || 0;
+  }
+  if (!homeOdds && m.rawMatch) {
+    homeOdds = Number(m.rawMatch.homeOdds) || 0;
+    drawOdds = Number(m.rawMatch.drawOdds) || 0;
+    awayOdds = Number(m.rawMatch.awayOdds) || 0;
+  }
+
+  if (m.doubleChanceOdds) {
+    dc1X = Number(m.doubleChanceOdds.dc1X || m.doubleChanceOdds["1X"] || m.doubleChanceOdds.homeDraw) || 0;
+    dc12 = Number(m.doubleChanceOdds.dc12 || m.doubleChanceOdds["12"] || m.doubleChanceOdds.homeAway) || 0;
+    dcX2 = Number(m.doubleChanceOdds.dcX2 || m.doubleChanceOdds["X2"] || m.doubleChanceOdds.drawAway) || 0;
+  }
+  if ((!dc1X || !dcX2) && m.rawMatch?.doubleChanceOdds) {
+    dc1X = dc1X || Number(m.rawMatch.doubleChanceOdds.dc1X || m.rawMatch.doubleChanceOdds["1X"]) || 0;
+    dc12 = dc12 || Number(m.rawMatch.doubleChanceOdds.dc12 || m.rawMatch.doubleChanceOdds["12"]) || 0;
+    dcX2 = dcX2 || Number(m.rawMatch.doubleChanceOdds.dcX2 || m.rawMatch.doubleChanceOdds["X2"]) || 0;
+  }
+
+  if (m.overUnderOdds) {
+    over25 = Number(m.overUnderOdds.over25 || m.overUnderOdds.over || m.overUnderOdds.over2_5) || 0;
+    under25 = Number(m.overUnderOdds.under25 || m.overUnderOdds.under || m.overUnderOdds.under2_5) || 0;
+  }
+  if ((!over25 || !under25) && m.rawMatch?.overUnderOdds) {
+    over25 = over25 || Number(m.rawMatch.overUnderOdds.over25 || m.rawMatch.overUnderOdds.over) || 0;
+    under25 = under25 || Number(m.rawMatch.overUnderOdds.under25 || m.rawMatch.overUnderOdds.under) || 0;
+  }
+
+  if (m.bothTeamsScoreOdds) {
+    gg = Number(m.bothTeamsScoreOdds.yes || m.bothTeamsScoreOdds.gg || m.bothTeamsScoreOdds.both) || 0;
+    ng = Number(m.bothTeamsScoreOdds.no || m.bothTeamsScoreOdds.ng || m.bothTeamsScoreOdds.neither) || 0;
+  }
+  if ((!gg || !ng) && m.rawMatch?.bothTeamsScoreOdds) {
+    gg = gg || Number(m.rawMatch.bothTeamsScoreOdds.yes || m.rawMatch.bothTeamsScoreOdds.gg) || 0;
+    ng = ng || Number(m.rawMatch.bothTeamsScoreOdds.no || m.rawMatch.bothTeamsScoreOdds.ng) || 0;
+  }
+
+  // 2. Deep betTypes / markets check
+  const betTypes =
+    m.eventBetTypes ||
+    m.odds ||
+    m.markets ||
+    m.rawMatch?.eventBetTypes ||
+    m.rawMatch?.odds ||
+    m.rawMatch?.markets ||
+    m.event?.eventBetTypes ||
+    [];
+
+  if (Array.isArray(betTypes) && betTypes.length > 0) {
+    betTypes.forEach((b: any) => {
+      if (!b) return;
+      const name = String(b.name || b.title || b.desc || "").toUpperCase();
+      const bId = Number(b.betTypeId || b.id || b.type || 0);
+      const items = b.eventBetTypeItems || b.odds || b.items || b.outcomes || [];
+
+      if (!Array.isArray(items)) return;
+
+      // 1X2 Market
+      if (
+        bId === 30083 || bId === 1 || bId === 30001 ||
+        name.includes("1X2") || name.includes("WINNER") || name.includes("RESULT") || name === "FULL TIME RESULT"
+      ) {
+        items.forEach((it: any) => {
+          const sName = String(it.shortName || it.name || it.title || "").trim().toUpperCase();
+          const val = Number(it.odds || it.price || it.value || 0);
+          if (val > 0) {
+            if (sName === "1" || sName === "HOME" || sName.includes("DOMICILE")) {
+              if (!homeOdds) homeOdds = val;
+            } else if (sName === "X" || sName === "DRAW" || sName.includes("NUL")) {
+              if (!drawOdds) drawOdds = val;
+            } else if (sName === "2" || sName === "AWAY" || sName.includes("EXTERIEUR")) {
+              if (!awayOdds) awayOdds = val;
+            }
+          }
+        });
+      }
+      // Double Chance
+      else if (
+        bId === 30084 || bId === 30002 ||
+        name.includes("DOUBLE") || name.includes("CHANCE") || name === "DC"
+      ) {
+        items.forEach((it: any) => {
+          const sName = String(it.shortName || it.name || it.title || "").trim().toUpperCase();
+          const val = Number(it.odds || it.price || it.value || 0);
+          if (val > 0) {
+            if (sName === "1X" && !dc1X) dc1X = val;
+            else if (sName === "12" && !dc12) dc12 = val;
+            else if (sName === "X2" && !dcX2) dcX2 = val;
+          }
+        });
+      }
+      // Over / Under 2.5
+      else if (
+        bId === 30085 || bId === 30003 ||
+        name.includes("OVER") || name.includes("UNDER") || name.includes("PLUS") || name.includes("MOINS") || name.includes("2.5") || name.includes("TOTAL")
+      ) {
+        items.forEach((it: any) => {
+          const sName = String(it.shortName || it.name || it.title || "").trim().toLowerCase();
+          const val = Number(it.odds || it.price || it.value || 0);
+          if (val > 0) {
+            if ((sName.includes("over") || sName.includes("plus") || sName.includes("> 2.5") || sName === "o 2.5") && !over25) over25 = val;
+            else if ((sName.includes("under") || sName.includes("moins") || sName.includes("< 2.5") || sName === "u 2.5") && !under25) under25 = val;
+          }
+        });
+      }
+      // Both Teams to Score (GG / NG)
+      else if (
+        bId === 30086 || bId === 30004 ||
+        name.includes("BOTH") || name.includes("GOAL") || name.includes("GG") || name.includes("LES DEUX") || name.includes("BTTS")
+      ) {
+        items.forEach((it: any) => {
+          const sName = String(it.shortName || it.name || it.title || "").trim().toLowerCase();
+          const val = Number(it.odds || it.price || it.value || 0);
+          if (val > 0) {
+            if ((sName.includes("yes") || sName.includes("oui") || sName === "gg" || sName.includes("both")) && !gg) gg = val;
+            else if ((sName.includes("no") || sName.includes("non") || sName === "ng" || sName.includes("one")) && !ng) ng = val;
+          }
+        });
+      }
+    });
+  }
+
+  // Summary string
+  const summaryParts: string[] = [];
+  if (homeOdds > 0 || drawOdds > 0 || awayOdds > 0) summaryParts.push(`1X2: ${homeOdds.toFixed(2)}/${drawOdds.toFixed(2)}/${awayOdds.toFixed(2)}`);
+  if (dc1X > 0 || dc12 > 0 || dcX2 > 0) summaryParts.push(`DC: ${dc1X.toFixed(2)}/${dc12.toFixed(2)}/${dcX2.toFixed(2)}`);
+  if (over25 > 0 || under25 > 0) summaryParts.push(`O2.5: ${over25.toFixed(2)} | U2.5: ${under25.toFixed(2)}`);
+  if (gg > 0 || ng > 0) summaryParts.push(`GG: ${gg.toFixed(2)} | NG: ${ng.toFixed(2)}`);
+  const allOddsSummary = summaryParts.length > 0 ? summaryParts.join(" | ") : (m.allOddsSummary || "Cotes non disponibles");
+
+  return {
+    homeOdds,
+    drawOdds,
+    awayOdds,
+    doubleChanceOdds: { dc1X, dc12, dcX2 },
+    overUnderOdds: { over25, under25 },
+    bothTeamsScoreOdds: { yes: gg, no: ng },
+    allOddsSummary,
+  };
+}
+
+/**
  * Intelligently merges incoming records into existing database, automatically purging temporary IDs when real Bet261 IDs arrive
  */
 export function mergeExtractedRecords(
@@ -100,6 +268,43 @@ export function mergeExtractedRecords(
     keyToIdMap.set(matchKey, rec.id);
   });
 
+  // Helper to merge odds from both
+  const combineOdds = (a: any, b: any) => {
+    const oddsA = extractAllOddsFromMatch(a);
+    const oddsB = extractAllOddsFromMatch(b);
+
+    const homeOdds = oddsB.homeOdds || oddsA.homeOdds || 0;
+    const drawOdds = oddsB.drawOdds || oddsA.drawOdds || 0;
+    const awayOdds = oddsB.awayOdds || oddsA.awayOdds || 0;
+
+    const dc1X = oddsB.doubleChanceOdds.dc1X || oddsA.doubleChanceOdds.dc1X || 0;
+    const dc12 = oddsB.doubleChanceOdds.dc12 || oddsA.doubleChanceOdds.dc12 || 0;
+    const dcX2 = oddsB.doubleChanceOdds.dcX2 || oddsA.doubleChanceOdds.dcX2 || 0;
+
+    const over25 = oddsB.overUnderOdds.over25 || oddsA.overUnderOdds.over25 || 0;
+    const under25 = oddsB.overUnderOdds.under25 || oddsA.overUnderOdds.under25 || 0;
+
+    const yes = oddsB.bothTeamsScoreOdds.yes || oddsA.bothTeamsScoreOdds.yes || 0;
+    const no = oddsB.bothTeamsScoreOdds.no || oddsA.bothTeamsScoreOdds.no || 0;
+
+    const parts: string[] = [];
+    if (homeOdds > 0 || drawOdds > 0 || awayOdds > 0) parts.push(`1X2: ${homeOdds.toFixed(2)}/${drawOdds.toFixed(2)}/${awayOdds.toFixed(2)}`);
+    if (dc1X > 0 || dc12 > 0 || dcX2 > 0) parts.push(`DC: ${dc1X.toFixed(2)}/${dc12.toFixed(2)}/${dcX2.toFixed(2)}`);
+    if (over25 > 0 || under25 > 0) parts.push(`O2.5: ${over25.toFixed(2)} | U2.5: ${under25.toFixed(2)}`);
+    if (yes > 0 || no > 0) parts.push(`GG: ${yes.toFixed(2)} | NG: ${no.toFixed(2)}`);
+    const allOddsSummary = parts.length > 0 ? parts.join(" | ") : (oddsB.allOddsSummary !== "Cotes non disponibles" ? oddsB.allOddsSummary : oddsA.allOddsSummary);
+
+    return {
+      homeOdds,
+      drawOdds,
+      awayOdds,
+      doubleChanceOdds: { dc1X, dc12, dcX2 },
+      overUnderOdds: { over25, under25 },
+      bothTeamsScoreOdds: { yes, no },
+      allOddsSummary,
+    };
+  };
+
   // 2. Merge incoming
   incomingList.forEach((inc) => {
     const matchKey = makeMatchKey(inc);
@@ -110,6 +315,8 @@ export function mergeExtractedRecords(
 
       const existingIsTemp = isTemporaryId(existingRec?.id);
       const incomingIsTemp = isTemporaryId(inc.id);
+
+      const mergedOdds = combineOdds(existingRec, inc);
 
       if (existingIsTemp && !incomingIsTemp) {
         // Upgrade temporary ID to real Bet261 ID!
@@ -125,12 +332,7 @@ export function mergeExtractedRecords(
           goalsCount: inc.goalsCount ?? existingRec?.goalsCount,
           goalMinutes: inc.goalMinutes || existingRec?.goalMinutes,
           goalsDetail: (inc.goalsDetail && inc.goalsDetail.length > 0) ? inc.goalsDetail : existingRec?.goalsDetail,
-          homeOdds: inc.homeOdds || existingRec?.homeOdds,
-          drawOdds: inc.drawOdds || existingRec?.drawOdds,
-          awayOdds: inc.awayOdds || existingRec?.awayOdds,
-          doubleChanceOdds: inc.doubleChanceOdds || existingRec?.doubleChanceOdds,
-          overUnderOdds: inc.overUnderOdds || existingRec?.overUnderOdds,
-          bothTeamsScoreOdds: inc.bothTeamsScoreOdds || existingRec?.bothTeamsScoreOdds,
+          ...mergedOdds,
         };
 
         recordsMap.set(String(inc.id), mergedRec);
@@ -149,13 +351,18 @@ export function mergeExtractedRecords(
           goalsCount: inc.goalsCount ?? targetRec.goalsCount,
           goalMinutes: inc.goalMinutes || targetRec.goalMinutes,
           goalsDetail: (inc.goalsDetail && inc.goalsDetail.length > 0) ? inc.goalsDetail : targetRec.goalsDetail,
+          ...mergedOdds,
         };
 
         recordsMap.set(String(targetRec.id), updated);
       }
     } else {
       // New record
-      recordsMap.set(String(inc.id), inc);
+      const incOdds = extractAllOddsFromMatch(inc);
+      recordsMap.set(String(inc.id), {
+        ...inc,
+        ...incOdds,
+      });
       keyToIdMap.set(matchKey, inc.id);
     }
   });
@@ -210,6 +417,8 @@ export function convertRoundResultsToExtractedRecords(
         (m as any).seasonId ||
         competitionId;
 
+      const odds = extractAllOddsFromMatch(m);
+
       records.push({
         id: matchId,
         matchName: `${homeName} vs ${awayName}`,
@@ -235,6 +444,13 @@ export function convertRoundResultsToExtractedRecords(
         goalsCount: h + a,
         goalMinutes: goalMins,
         goalsDetail: m.goals || [],
+        homeOdds: odds.homeOdds,
+        drawOdds: odds.drawOdds,
+        awayOdds: odds.awayOdds,
+        doubleChanceOdds: odds.doubleChanceOdds,
+        overUnderOdds: odds.overUnderOdds,
+        bothTeamsScoreOdds: odds.bothTeamsScoreOdds,
+        allOddsSummary: odds.allOddsSummary,
         extractedAt: new Date().toISOString(),
         source: "Automated Results Collector",
       });
