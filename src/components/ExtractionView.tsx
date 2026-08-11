@@ -310,18 +310,25 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
 
       const extractRealMatchId = (matchObj: any): string | number | undefined => {
         if (!matchObj) return undefined;
-        const direct = matchObj.id ?? matchObj.eventId ?? matchObj.matchId ?? matchObj.gameId ?? matchObj.code ?? matchObj.eventCode;
+        // 1. Direct root ID fields FIRST (e.g. matchObj.id or matchObj.eventId, as displayed on MatchCard)
+        const direct = matchObj.id ?? matchObj.eventId ?? matchObj.matchId ?? matchObj.gameId ?? matchObj.code ?? matchObj.eventCode ?? matchObj.eventIdStr;
         if (direct !== undefined && direct !== null && String(direct).trim() !== "" && String(direct) !== "0") {
           return direct;
         }
+        // 2. Check rawMatch or event sub-objects (un-mutated API payload)
         if (matchObj.rawMatch) {
           const raw = extractRealMatchId(matchObj.rawMatch);
-          if (raw !== undefined) return raw;
+          if (raw !== undefined && raw !== null && String(raw).trim() !== "" && String(raw) !== "0") {
+            return raw;
+          }
         }
         if (matchObj.event) {
           const ev = extractRealMatchId(matchObj.event);
-          if (ev !== undefined) return ev;
+          if (ev !== undefined && ev !== null && String(ev).trim() !== "" && String(ev) !== "0") {
+            return ev;
+          }
         }
+        // 3. Bet types array
         if (Array.isArray(matchObj.eventBetTypes) && matchObj.eventBetTypes.length > 0) {
           for (const bt of matchObj.eventBetTypes) {
             if (bt && bt.eventId) return bt.eventId;

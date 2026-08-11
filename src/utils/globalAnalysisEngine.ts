@@ -38,6 +38,13 @@ export function convertRoundResultsToExtractedRecords(
         (m as any).seasonName ||
         `Saison ${sNum}`;
 
+      const eventCatId =
+        (r as any).eventCategoryId ||
+        (r as any).seasonId ||
+        (m as any).eventCategoryId ||
+        (m as any).seasonId ||
+        competitionId;
+
       records.push({
         id: matchId,
         matchName: `${homeName} vs ${awayName}`,
@@ -50,6 +57,7 @@ export function convertRoundResultsToExtractedRecords(
         homePoints: m.homeTeam?.points || 0,
         awayPoints: m.awayTeam?.points || 0,
         competitionId: competitionId,
+        eventCategoryId: eventCatId,
         competitionName: categoryName,
         roundNumber: r.roundNumber || 0,
         seasonNumber: sNum,

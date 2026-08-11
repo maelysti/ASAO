@@ -9,6 +9,8 @@ interface DataInspectorProps {
   entryPoints: SportyEntryPoint[];
   events: SportyEvent[];
   bearerToken: string;
+  activeCategoryId?: number;
+  activeEventCategoryId?: number;
 }
 
 export const DataInspector: React.FC<DataInspectorProps> = ({
@@ -17,9 +19,11 @@ export const DataInspector: React.FC<DataInspectorProps> = ({
   entryPoints,
   events,
   bearerToken,
+  activeCategoryId = 8035,
+  activeEventCategoryId,
 }) => {
   const [activeTab, setActiveTab] = useState<
-    "entrypoints" | "events" | "curl_instant" | "curl_entrypoints"
+    "entrypoints" | "events" | "curl_instant" | "curl_round" | "curl_entrypoints"
   >("entrypoints");
   const [copied, setCopied] = useState(false);
 
@@ -44,7 +48,14 @@ export const DataInspector: React.FC<DataInspectorProps> = ({
     downloadAnchor.remove();
   };
 
-  const curlInstantLeagues = `curl "https://hg-event-api-prod.sporty-tech.net/api/instantleagues/8035/matches" \\
+  const curlInstantLeagues = `curl "https://hg-event-api-prod.sporty-tech.net/api/instantleagues/${activeCategoryId}/matches" \\
+  -H "Authorization: Bearer ${bearerToken}" \\
+  -H "Referer: https://bet261.mg/" \\
+  -H "Accept-Language: fr" \\
+  -H "App-Version: 34378" \\
+  -H "Accept: application/json, text/plain, */*"`;
+
+  const curlRoundEndpoint = `curl "https://hg-event-api-prod.sporty-tech.net/api/instantleagues/round/1?eventCategoryId=${activeEventCategoryId || activeCategoryId}&getNext=false" \\
   -H "Authorization: Bearer ${bearerToken}" \\
   -H "Referer: https://bet261.mg/" \\
   -H "Accept-Language: fr" \\
@@ -111,7 +122,17 @@ export const DataInspector: React.FC<DataInspectorProps> = ({
                   : "bg-slate-800 text-slate-400 hover:text-slate-200"
               }`}
             >
-              cURL InstantLeagues (8035)
+              cURL Matches ({activeCategoryId})
+            </button>
+            <button
+              onClick={() => setActiveTab("curl_round")}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                activeTab === "curl_round"
+                  ? "bg-cyan-600 text-white shadow-md shadow-cyan-600/30"
+                  : "bg-slate-800 text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              cURL Round ({activeEventCategoryId || activeCategoryId})
             </button>
             <button
               onClick={() => setActiveTab("curl_entrypoints")}
@@ -145,7 +166,7 @@ export const DataInspector: React.FC<DataInspectorProps> = ({
               <div className="flex items-center justify-between">
                 <span className="text-xs font-mono text-slate-400 flex items-center gap-1.5">
                   <Terminal className="w-4 h-4 text-emerald-400" />
-                  <span>cURL InstantLeagues Matches (8035 - English League)</span>
+                  <span>cURL InstantLeagues Matches (Entry Point #{activeCategoryId})</span>
                 </span>
                 <button
                   onClick={() => handleCopy(curlInstantLeagues)}
@@ -157,6 +178,25 @@ export const DataInspector: React.FC<DataInspectorProps> = ({
               </div>
               <pre className="p-4 bg-slate-950 border border-slate-800 rounded-xl text-xs font-mono text-emerald-300 overflow-x-auto whitespace-pre-wrap">
                 {curlInstantLeagues}
+              </pre>
+            </div>
+          ) : activeTab === "curl_round" ? (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-mono text-slate-400 flex items-center gap-1.5">
+                  <Terminal className="w-4 h-4 text-cyan-400" />
+                  <span>cURL InstantLeagues Round Details (Event Category ID #{activeEventCategoryId || activeCategoryId})</span>
+                </span>
+                <button
+                  onClick={() => handleCopy(curlRoundEndpoint)}
+                  className="flex items-center gap-1.5 px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded-lg border border-slate-700"
+                >
+                  {copied ? <Check className="w-3.5 h-3.5 text-cyan-400" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copied ? "Copié !" : "Copier cURL"}</span>
+                </button>
+              </div>
+              <pre className="p-4 bg-slate-950 border border-slate-800 rounded-xl text-xs font-mono text-cyan-300 overflow-x-auto whitespace-pre-wrap">
+                {curlRoundEndpoint}
               </pre>
             </div>
           ) : activeTab === "curl_entrypoints" ? (

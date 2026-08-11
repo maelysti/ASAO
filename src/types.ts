@@ -109,6 +109,9 @@ export interface InstantLeagueRound {
 export interface InstantLeagueMatchesResponse {
   rounds: InstantLeagueRound[];
   betTypes?: any[];
+  categoryDetails?: any;
+  subCategories?: any[];
+  eventCategoryId?: number;
 }
 
 export type MatchTimeFilter = "all" | "live" | "upcoming" | "finished";

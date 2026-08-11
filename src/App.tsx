@@ -10,6 +10,7 @@ import {
   saveStoredToken,
   fetchEntryPoints,
   fetchAllDataForCompetitions,
+  fetchInstantLeagueMatches,
   fetchInstantLeagueRound,
   fetchInstantLeagueResults,
   fetchInstantLeagueRanking,
@@ -241,25 +242,66 @@ export default function App() {
   // Extract rounds for active competition directly from API response
   const activeRawData = rawInstantResponses[activeCategoryId];
 
-  // Gather all matches across all competitions for rule evaluation & extraction
-  // Extract real match ID from any deep or shallow structure
+  // Extract real match ID from any deep or shallow structure (prioritizes real Bet261 event IDs)
   const extractRealMatchId = (m: any): string | number | undefined => {
     if (!m) return undefined;
-    const direct = m.id ?? m.eventId ?? m.matchId ?? m.gameId ?? m.code ?? m.eventCode;
-    if (direct !== undefined && direct !== null && String(direct).trim() !== "" && String(direct) !== "0") {
-      return direct;
+    // 1. Check root level fields FIRST (e.g. m.id, m.eventId, m.matchId)
+    const rootId = m.id ?? m.eventId ?? m.matchId ?? m.gameId ?? m.code ?? m.eventCode ?? m.eventIdStr;
+    if (rootId !== undefined && rootId !== null && String(rootId).trim() !== "" && String(rootId) !== "0") {
+      return rootId;
     }
+    // 2. Check rawMatch or event sub-objects
     if (m.rawMatch) {
       const raw = extractRealMatchId(m.rawMatch);
-      if (raw !== undefined) return raw;
+      if (raw !== undefined && raw !== null && String(raw).trim() !== "" && String(raw) !== "0") {
+        return raw;
+      }
     }
     if (m.event) {
       const ev = extractRealMatchId(m.event);
-      if (ev !== undefined) return ev;
+      if (ev !== undefined && ev !== null && String(ev).trim() !== "" && String(ev) !== "0") {
+        return ev;
+      }
     }
+    // 3. Bet types array
     if (Array.isArray(m.eventBetTypes) && m.eventBetTypes.length > 0) {
       for (const bt of m.eventBetTypes) {
         if (bt && bt.eventId) return bt.eventId;
+      }
+    }
+    return undefined;
+  };
+
+  // Helper to extract season eventCategoryId (e.g. 160116) from any round/match payload
+  const extractSeasonCatId = (obj: any, epId?: number): number | undefined => {
+    if (!obj) return undefined;
+    const candidates = [
+      obj.eventCategoryId,
+      obj.seasonId,
+      obj.rawMatch?.eventCategoryId,
+      obj.rawMatch?.seasonId,
+      obj.categoryId !== epId ? obj.categoryId : undefined,
+      obj.rawMatch?.categoryId !== epId ? obj.rawMatch?.categoryId : undefined,
+    ];
+    for (const cid of candidates) {
+      if (cid !== undefined && cid !== null && String(cid).trim() !== "" && String(cid) !== "0") {
+        const num = Number(cid);
+        if (!isNaN(num) && (epId === undefined || num !== epId)) {
+          return num;
+        }
+      }
+    }
+    const sourceRef = obj.sourceRef || obj.rawMatch?.sourceRef;
+    if (sourceRef && typeof sourceRef === "string") {
+      const parts = sourceRef.split("-");
+      if (parts.length >= 3) {
+        const last = parts[parts.length - 1];
+        if (/^\d+$/.test(last)) {
+          const num = Number(last);
+          if (!isNaN(num) && (epId === undefined || num !== epId)) {
+            return num;
+          }
+        }
       }
     }
     return undefined;
@@ -282,38 +324,38 @@ export default function App() {
       const raw = rawInstantResponses[ep.id];
       const matchSet = new Map<string, any>();
 
-      const getMatchKey = (m: any, rNum?: any) => {
+      const getTeamKey = (m: any, rNum?: any) => {
         const hName = (m.homeTeam?.name || m.homeTeamName || (typeof m.homeTeam === "string" ? m.homeTeam : "") || m.name?.split(" vs ")[0]?.trim() || "").toUpperCase().replace(/\s+/g, "");
         const aName = (m.awayTeam?.name || m.awayTeamName || (typeof m.awayTeam === "string" ? m.awayTeam : "") || m.name?.split(" vs ")[1]?.trim() || "").toUpperCase().replace(/\s+/g, "");
         const rn = rNum || m.roundNumber || m.round || 1;
+        const sNum = m.seasonNumber || m.season || 1;
 
         if (hName && aName) {
-          return `R${rn}_${hName}_${aName}`;
+          return `S${sNum}_R${rn}_${hName}_${aName}`;
         }
-        const realId = extractRealMatchId(m);
-        if (realId !== undefined) {
-          return `ID_${realId}`;
-        }
-        return `R${rn}_UNK`;
+        return null;
       };
 
-      const rawEventCatId =
-        raw?.eventCategoryId ||
-        raw?.rounds?.[0]?.eventCategoryId ||
-        (ep as any).eventCategoryId;
+      const findExisting = (m: any, rNum?: any) => {
+        const realId = extractRealMatchId(m);
+        if (realId !== undefined && realId !== null && String(realId).trim() !== "" && String(realId) !== "0") {
+          const byId = matchSet.get(`ID_${realId}`);
+          if (byId) return byId;
+        }
+        const teamKey = getTeamKey(m, rNum);
+        if (teamKey) {
+          const byTeam = matchSet.get(teamKey);
+          if (byTeam) return byTeam;
+        }
+        return undefined;
+      };
 
       const mergeMatch = (existing: any, incoming: any, epId: number, rNum: any) => {
-        const incCat =
-          incoming.eventCategoryId ||
-          incoming.rawMatch?.eventCategoryId ||
-          (incoming.categoryId && incoming.categoryId !== epId ? incoming.categoryId : undefined);
+        const incCat = extractSeasonCatId(incoming, epId);
+        const extCat = extractSeasonCatId(existing, epId);
+        const rawCat = extractSeasonCatId(raw, epId);
 
-        const extCat =
-          existing?.eventCategoryId && existing.eventCategoryId !== epId
-            ? existing.eventCategoryId
-            : undefined;
-
-        const resolvedCatId = incCat || extCat || (rawEventCatId !== epId ? rawEventCatId : undefined) || epId;
+        const resolvedCatId = incCat || extCat || rawCat || epId;
 
         const realMatchId = extractRealMatchId(incoming) ?? extractRealMatchId(existing);
 
@@ -375,32 +417,42 @@ export default function App() {
         return merged;
       };
 
+      const addOrUpdateMatch = (incoming: any, epId: number, rNum: any) => {
+        const existing = findExisting(incoming, rNum);
+        const merged = mergeMatch(existing, incoming, epId, rNum);
+
+        const realId = extractRealMatchId(merged);
+        if (realId !== undefined && realId !== null && String(realId).trim() !== "" && String(realId) !== "0") {
+          matchSet.set(`ID_${realId}`, merged);
+        }
+        const teamKey = getTeamKey(merged, rNum);
+        if (teamKey) {
+          matchSet.set(teamKey, merged);
+        }
+      };
+
       if (raw && raw.rounds && Array.isArray(raw.rounds)) {
         raw.rounds.forEach((r: any) => {
           if (r.matches && Array.isArray(r.matches)) {
             r.matches.forEach((m: any) => {
               const rNum = r.roundNumber || m.roundNumber || m.round;
-              const key = getMatchKey(m, rNum);
-              const existing = matchSet.get(key);
-              matchSet.set(key, mergeMatch(existing, {
+              addOrUpdateMatch({
                 ...m,
                 eventCategoryId: r.eventCategoryId || m.eventCategoryId || m.categoryId,
                 seasonNumber: r.seasonNumber || r.season || m.seasonNumber || m.season,
                 seasonName: r.seasonName || m.seasonName,
                 seasonId: r.seasonId || m.seasonId,
-              }, ep.id, rNum));
+              }, ep.id, rNum);
             });
           }
         });
       }
 
-      // Also check instantMatches (results / live matches fetched from instant leagues)
+      // Also check instantMatches
       if (instantMatches && Array.isArray(instantMatches)) {
         instantMatches.forEach((m: any) => {
           if (m.entryPointId === ep.id || m.eventCategoryId === ep.id) {
-            const key = getMatchKey(m);
-            const existing = matchSet.get(key);
-            matchSet.set(key, mergeMatch(existing, m, ep.id, m.roundNumber || m.round));
+            addOrUpdateMatch(m, ep.id, m.roundNumber || m.round);
           }
         });
       }
@@ -410,29 +462,25 @@ export default function App() {
         if (key.startsWith(`${ep.id}_`)) {
           const mList = Array.isArray(val) ? val : (val as any)?.matches || [];
           mList.forEach((m: any) => {
-            const mKey = getMatchKey(m);
-            const existing = matchSet.get(mKey);
-            matchSet.set(mKey, mergeMatch(existing, m, ep.id, m.roundNumber || m.round));
+            addOrUpdateMatch(m, ep.id, m.roundNumber || m.round);
           });
         }
       });
 
-      // Also check competitionResults (results rounds from Bet261 API, containing rounds 1 to current played round)
+      // Also check competitionResults
       const resRounds = competitionResults[ep.id];
       if (resRounds && Array.isArray(resRounds)) {
         resRounds.forEach((r: any) => {
           if (r.matches && Array.isArray(r.matches)) {
             r.matches.forEach((m: any) => {
               const rNum = r.roundNumber || m.roundNumber || m.round;
-              const key = getMatchKey(m, rNum);
-              const existing = matchSet.get(key);
-              matchSet.set(key, mergeMatch(existing, {
+              addOrUpdateMatch({
                 ...m,
                 eventCategoryId: r.eventCategoryId || m.eventCategoryId || ep.id,
                 seasonNumber: r.seasonNumber || r.season || m.seasonNumber || m.season,
                 seasonName: r.seasonName || m.seasonName,
                 seasonId: r.seasonId || m.seasonId,
-              }, ep.id, rNum));
+              }, ep.id, rNum);
             });
           }
         });
@@ -442,15 +490,13 @@ export default function App() {
       if (events && Array.isArray(events)) {
         events.forEach((ev: any) => {
           if (ev.entryPointId === ep.id || ev.categoryId === ep.id) {
-            const key = getMatchKey(ev);
-            const existing = matchSet.get(key);
-            matchSet.set(key, mergeMatch(existing, ev, ep.id, ev.roundNumber || ev.round));
+            addOrUpdateMatch(ev, ep.id, ev.roundNumber || ev.round);
           }
         });
       }
 
       map[ep.id] = {
-        matches: Array.from(matchSet.values()),
+        matches: Array.from(new Set(matchSet.values())),
         categoryName: ep.name,
       };
     });
@@ -458,23 +504,51 @@ export default function App() {
     return map;
   }, [entryPoints, rawInstantResponses, fetchedRoundMatches, instantMatches, events, competitionResults]);
 
-  // Specific eventCategoryId (e.g. 159864 for Spanish League, 159866 for English League)
+  // Specific season eventCategoryId (e.g. 160332 for English League, 160330 for Spanish League)
   const activeEventCategoryId = useMemo(() => {
+    // 1. Check rawInstantResponses
     const raw = rawInstantResponses[activeCategoryId];
-    if (raw && raw.rounds && raw.rounds[0] && raw.rounds[0].eventCategoryId) {
-      return Number(raw.rounds[0].eventCategoryId);
+    if (raw) {
+      if ((raw as any).eventCategoryId) return (raw as any).eventCategoryId;
+      if ((raw as any).subCategories?.[0]?.id) return (raw as any).subCategories[0].id;
+      if ((raw as any).categoryDetails?.subCategories?.[0]?.id) return (raw as any).categoryDetails.subCategories[0].id;
+      if (raw.rounds && Array.isArray(raw.rounds)) {
+        for (const r of raw.rounds) {
+          const catId = extractSeasonCatId(r, activeCategoryId);
+          if (catId) return catId;
+          if (r.matches && Array.isArray(r.matches)) {
+            for (const m of r.matches) {
+              const mCat = extractSeasonCatId(m, activeCategoryId);
+              if (mCat) return mCat;
+            }
+          }
+        }
+      }
     }
+    // 2. Check allMatchesByComp
     const compMatches = allMatchesByComp[activeCategoryId]?.matches;
-    if (compMatches && compMatches[0]) {
-      const catId =
-        compMatches[0].eventCategoryId ||
-        compMatches[0].categoryId ||
-        compMatches[0].rawMatch?.eventCategoryId ||
-        compMatches[0].rawMatch?.categoryId;
-      if (catId) return Number(catId);
+    if (compMatches && compMatches.length > 0) {
+      for (const m of compMatches) {
+        const catId = extractSeasonCatId(m, activeCategoryId);
+        if (catId) return catId;
+      }
+    }
+    // 3. Check competitionResults
+    const resRounds = competitionResults[activeCategoryId];
+    if (resRounds && Array.isArray(resRounds)) {
+      for (const r of resRounds) {
+        const catId = extractSeasonCatId(r, activeCategoryId);
+        if (catId) return catId;
+        if (r.matches && Array.isArray(r.matches)) {
+          for (const m of r.matches) {
+            const mCat = extractSeasonCatId(m, activeCategoryId);
+            if (mCat) return mCat;
+          }
+        }
+      }
     }
     return activeCategoryId;
-  }, [rawInstantResponses, activeCategoryId, allMatchesByComp]);
+  }, [rawInstantResponses, activeCategoryId, allMatchesByComp, competitionResults]);
 
   // Process rules dynamically on matches data
   const evaluatedRules = useMemo(() => {
@@ -730,6 +804,17 @@ export default function App() {
   useEffect(() => {
     if (!selectedRoundNumber || !activeCategoryId) return;
 
+    // CRITICAL: round/X API requires season eventCategoryId (e.g. 159866), NOT entryPointId (8035/8037).
+    // If activeEventCategoryId is still equal to activeCategoryId, fetch instant league matches first to discover real eventCategoryId!
+    if (activeEventCategoryId === activeCategoryId) {
+      fetchInstantLeagueMatches(activeCategoryId, token).then((res) => {
+        if (res.data && res.data.rounds) {
+          setRawInstantResponses((prev) => ({ ...prev, [activeCategoryId]: res.data! }));
+        }
+      });
+      return;
+    }
+
     const eventCategoryId = activeEventCategoryId;
     const cacheKey = `${activeCategoryId}_${selectedRoundNumber}`;
 
@@ -738,7 +823,7 @@ export default function App() {
       setIsRoundLoading(true);
     }
 
-    fetchInstantLeagueRound(selectedRoundNumber, Number(eventCategoryId), token).then((res) => {
+    fetchInstantLeagueRound(selectedRoundNumber, Number(eventCategoryId), token, activeCategoryId).then((res) => {
       if (isMounted) {
         setIsRoundLoading(false);
         if (res.data && res.data.matches && Array.isArray(res.data.matches)) {
@@ -756,7 +841,7 @@ export default function App() {
     // Continuous 5-second silent background poll for instant score & rank updates
     const livePollTimer = setInterval(() => {
       if (!isMounted) return;
-      fetchInstantLeagueRound(selectedRoundNumber, Number(eventCategoryId), token).then((res) => {
+      fetchInstantLeagueRound(selectedRoundNumber, Number(eventCategoryId), token, activeCategoryId).then((res) => {
         if (isMounted && res.data && res.data.matches && Array.isArray(res.data.matches)) {
           setFetchedRoundMatches((prev) => ({
             ...prev,
@@ -784,7 +869,7 @@ export default function App() {
       isMounted = false;
       clearInterval(livePollTimer);
     };
-  }, [selectedRoundNumber, activeCategoryId, token, apiState.lastUpdated]);
+  }, [selectedRoundNumber, activeCategoryId, activeEventCategoryId, token, apiState.lastUpdated]);
 
   // Determine matches source for the active round
   const activeCacheKey = `${activeCategoryId}_${selectedRoundNumber}`;
@@ -960,10 +1045,17 @@ export default function App() {
       ? realMatchId
       : getNumericFallbackId(selectedRoundNumber, homeName, awayName);
 
+    const matchCatId =
+      extractSeasonCatId(m, activeCategoryId) ||
+      extractSeasonCatId(resultMatch, activeCategoryId) ||
+      extractSeasonCatId(activeRawRoundObj, activeCategoryId) ||
+      activeEventCategoryId ||
+      activeCategoryId;
+
     return {
       id: resolvedMatchId,
       entryPointId: activeCategoryId,
-      eventCategoryId: activeRawRoundObj?.eventCategoryId || activeCategoryId,
+      eventCategoryId: matchCatId,
       categoryName: currentEntryPoint?.name || "Compétition",
       roundNumber: selectedRoundNumber,
       homeTeamName: homeName,
@@ -1704,6 +1796,8 @@ export default function App() {
         entryPoints={entryPoints}
         events={events}
         bearerToken={token}
+        activeCategoryId={activeCategoryId}
+        activeEventCategoryId={activeEventCategoryId}
       />
     </div>
   );

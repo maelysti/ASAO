@@ -311,13 +311,12 @@ export async function fetchInstantLeagueRanking(
   }
 }
 
-export async function fetchInstantLeagueRound(
-  roundNumber: number,
-  eventCategoryId: number,
+export async function fetchCategoryDetails(
+  parentEventCategoryId: number,
   token?: string
 ): Promise<{ data: any | null; status: number; error?: string }> {
   const activeToken = token || getStoredToken();
-  const url = `https://hg-event-api-prod.sporty-tech.net/api/instantleagues/round/${roundNumber}?eventCategoryId=${eventCategoryId}&getNext=false`;
+  const url = `https://hg-event-api-prod.sporty-tech.net/api/eventcategories/${parentEventCategoryId}/details`;
 
   try {
     const res = await fetch(
@@ -335,10 +334,116 @@ export async function fetchInstantLeagueRound(
     }
 
     const raw = await res.json();
-    if (raw && raw.round) {
-      return { data: raw.round, status: 200 };
+    return { data: raw, status: 200 };
+  } catch (err: any) {
+    return { data: null, status: 500, error: err.message || "Network Error" };
+  }
+}
+
+export async function fetchInstantLeaguePlayout(
+  roundNumber: number,
+  eventCategoryId: number,
+  parentEventCategoryId: number,
+  token?: string
+): Promise<{ data: any[] | null; status: number; error?: string }> {
+  const activeToken = token || getStoredToken();
+  const url = `https://hg-event-api-prod.sporty-tech.net/api/instantleagues/round/${roundNumber}/playout?eventCategoryId=${eventCategoryId}&parentEventCategoryId=${parentEventCategoryId}`;
+
+  try {
+    const res = await fetch(
+      `/api/sporty/proxy?url=${encodeURIComponent(url)}&token=${encodeURIComponent(activeToken)}`,
+      {
+        headers: {
+          Authorization: `Bearer ${activeToken}`,
+        },
+      }
+    );
+
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "");
+      return { data: null, status: res.status, error: errText || `HTTP ${res.status}` };
     }
-    return { data: null, status: 200 };
+
+    const raw = await res.json();
+    return { data: raw?.matches || [], status: 200 };
+  } catch (err: any) {
+    return { data: null, status: 500, error: err.message || "Network Error" };
+  }
+}
+
+export async function fetchInstantLeagueRound(
+  roundNumber: number,
+  eventCategoryId: number,
+  token?: string,
+  parentEventCategoryId?: number
+): Promise<{ data: any | null; status: number; error?: string }> {
+  const activeToken = token || getStoredToken();
+  const roundUrl = `https://hg-event-api-prod.sporty-tech.net/api/instantleagues/round/${roundNumber}?eventCategoryId=${eventCategoryId}&getNext=false`;
+
+  try {
+    const [roundRes, playoutRes] = await Promise.all([
+      fetch(
+        `/api/sporty/proxy?url=${encodeURIComponent(roundUrl)}&token=${encodeURIComponent(activeToken)}`,
+        { headers: { Authorization: `Bearer ${activeToken}` } }
+      ),
+      parentEventCategoryId
+        ? fetchInstantLeaguePlayout(roundNumber, eventCategoryId, parentEventCategoryId, activeToken)
+        : Promise.resolve({ data: null, status: 200 }),
+    ]);
+
+    if (!roundRes.ok) {
+      const errText = await roundRes.text().catch(() => "");
+      return { data: null, status: roundRes.status, error: errText || `HTTP ${roundRes.status}` };
+    }
+
+    const raw = await roundRes.json();
+    const roundObj = raw?.round;
+
+    if (roundObj && roundObj.matches && Array.isArray(roundObj.matches)) {
+      const playoutMatches = playoutRes.data || [];
+      const playoutMap = new Map<number, any>();
+      playoutMatches.forEach((pm: any) => {
+        if (pm.id) playoutMap.set(Number(pm.id), pm);
+      });
+
+      roundObj.matches = roundObj.matches.map((m: any, idx: number) => {
+        const realId = m.id || m.eventId;
+        const playoutItem = realId ? playoutMap.get(Number(realId)) : playoutMatches[idx];
+
+        let goals = m.goals || playoutItem?.goals || [];
+        let score = m.score;
+        let halfTimeScore = m.halfTimeScore;
+
+        if (playoutItem && playoutItem.goals && Array.isArray(playoutItem.goals) && playoutItem.goals.length > 0) {
+          goals = playoutItem.goals;
+          const lastG = goals[goals.length - 1];
+          score = `${Math.round(lastG.homeScore ?? 0)}:${Math.round(lastG.awayScore ?? 0)}`;
+
+          const htGoals = goals.filter((g: any) => (g.minute ?? 0) <= 45);
+          if (htGoals.length > 0) {
+            const lastHt = htGoals[htGoals.length - 1];
+            halfTimeScore = `${Math.round(lastHt.homeScore ?? 0)}:${Math.round(lastHt.awayScore ?? 0)}`;
+          } else {
+            halfTimeScore = "0:0";
+          }
+        }
+
+        return {
+          ...m,
+          id: realId || playoutItem?.id || m.id,
+          eventCategoryId: roundObj.eventCategoryId || eventCategoryId,
+          goals,
+          score,
+          halfTimeScore,
+          state: score ? "Ended" : (m.state || "PreEvent"),
+          preEventOrLive: score ? "Finished" : (m.preEventOrLive || "PreEvent"),
+        };
+      });
+
+      return { data: roundObj, status: 200 };
+    }
+
+    return { data: roundObj || null, status: 200 };
   } catch (err: any) {
     return { data: null, status: 500, error: err.message || "Network Error" };
   }
@@ -416,19 +521,23 @@ export async function fetchAllDataForCompetitions(
 
   const instantResults = await Promise.all(
     entryPoints.map(async (ep) => {
-      const res = await fetchInstantLeagueMatches(ep.id, token);
-      return { entryPoint: ep, res };
+      const [res, detailsRes] = await Promise.all([
+        fetchInstantLeagueMatches(ep.id, token),
+        fetchCategoryDetails(ep.id, token),
+      ]);
+      return { entryPoint: ep, res, details: detailsRes.data };
     })
   );
 
   for (const item of instantResults) {
-    const { entryPoint, res } = item;
+    const { entryPoint, res, details } = item;
     if (res.status !== 200) {
       lastStatus = res.status;
       lastError = res.error;
     }
 
     let roundsToProcess: any[] = [];
+    const activeSubCatId = details?.subCategories?.[0]?.id;
 
     if (res.data && res.data.rounds && res.data.rounds.length > 0) {
       roundsToProcess = res.data.rounds;
@@ -485,8 +594,14 @@ export async function fetchAllDataForCompetitions(
       }
     }
 
-    if (roundsToProcess.length > 0) {
-      rawResponses[entryPoint.id] = { rounds: roundsToProcess };
+    if (roundsToProcess.length > 0 || details) {
+      rawResponses[entryPoint.id] = {
+        ...(res.data || {}),
+        categoryDetails: details,
+        subCategories: details?.subCategories || [],
+        eventCategoryId: activeSubCatId || (res.data as any)?.eventCategoryId,
+        rounds: roundsToProcess,
+      };
 
       roundsToProcess.forEach((round) => {
         if (round.matches && Array.isArray(round.matches)) {
@@ -525,12 +640,29 @@ export async function fetchAllDataForCompetitions(
               (m as any).seasonName ||
               `Saison ${sNum}`;
 
-            const realMatchId = m.id ?? m.eventId ?? m.matchId ?? m.gameId ?? m.code ?? m.eventCode ?? (m.rawMatch && (m.rawMatch.id ?? m.rawMatch.eventId ?? m.rawMatch.matchId));
+            const realMatchId =
+              m.id ??
+              m.eventId ??
+              m.matchId ??
+              m.gameId ??
+              m.code ??
+              m.eventCode ??
+              m.eventIdStr ??
+              (m.rawMatch && (m.rawMatch.id ?? m.rawMatch.eventId ?? m.rawMatch.matchId));
+
+            const catIdVal =
+              activeSubCatId ||
+              round.eventCategoryId ||
+              m.eventCategoryId ||
+              round.seasonId ||
+              m.seasonId ||
+              (sourceRefSeason ? Number(sourceRefSeason) : undefined) ||
+              entryPoint.id;
 
             combinedList.push({
               id: realMatchId,
               entryPointId: entryPoint.id,
-              eventCategoryId: round.eventCategoryId || entryPoint.id,
+              eventCategoryId: catIdVal,
               categoryName: entryPoint.name,
               roundNumber: round.roundNumber || m.round || 1,
               seasonNumber: sNum,
