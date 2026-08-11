@@ -42,7 +42,12 @@ import {
   AIDatabaseRuleInsight,
   RuleItem,
 } from "../types";
-import { getRealMatchId, extractAllOddsFromMatch } from "../utils/globalAnalysisEngine";
+import {
+  getRealMatchId,
+  extractAllOddsFromMatch,
+  convertRoundResultsToExtractedRecords,
+} from "../utils/globalAnalysisEngine";
+import { fetchInstantLeagueResults, getStoredToken } from "../services/sportyApi";
 
 interface ExtractionViewProps {
   entryPoints: SportyEntryPoint[];
@@ -86,7 +91,7 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
   const [selectedLeagueFilter, setSelectedLeagueFilter] = useState<number | "ALL">("ALL");
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>("ALL");
   const [searchQuery, setSearchQuery] = useState<string>("");
-  const [strictScoreOnly, setStrictScoreOnly] = useState<boolean>(true);
+  const [strictScoreOnly, setStrictScoreOnly] = useState<boolean>(false);
 
   // Gemini API Key & Auto AI Analysis Settings
   const [geminiApiKey, setGeminiApiKey] = useState<string>(() => {
@@ -259,8 +264,11 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
     return { finalScore, halfTimeScore, hasScore };
   };
 
-  // Perform extraction logic: Collect directly from current match data (allMatchesByComp) in application state
-  const performExtractionStep = React.useCallback(() => {
+  const [isExtractingLoading, setIsExtractingLoading] = useState<boolean>(false);
+
+  // Perform extraction logic: Collect all played/finished matches across all rounds (J1 to current) for current season
+  const performExtractionStep = React.useCallback(async () => {
+    setIsExtractingLoading(true);
     const newExtracted: ExtractedMatchRecord[] = [];
     const timestamp = new Date().toLocaleTimeString("fr-FR", {
       hour: "2-digit",
@@ -268,39 +276,35 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
       second: "2-digit",
     });
 
-    // Build existing ID map for strict deduplication
-    const existingIds = new Set(extractedDatabase.map((rec) => String(rec.id)));
+    const activeToken = getStoredToken();
     let scannedCount = 0;
-    let dupCount = 0;
+    let maxRoundProcessed = 1;
 
-    // Flatten all matches across competitions from current match data
-    const allMatchesList: Array<{ match: any; compId: number; categoryName: string }> = [];
+    // Determine targeted entryPoints/competitions
+    const targetedEntryPoints = entryPoints.filter((ep) => {
+      if (selectedLeagueFilter === "ALL") return true;
+      return String(ep.id) === String(selectedLeagueFilter);
+    });
 
+    // 1. Collect from memory active state (allMatchesByComp)
+    const memoryMatchesList: Array<{ match: any; compId: number; categoryName: string }> = [];
     Object.entries(allMatchesByComp).forEach(([catIdStr, compDataObj]) => {
       const compId = Number(catIdStr);
       const compData = compDataObj as { matches: any[]; categoryName: string };
 
-      if (selectedLeagueFilter !== "ALL" && selectedLeagueFilter !== compId) {
+      if (selectedLeagueFilter !== "ALL" && String(selectedLeagueFilter) !== String(compId)) {
         return;
       }
 
       if (compData && Array.isArray(compData.matches)) {
         compData.matches.forEach((m: any) => {
-          allMatchesList.push({ match: m, compId, categoryName: compData.categoryName });
+          memoryMatchesList.push({ match: m, compId, categoryName: compData.categoryName });
         });
       }
     });
 
-    // Sort matches by round number ascending (Round 1, 2, 3...)
-    allMatchesList.sort((a, b) => {
-      const rA = a.match.roundNumber || a.match.round || 1;
-      const rB = b.match.roundNumber || b.match.round || 1;
-      return rA - rB;
-    });
-
-    let maxRoundProcessed = 1;
-
-    allMatchesList.forEach(({ match: m, compId, categoryName }) => {
+    // Extract memory matches with finished scores
+    memoryMatchesList.forEach(({ match: m, compId, categoryName }) => {
       scannedCount++;
       const roundNum = m.roundNumber || m.round || 1;
       if (roundNum > maxRoundProcessed) maxRoundProcessed = roundNum;
@@ -308,45 +312,23 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
       const homeName = m.homeTeam?.name || m.homeTeamName || (typeof m.homeTeam === "string" ? m.homeTeam : "") || m.name?.split(" vs ")[0]?.trim() || "Dom";
       const awayName = m.awayTeam?.name || m.awayTeamName || (typeof m.awayTeam === "string" ? m.awayTeam : "") || m.name?.split(" vs ")[1]?.trim() || "Ext";
 
-      // 1. Match ID: direct ID from current match object
       const matchId = getRealMatchId(m) || m.id || m.eventId || 0;
+      const extractedOdds = extractAllOddsFromMatch(m);
 
-      // Deduplication check
-      if (existingIds.has(String(matchId))) {
-        dupCount++;
-        return;
-      }
-
-      // 2. Score & Halftime Score parsing (from current match data)
       const scoreDetails = parseMatchScoreDetails(m);
-
       const matchStatusStr = String(m.state || m.preEventOrLive || m.status || "").toLowerCase();
       const isPreEvent = matchStatusStr.includes("preevent") || matchStatusStr.includes("upcoming") || matchStatusStr.includes("notstarted") || matchStatusStr.includes("scheduled");
 
       // Extract only played/finished matches with a valid score
-      if (strictScoreOnly && (!scoreDetails.hasScore || !scoreDetails.scoreStr || scoreDetails.scoreStr === "-" || isPreEvent)) {
+      if (!scoreDetails.hasScore || !scoreDetails.scoreStr || scoreDetails.scoreStr === "-" || isPreEvent) {
         return;
       }
 
       const finalScore = scoreDetails.scoreStr;
       const halfTimeScore = scoreDetails.htStr !== "-" ? scoreDetails.htStr : (m.halfTimeScore || "0 - 0");
 
-      // 3. Extract Odds directly from current match payload
-      const extractedOdds = extractAllOddsFromMatch(m);
-      const {
-        homeOdds: hOdds,
-        drawOdds: dOdds,
-        awayOdds: aOdds,
-        doubleChanceOdds,
-        overUnderOdds,
-        bothTeamsScoreOdds,
-        allOddsSummary: summaryStr,
-      } = extractedOdds;
-
-      // 4. Goals & Goal Minutes from current match data
       let goalMinsStr = "";
       let goalsList: any[] = [];
-
       const rawGoals =
         (m.goals && Array.isArray(m.goals) && m.goals.length > 0)
           ? m.goals
@@ -403,21 +385,16 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
         goalMinsStr = finalScore === "0-0" ? "Aucun but (0-0)" : "Minutes non transmises";
       }
 
-      // 5. Season info
       const rawSeason = m.seasonNumber || m.season || m.seasonId || m.rawMatch?.seasonNumber || 1;
       const sNum = typeof rawSeason === "number" ? rawSeason : (parseInt(String(rawSeason).replace(/\D/g, ""), 10) || 1);
       const sName = m.seasonName || m.rawMatch?.seasonName || `Saison ${sNum}`;
       const sId = m.seasonId || m.rawMatch?.seasonId || sNum;
 
-      // 6. Ranks and points from current match object
       const homeRankVal = m.homeRankAtRound ?? m.homeTeam?.position ?? m.homeRank ?? m.homePosition ?? 0;
       const awayRankVal = m.awayRankAtRound ?? m.awayTeam?.position ?? m.awayRank ?? m.awayPosition ?? 0;
       const homePointsVal = m.homePoints ?? m.homeTeam?.points ?? m.homePts ?? 0;
       const awayPointsVal = m.awayPoints ?? m.awayTeam?.points ?? m.awayPts ?? 0;
 
-      const matchTimeVal = m.expectedStart || m.startTime || m.time || "";
-
-      // 7. Event Category ID (exact season ID from current match object)
       const eventCatId = m.eventCategoryId || m.rawMatch?.eventCategoryId || (compId === activeCategoryId ? activeEventCategoryId : undefined) || compId;
 
       newExtracted.push({
@@ -439,38 +416,56 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
         seasonName: sName,
         seasonId: sId,
         status: m.state || m.preEventOrLive || "Terminé",
-        expectedStart: matchTimeVal,
+        expectedStart: m.expectedStart || m.startTime || "",
         score: finalScore,
         halfTimeScore: halfTimeScore,
         goalsCount: goalsList.length || (finalScore !== "0-0" && finalScore ? finalScore.split("-").reduce((a, b) => Number(a) + Number(b), 0) : 0),
         goalMinutes: goalMinsStr,
         goalsDetail: goalsList,
-        homeOdds: hOdds,
-        drawOdds: dOdds,
-        awayOdds: aOdds,
-        doubleChanceOdds,
-        overUnderOdds,
-        bothTeamsScoreOdds,
-        allOddsSummary: summaryStr,
+        homeOdds: extractedOdds.homeOdds,
+        drawOdds: extractedOdds.drawOdds,
+        awayOdds: extractedOdds.awayOdds,
+        doubleChanceOdds: extractedOdds.doubleChanceOdds,
+        overUnderOdds: extractedOdds.overUnderOdds,
+        bothTeamsScoreOdds: extractedOdds.bothTeamsScoreOdds,
+        allOddsSummary: extractedOdds.allOddsSummary,
         headToHeadHistory: [],
         extractedAt: timestamp,
-        source: "Données Matchs Actuels",
+        source: "Saison Actuelle",
       });
-
-      existingIds.add(String(matchId));
     });
 
-    if (dupCount > 0) {
-      setDuplicatesAvoided((prev) => prev + dupCount);
+    // 2. Fetch all played round results (Round 1 to current round) directly from official API
+    for (const ep of targetedEntryPoints) {
+      try {
+        const resultsRes = await fetchInstantLeagueResults(ep.id, 0, 100, activeToken);
+        if (resultsRes.data && Array.isArray(resultsRes.data)) {
+          const rounds = resultsRes.data;
+          const apiRecords = convertRoundResultsToExtractedRecords(rounds, ep.id, ep.name);
+
+          apiRecords.forEach((rec) => {
+            scannedCount++;
+            if (rec.score && rec.score !== "-" && rec.score !== "0:0" && rec.score !== "") {
+              const rNum = Number(rec.roundNumber) || 1;
+              if (rNum > maxRoundProcessed) maxRoundProcessed = rNum;
+              newExtracted.push(rec);
+            }
+          });
+        }
+      } catch (err) {
+        console.warn(`Erreur résultats pour ligue ${ep.name}:`, err);
+      }
     }
 
     setCurrentRoundProgress(maxRoundProcessed);
 
     if (newExtracted.length > 0) {
+      // Pass all extracted records to onAddExtractedRecords (which calls mergeExtractedRecords to update existing & add new)
       onAddExtractedRecords(newExtracted);
+
       addLog(
         "SUCCESS",
-        `[DONNÉES MATCHS ACTUELS] +${newExtracted.length} match(s) extrait(s) directement depuis la mémoire active. ${dupCount} doublons ignorés.`
+        `[SAISON ACTUELLE] ${scannedCount} matchs scannés de la J1 à la J${maxRoundProcessed}. ${newExtracted.length} match(s) terminés enregistrés/mis à jour en BDD avec scores et cotes réels.`
       );
       if (autoAiAnalysis) {
         setTimeout(() => handleAnalyzeDatabaseWithAI(), 300);
@@ -478,10 +473,11 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
     } else {
       addLog(
         "INFO",
-        `[SCAN MATCHS ACTUELS] ${scannedCount} matchs scannés. Aucun nouveau match. ${dupCount} doublons déjà en BDD.`
+        `[SCAN SAISON ACTUELLE] ${scannedCount} matchs scannés (J1 à J${maxRoundProcessed}). Tous les résultats disponibles sont déjà à jour.`
       );
     }
-  }, [allMatchesByComp, selectedLeagueFilter, strictScoreOnly, onAddExtractedRecords, extractedDatabase]);
+    setIsExtractingLoading(false);
+  }, [allMatchesByComp, entryPoints, selectedLeagueFilter, activeCategoryId, activeEventCategoryId, onAddExtractedRecords, autoAiAnalysis]);
 
   // Timer loop
   useEffect(() => {
@@ -1138,32 +1134,33 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
           {/* Start/Stop extraction button */}
           <div className="md:col-span-2 flex items-center gap-3">
             <button
-              onClick={() => setIsExtracting(!isExtracting)}
-              className={`flex-1 py-3 px-5 rounded-2xl font-black text-xs flex items-center justify-center gap-2.5 transition-all shadow-lg cursor-pointer ${
-                isExtracting
-                  ? "bg-rose-500 hover:bg-rose-600 text-white shadow-rose-500/20"
-                  : "bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 shadow-emerald-500/20"
-              }`}
+              onClick={performExtractionStep}
+              className="flex-1 py-3 px-5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs rounded-2xl flex items-center justify-center gap-2.5 transition-all shadow-lg shadow-emerald-500/20 cursor-pointer border border-emerald-300/40"
             >
-              {isExtracting ? (
-                <>
-                  <Square className="w-4 h-4 fill-current" />
-                  <span>Arrêter l'Extraction Live</span>
-                </>
-              ) : (
-                <>
-                  <Play className="w-4 h-4 fill-current" />
-                  <span>Lancer l'Extraction Continuous ({autoExtractInterval}s)</span>
-                </>
-              )}
+              <Database className="w-4 h-4 fill-current" />
+              <span>Extraire les Matchs Actuels Maintenant</span>
             </button>
 
             <button
-              onClick={performExtractionStep}
-              className="p-3 bg-slate-800 hover:bg-slate-700 text-white rounded-2xl border border-slate-700 transition-all cursor-pointer"
-              title="Extraire manuellement 1 instant"
+              onClick={() => setIsExtracting(!isExtracting)}
+              className={`py-3 px-4 rounded-2xl font-black text-xs flex items-center justify-center gap-2 transition-all cursor-pointer border ${
+                isExtracting
+                  ? "bg-rose-500/20 text-rose-300 border-rose-500/40 hover:bg-rose-500/30"
+                  : "bg-slate-900 text-slate-400 border-slate-800 hover:bg-slate-800 hover:text-slate-200"
+              }`}
+              title="Activer/Désactiver l'extraction automatique périodique"
             >
-              <RefreshCw className="w-4 h-4" />
+              {isExtracting ? (
+                <>
+                  <Square className="w-3.5 h-3.5 fill-current text-rose-400" />
+                  <span>Auto-Extraction : ACTIF ({autoExtractInterval}s)</span>
+                </>
+              ) : (
+                <>
+                  <Play className="w-3.5 h-3.5 fill-current text-slate-400" />
+                  <span>Auto-Extraction : DÉSACTIVÉ</span>
+                </>
+              )}
             </button>
           </div>
 

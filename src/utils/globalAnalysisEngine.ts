@@ -133,22 +133,23 @@ export function extractAllOddsFromMatch(m: any) {
     [];
 
   if (Array.isArray(betTypes) && betTypes.length > 0) {
-    betTypes.forEach((b: any) => {
+    betTypes.forEach((b: any, bIdx: number) => {
       if (!b) return;
-      const name = String(b.name || b.title || b.desc || "").toUpperCase();
+      const name = String(b.name || b.title || b.desc || b.type || "").toUpperCase();
       const bId = Number(b.betTypeId || b.id || b.type || 0);
       const items = b.eventBetTypeItems || b.odds || b.items || b.outcomes || [];
 
-      if (!Array.isArray(items)) return;
+      if (!Array.isArray(items) || items.length === 0) return;
 
       // 1X2 Market
       if (
         bId === 30083 || bId === 1 || bId === 30001 ||
-        name.includes("1X2") || name.includes("WINNER") || name.includes("RESULT") || name === "FULL TIME RESULT"
+        name.includes("1X2") || name.includes("WINNER") || name.includes("RESULT") || name.includes("RÉSULTAT") || name === "FULL TIME RESULT" ||
+        (bIdx === 0 && items.length === 3 && !homeOdds)
       ) {
         items.forEach((it: any) => {
           const sName = String(it.shortName || it.name || it.title || "").trim().toUpperCase();
-          const val = Number(it.odds || it.price || it.value || 0);
+          const val = Number(it.odds || it.price || it.value || it.rate || 0);
           if (val > 0) {
             if (sName === "1" || sName === "HOME" || sName.includes("DOMICILE")) {
               if (!homeOdds) homeOdds = val;
@@ -159,51 +160,86 @@ export function extractAllOddsFromMatch(m: any) {
             }
           }
         });
+        // Positional fallback for 1X2
+        if (!homeOdds && items.length >= 3) {
+          homeOdds = Number(items[0]?.odds || items[0]?.price || items[0]?.value || 0);
+          drawOdds = Number(items[1]?.odds || items[1]?.price || items[1]?.value || 0);
+          awayOdds = Number(items[2]?.odds || items[2]?.price || items[2]?.value || 0);
+        }
       }
       // Double Chance
       else if (
-        bId === 30084 || bId === 30002 ||
+        bId === 30084 || bId === 30002 || bId === 2 ||
         name.includes("DOUBLE") || name.includes("CHANCE") || name === "DC"
       ) {
         items.forEach((it: any) => {
           const sName = String(it.shortName || it.name || it.title || "").trim().toUpperCase();
-          const val = Number(it.odds || it.price || it.value || 0);
+          const val = Number(it.odds || it.price || it.value || it.rate || 0);
           if (val > 0) {
-            if (sName === "1X" && !dc1X) dc1X = val;
-            else if (sName === "12" && !dc12) dc12 = val;
-            else if (sName === "X2" && !dcX2) dcX2 = val;
+            if ((sName === "1X" || sName.includes("1/X")) && !dc1X) dc1X = val;
+            else if ((sName === "12" || sName.includes("1/2")) && !dc12) dc12 = val;
+            else if ((sName === "X2" || sName.includes("X/2")) && !dcX2) dcX2 = val;
           }
         });
+        // Positional fallback for Double Chance
+        if (!dc1X && items.length >= 3) {
+          dc1X = Number(items[0]?.odds || items[0]?.price || items[0]?.value || 0);
+          dc12 = Number(items[1]?.odds || items[1]?.price || items[1]?.value || 0);
+          dcX2 = Number(items[2]?.odds || items[2]?.price || items[2]?.value || 0);
+        }
       }
       // Over / Under 2.5
       else if (
-        bId === 30085 || bId === 30003 ||
+        bId === 30085 || bId === 30003 || bId === 3 ||
         name.includes("OVER") || name.includes("UNDER") || name.includes("PLUS") || name.includes("MOINS") || name.includes("2.5") || name.includes("TOTAL")
       ) {
         items.forEach((it: any) => {
           const sName = String(it.shortName || it.name || it.title || "").trim().toLowerCase();
-          const val = Number(it.odds || it.price || it.value || 0);
+          const val = Number(it.odds || it.price || it.value || it.rate || 0);
           if (val > 0) {
             if ((sName.includes("over") || sName.includes("plus") || sName.includes("> 2.5") || sName === "o 2.5") && !over25) over25 = val;
             else if ((sName.includes("under") || sName.includes("moins") || sName.includes("< 2.5") || sName === "u 2.5") && !under25) under25 = val;
           }
         });
+        // Positional fallback for Over/Under
+        if (!over25 && items.length >= 2) {
+          over25 = Number(items[0]?.odds || items[0]?.price || items[0]?.value || 0);
+          under25 = Number(items[1]?.odds || items[1]?.price || items[1]?.value || 0);
+        }
       }
       // Both Teams to Score (GG / NG)
       else if (
-        bId === 30086 || bId === 30004 ||
+        bId === 30086 || bId === 30004 || bId === 4 ||
         name.includes("BOTH") || name.includes("GOAL") || name.includes("GG") || name.includes("LES DEUX") || name.includes("BTTS")
       ) {
         items.forEach((it: any) => {
           const sName = String(it.shortName || it.name || it.title || "").trim().toLowerCase();
-          const val = Number(it.odds || it.price || it.value || 0);
+          const val = Number(it.odds || it.price || it.value || it.rate || 0);
           if (val > 0) {
             if ((sName.includes("yes") || sName.includes("oui") || sName === "gg" || sName.includes("both")) && !gg) gg = val;
             else if ((sName.includes("no") || sName.includes("non") || sName === "ng" || sName.includes("one")) && !ng) ng = val;
           }
         });
+        // Positional fallback for BTTS
+        if (!gg && items.length >= 2) {
+          gg = Number(items[0]?.odds || items[0]?.price || items[0]?.value || 0);
+          ng = Number(items[1]?.odds || items[1]?.price || items[1]?.value || 0);
+        }
       }
     });
+
+    // Universal catch-all fallback if homeOdds still 0
+    if (!homeOdds) {
+      for (const b of betTypes) {
+        const items = b?.eventBetTypeItems || b?.odds || b?.items || b?.outcomes || [];
+        if (Array.isArray(items) && items.length >= 3) {
+          homeOdds = Number(items[0]?.odds || items[0]?.price || items[0]?.value || 0);
+          drawOdds = Number(items[1]?.odds || items[1]?.price || items[1]?.value || 0);
+          awayOdds = Number(items[2]?.odds || items[2]?.price || items[2]?.value || 0);
+          break;
+        }
+      }
+    }
   }
 
   // Summary string

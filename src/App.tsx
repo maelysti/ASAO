@@ -130,7 +130,7 @@ export default function App() {
   const [isExtracting, setIsExtracting] = useState<boolean>(false);
   const [autoExtractInterval, setAutoExtractInterval] = useState<number>(2);
 
-  const [autoRefresh, setAutoRefresh] = useState<boolean>(true);
+  const [autoRefresh, setAutoRefresh] = useState<boolean>(false);
   const [countdown, setCountdown] = useState<number>(10);
 
   const [apiState, setApiState] = useState<ApiConnectionState>({
@@ -174,34 +174,6 @@ export default function App() {
             : `Erreur API Sporty-Tech (Code HTTP ${allData.status || epRes.status})`,
       });
     }
-
-    // 3. Fetch past results for all entry points (Round 1 to latest played round)
-    validEPs.forEach((ep) => {
-      fetchInstantLeagueResults(ep.id, 0, 100, currentToken).then((resResults) => {
-        if (resResults.data) {
-          const roundsList = Array.isArray(resResults.data)
-            ? resResults.data
-            : (resResults.data as any).rounds || [];
-          setCompetitionResults((prev) => ({
-            ...prev,
-            [ep.id]: roundsList,
-          }));
-
-          // Automatically upgrade temporary IDs in extracted database with real Bet261 IDs
-          const newRecords = convertRoundResultsToExtractedRecords(
-            roundsList,
-            ep.id,
-            ep.name
-          );
-          if (newRecords.length > 0) {
-            setExtractedDatabase((prevDb) => {
-              const { merged } = mergeExtractedRecords(prevDb, newRecords);
-              return merged;
-            });
-          }
-        }
-      });
-    });
   }, []);
 
   // Initial load on mount or when token changes
