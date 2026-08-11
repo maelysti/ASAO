@@ -258,7 +258,7 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
     return { finalScore, halfTimeScore, hasScore };
   };
 
-  // Perform extraction logic (Phase 1: Past matches from Round 1 -> Phase 2: Live Stream)
+  // Perform extraction logic: Collect directly from current match data (allMatchesByComp) in application state
   const performExtractionStep = React.useCallback(() => {
     const newExtracted: ExtractedMatchRecord[] = [];
     const timestamp = new Date().toLocaleTimeString("fr-FR", {
@@ -268,11 +268,22 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
     });
 
     // Build existing ID map for strict deduplication
-    const existingIds = new Set(extractedDatabase.map((rec) => rec.id));
+    const existingIds = new Set(extractedDatabase.map((rec) => String(rec.id)));
     let scannedCount = 0;
     let dupCount = 0;
 
-    // Flatten all matches across competitions and sort by roundNumber ascending (Round 1, 2, 3...)
+    // Helper for fallback hash ID if no real ID is present
+    const getNumericFallbackId = (rn: any, hName: string, aName: string): number => {
+      let hash = 0;
+      const str = `R${rn}_${hName}_${aName}`;
+      for (let i = 0; i < str.length; i++) {
+        hash = (hash << 5) - hash + str.charCodeAt(i);
+        hash |= 0;
+      }
+      return Math.abs(hash) + 100000;
+    };
+
+    // Flatten all matches across competitions from current match data
     const allMatchesList: Array<{ match: any; compId: number; categoryName: string }> = [];
 
     Object.entries(allMatchesByComp).forEach(([catIdStr, compDataObj]) => {
@@ -290,89 +301,50 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
       }
     });
 
-    // Sort matches: Past/Finished matches first (by round 1 -> N), then Live/Upcoming
+    // Sort matches by round number ascending (Round 1, 2, 3...)
     allMatchesList.sort((a, b) => {
-      const rA = a.match.round || a.match.roundNumber || 1;
-      const rB = b.match.round || b.match.roundNumber || 1;
+      const rA = a.match.roundNumber || a.match.round || 1;
+      const rB = b.match.roundNumber || b.match.round || 1;
       return rA - rB;
     });
 
-    let extractedPastInThisRun = 0;
     let maxRoundProcessed = 1;
 
     allMatchesList.forEach(({ match: m, compId, categoryName }) => {
       scannedCount++;
-      const roundNum = m.round || m.roundNumber || 1;
+      const roundNum = m.roundNumber || m.round || 1;
       if (roundNum > maxRoundProcessed) maxRoundProcessed = roundNum;
 
       const homeName = m.homeTeam?.name || m.homeTeamName || (typeof m.homeTeam === "string" ? m.homeTeam : "") || m.name?.split(" vs ")[0]?.trim() || "Dom";
       const awayName = m.awayTeam?.name || m.awayTeamName || (typeof m.awayTeam === "string" ? m.awayTeam : "") || m.name?.split(" vs ")[1]?.trim() || "Ext";
 
-      const extractRealMatchId = (matchObj: any): string | number | undefined => {
-        if (!matchObj) return undefined;
-        // 1. Direct root ID fields FIRST (e.g. matchObj.id or matchObj.eventId, as displayed on MatchCard)
-        const direct = matchObj.id ?? matchObj.eventId ?? matchObj.matchId ?? matchObj.gameId ?? matchObj.code ?? matchObj.eventCode ?? matchObj.eventIdStr;
-        if (direct !== undefined && direct !== null && String(direct).trim() !== "" && String(direct) !== "0") {
-          return direct;
-        }
-        // 2. Check rawMatch or event sub-objects (un-mutated API payload)
-        if (matchObj.rawMatch) {
-          const raw = extractRealMatchId(matchObj.rawMatch);
-          if (raw !== undefined && raw !== null && String(raw).trim() !== "" && String(raw) !== "0") {
-            return raw;
-          }
-        }
-        if (matchObj.event) {
-          const ev = extractRealMatchId(matchObj.event);
-          if (ev !== undefined && ev !== null && String(ev).trim() !== "" && String(ev) !== "0") {
-            return ev;
-          }
-        }
-        // 3. Bet types array
-        if (Array.isArray(matchObj.eventBetTypes) && matchObj.eventBetTypes.length > 0) {
-          for (const bt of matchObj.eventBetTypes) {
-            if (bt && bt.eventId) return bt.eventId;
-          }
-        }
-        return undefined;
-      };
-
-      const getNumericFallbackId = (rn: any, hName: string, aName: string): number => {
-        let hash = 0;
-        const str = `R${rn}_${hName}_${aName}`;
-        for (let i = 0; i < str.length; i++) {
-          hash = (hash << 5) - hash + str.charCodeAt(i);
-          hash |= 0;
-        }
-        return Math.abs(hash) + 100000;
-      };
-
-      const rawMatchId = extractRealMatchId(m);
-      const matchId = rawMatchId !== undefined && rawMatchId !== null && String(rawMatchId).trim() !== ""
-        ? (typeof rawMatchId === "number" ? rawMatchId : String(rawMatchId))
+      // 1. Match ID: direct ID from current match object or fallback
+      const directId = m.id ?? m.eventId ?? m.matchId ?? m.rawMatch?.id ?? m.rawMatch?.eventId;
+      const matchId = (directId !== undefined && directId !== null && String(directId).trim() !== "" && String(directId) !== "0")
+        ? (typeof directId === "number" ? directId : String(directId))
         : getNumericFallbackId(roundNum, homeName, awayName);
 
-      // Deduplication check: if match is already in BDD, count as avoided duplicate
-      if (existingIds.has(matchId)) {
+      // Deduplication check
+      if (existingIds.has(String(matchId))) {
         dupCount++;
         return;
       }
 
-      // Extract exact score & halftime score from API payload (Bet261) using parseMatchScoreDetails
+      // 2. Score & Halftime Score parsing (from current match data)
       const scoreDetails = parseMatchScoreDetails(m);
 
       const matchStatusStr = String(m.state || m.preEventOrLive || m.status || "").toLowerCase();
       const isPreEvent = matchStatusStr.includes("preevent") || matchStatusStr.includes("upcoming") || matchStatusStr.includes("notstarted") || matchStatusStr.includes("scheduled");
 
-      // ABSOLUTE DIRECTIVE: DO NOT EXTRACT UNPLAYED / PRE-EVENT MATCHES OR MATCHES WITHOUT A REAL VALID SCORE FROM BET261
-      if (!scoreDetails.hasScore || !scoreDetails.scoreStr || scoreDetails.scoreStr === "-" || isPreEvent) {
+      // Extract only played/finished matches with a valid score
+      if (strictScoreOnly && (!scoreDetails.hasScore || !scoreDetails.scoreStr || scoreDetails.scoreStr === "-" || isPreEvent)) {
         return;
       }
 
       const finalScore = scoreDetails.scoreStr;
       const halfTimeScore = scoreDetails.htStr !== "-" ? scoreDetails.htStr : (m.halfTimeScore || "0 - 0");
 
-      // Extract Odds directly from API payload
+      // 3. Extract Odds directly from current match payload
       let hOdds = 0, dOdds = 0, aOdds = 0;
       let dc1X = 0, dc12 = 0, dcX2 = 0;
       let over25 = 0, under25 = 0;
@@ -386,7 +358,6 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
           const bId = Number(b.betTypeId || b.id || 0);
           const items = b.eventBetTypeItems || b.odds || b.items || [];
 
-          // 1X2 Market (BetTypeId 30083, 1, 30001, or name 1X2 / Winner / Match Result)
           if (
             bId === 30083 || bId === 1 || bId === 30001 ||
             name.includes("1X2") || name.includes("WINNER") || name.includes("RESULT")
@@ -398,9 +369,7 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
               else if (sName === "X" || sName === "DRAW") dOdds = val;
               else if (sName === "2" || sName === "AWAY") aOdds = val;
             });
-          }
-          // Double Chance Market (BetTypeId 30084, 30002, or name DOUBLE CHANCE / DC)
-          else if (
+          } else if (
             bId === 30084 || bId === 30002 ||
             name.includes("DOUBLE") || name.includes("CHANCE") || name === "DC"
           ) {
@@ -411,9 +380,7 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
               else if (sName === "12") dc12 = val;
               else if (sName === "X2") dcX2 = val;
             });
-          }
-          // Over / Under 2.5 Market (BetTypeId 30085, 30003, or name OVER/UNDER, PLUS/MOINS, 2.5, TOTAL)
-          else if (
+          } else if (
             bId === 30085 || bId === 30003 ||
             name.includes("OVER") || name.includes("UNDER") || name.includes("PLUS") || name.includes("MOINS") || name.includes("2.5") || name.includes("TOTAL")
           ) {
@@ -423,9 +390,7 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
               if (sName.includes("over") || sName.includes("plus")) over25 = val;
               else if (sName.includes("under") || sName.includes("moins")) under25 = val;
             });
-          }
-          // Both Teams To Score (GG/NG) Market (BetTypeId 30086, 30004, or name BOTH TEAMS, GOAL/NO GOAL, GG/NG, LES DEUX)
-          else if (
+          } else if (
             bId === 30086 || bId === 30004 ||
             name.includes("BOTH") || name.includes("GOAL") || name.includes("GG") || name.includes("LES DEUX")
           ) {
@@ -439,7 +404,6 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
         });
       }
 
-      // Fallbacks if betTypes array was missing or incomplete
       if (!hOdds && (m.homeOdds || m.drawOdds || m.awayOdds)) {
         hOdds = Number(m.homeOdds) || 0;
         dOdds = Number(m.drawOdds) || 0;
@@ -466,7 +430,7 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
       if (gg > 0 || ng > 0) summaryParts.push(`GG: ${gg.toFixed(2)} | NG: ${ng.toFixed(2)}`);
       const summaryStr = summaryParts.length > 0 ? summaryParts.join(" | ") : "Cotes non disponibles";
 
-      // Goals & Goal minutes extraction from Bet261 / Sporty API payload ONLY
+      // 4. Goals & Goal Minutes from current match data
       let goalMinsStr = "";
       let goalsList: any[] = [];
 
@@ -477,8 +441,6 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
           ? m.goalsDetail
           : (m.rawMatch?.goals && Array.isArray(m.rawMatch.goals) && m.rawMatch.goals.length > 0)
           ? m.rawMatch.goals
-          : (m.rawMatch?.goalsDetail && Array.isArray(m.rawMatch.goalsDetail) && m.rawMatch.goalsDetail.length > 0)
-          ? m.rawMatch.goalsDetail
           : [];
 
       if (rawGoals.length > 0) {
@@ -496,11 +458,8 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
           } else if (g.homeScore !== undefined && g.awayScore !== undefined) {
             const curH = Number(g.homeScore);
             const curA = Number(g.awayScore);
-            if (curH > prevH) {
-              teamSide = "home";
-            } else if (curA > prevA) {
-              teamSide = "away";
-            }
+            if (curH > prevH) teamSide = "home";
+            else if (curA > prevA) teamSide = "away";
             prevH = curH;
             prevA = curA;
           } else {
@@ -527,88 +486,26 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
           .join(", ");
       } else if (m.goalMinutes && typeof m.goalMinutes === "string" && m.goalMinutes.trim().length > 0 && !m.goalMinutes.includes("non transmises")) {
         goalMinsStr = m.goalMinutes;
-      } else if (m.rawMatch?.goalMinutes && typeof m.rawMatch.goalMinutes === "string" && m.rawMatch.goalMinutes.trim().length > 0) {
-        goalMinsStr = m.rawMatch.goalMinutes;
       } else {
         goalMinsStr = finalScore === "0-0" ? "Aucun but (0-0)" : "Minutes non transmises";
       }
 
-      // Robust Season Extraction
-      const rawSeason =
-        (m as any).seasonNumber ||
-        (m as any).season ||
-        (m as any).seasonId ||
-        (m as any).rawMatch?.seasonNumber ||
-        (m as any).rawMatch?.season ||
-        (m as any).rawMatch?.seasonId ||
-        (m as any).roundSeasonNumber ||
-        (m as any).round?.seasonNumber ||
-        1;
-
+      // 5. Season info
+      const rawSeason = m.seasonNumber || m.season || m.seasonId || m.rawMatch?.seasonNumber || 1;
       const sNum = typeof rawSeason === "number" ? rawSeason : (parseInt(String(rawSeason).replace(/\D/g, ""), 10) || 1);
-      const sName = (m as any).seasonName || (m as any).rawMatch?.seasonName || `Saison ${sNum}`;
-      const sId = (m as any).seasonId || (m as any).rawMatch?.seasonId || sNum;
+      const sName = m.seasonName || m.rawMatch?.seasonName || `Saison ${sNum}`;
+      const sId = m.seasonId || m.rawMatch?.seasonId || sNum;
 
-      const homeRankVal =
-        m.homeTeam?.position ??
-        m.homeTeam?.rank ??
-        m.homeRank ??
-        m.homePosition ??
-        m.rawMatch?.homeTeam?.position ??
-        m.rawMatch?.homeRank ??
-        0;
+      // 6. Ranks and points from current match object
+      const homeRankVal = m.homeRankAtRound ?? m.homeTeam?.position ?? m.homeRank ?? m.homePosition ?? 0;
+      const awayRankVal = m.awayRankAtRound ?? m.awayTeam?.position ?? m.awayRank ?? m.awayPosition ?? 0;
+      const homePointsVal = m.homePoints ?? m.homeTeam?.points ?? m.homePts ?? 0;
+      const awayPointsVal = m.awayPoints ?? m.awayTeam?.points ?? m.awayPts ?? 0;
 
-      const awayRankVal =
-        m.awayTeam?.position ??
-        m.awayTeam?.rank ??
-        m.awayRank ??
-        m.awayPosition ??
-        m.rawMatch?.awayTeam?.position ??
-        m.rawMatch?.awayRank ??
-        0;
+      const matchTimeVal = m.expectedStart || m.startTime || m.time || "";
 
-      const homePointsVal =
-        m.homeTeam?.points ??
-        m.homePoints ??
-        m.homePts ??
-        m.rawMatch?.homeTeam?.points ??
-        m.rawMatch?.homePoints ??
-        0;
-
-      const awayPointsVal =
-        m.awayTeam?.points ??
-        m.awayPoints ??
-        m.awayPts ??
-        m.rawMatch?.awayTeam?.points ??
-        m.rawMatch?.awayPoints ??
-        0;
-
-      const matchTimeVal =
-        m.expectedStart ||
-        m.startTime ||
-        m.time ||
-        m.rawMatch?.expectedStart ||
-        "";
-
-      const matchRawCat =
-        (m as any).eventCategoryId ||
-        (m as any).rawMatch?.eventCategoryId ||
-        (m as any).round?.eventCategoryId ||
-        (m as any).categoryId ||
-        (m as any).rawMatch?.categoryId;
-
-      const compRawCat =
-        allMatchesByComp?.[compId]?.matches?.[0]?.eventCategoryId ||
-        allMatchesByComp?.[compId]?.matches?.[0]?.rawMatch?.eventCategoryId;
-
-      const eventCatId =
-        matchRawCat && matchRawCat !== compId
-          ? matchRawCat
-          : compRawCat && compRawCat !== compId
-          ? compRawCat
-          : activeEventCategoryId && activeEventCategoryId !== compId
-          ? activeEventCategoryId
-          : matchRawCat || compRawCat || activeEventCategoryId || compId;
+      // 7. Event Category ID (exact season ID from current match object)
+      const eventCatId = m.eventCategoryId || m.rawMatch?.eventCategoryId || (compId === activeCategoryId ? activeEventCategoryId : undefined) || compId;
 
       newExtracted.push({
         id: matchId,
@@ -644,11 +541,10 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
         allOddsSummary: summaryStr,
         headToHeadHistory: [],
         extractedAt: timestamp,
-        source: "Live Extraction",
+        source: "Données Matchs Actuels",
       });
 
-      // Track extracted IDs dynamically
-      existingIds.add(matchId);
+      existingIds.add(String(matchId));
     });
 
     if (dupCount > 0) {
@@ -661,28 +557,18 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
       onAddExtractedRecords(newExtracted);
       addLog(
         "SUCCESS",
-        `[EXTRACTION ${extractionPhase === "PAST_ARCHIVE" ? "PHASE 1 (ROUND 1➔PAST)" : "PHASE 2 (LIVE)"}] +${newExtracted.length} match(s) ajouté(s). ${dupCount} doublons évités.`
+        `[DONNÉES MATCHS ACTUELS] +${newExtracted.length} match(s) extrait(s) directement depuis la mémoire active. ${dupCount} doublons ignorés.`
       );
       if (autoAiAnalysis) {
-        // Trigger auto AI database analysis seamlessly
         setTimeout(() => handleAnalyzeDatabaseWithAI(), 300);
       }
     } else {
       addLog(
         "INFO",
-        `[SCAN] ${scannedCount} matchs scannés. Aucun nouveau match. ${dupCount} doublons déjà en BDD.`
+        `[SCAN MATCHS ACTUELS] ${scannedCount} matchs scannés. Aucun nouveau match. ${dupCount} doublons déjà en BDD.`
       );
     }
-
-    // Auto-transition logic: If Phase 1 (PAST_ARCHIVE) is active and all past matches are extracted or 0 new past matches remain
-    if (extractionPhase === "PAST_ARCHIVE" && newExtracted.length === 0) {
-      setExtractionPhase("LIVE_STREAM");
-      addLog(
-        "MATRIX",
-        "⚡ [AUTO-TRANSITION] Phase 1 (Archivage dès Round 1) terminée ! Transition automatique vers PHASE 2 (Stream Live Continu)."
-      );
-    }
-  }, [allMatchesByComp, selectedLeagueFilter, strictScoreOnly, onAddExtractedRecords, extractedDatabase, extractionPhase]);
+  }, [allMatchesByComp, selectedLeagueFilter, strictScoreOnly, onAddExtractedRecords, extractedDatabase]);
 
   // Timer loop
   useEffect(() => {
