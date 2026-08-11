@@ -42,7 +42,7 @@ import {
   AIDatabaseRuleInsight,
   RuleItem,
 } from "../types";
-import { getRealMatchId, isTemporaryId, getNumericFallbackId, extractAllOddsFromMatch } from "../utils/globalAnalysisEngine";
+import { getRealMatchId, extractAllOddsFromMatch } from "../utils/globalAnalysisEngine";
 
 interface ExtractionViewProps {
   entryPoints: SportyEntryPoint[];
@@ -273,17 +273,6 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
     let scannedCount = 0;
     let dupCount = 0;
 
-    // Helper for fallback hash ID if no real ID is present
-    const getNumericFallbackId = (rn: any, hName: string, aName: string): number => {
-      let hash = 0;
-      const str = `R${rn}_${hName}_${aName}`;
-      for (let i = 0; i < str.length; i++) {
-        hash = (hash << 5) - hash + str.charCodeAt(i);
-        hash |= 0;
-      }
-      return Math.abs(hash) + 100000;
-    };
-
     // Flatten all matches across competitions from current match data
     const allMatchesList: Array<{ match: any; compId: number; categoryName: string }> = [];
 
@@ -319,11 +308,8 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
       const homeName = m.homeTeam?.name || m.homeTeamName || (typeof m.homeTeam === "string" ? m.homeTeam : "") || m.name?.split(" vs ")[0]?.trim() || "Dom";
       const awayName = m.awayTeam?.name || m.awayTeamName || (typeof m.awayTeam === "string" ? m.awayTeam : "") || m.name?.split(" vs ")[1]?.trim() || "Ext";
 
-      // 1. Match ID: direct ID from current match object or fallback
-      const realId = getRealMatchId(m);
-      const matchId = realId !== undefined
-        ? realId
-        : getNumericFallbackId(roundNum, homeName, awayName);
+      // 1. Match ID: direct ID from current match object
+      const matchId = getRealMatchId(m) || m.id || m.eventId || 0;
 
       // Deduplication check
       if (existingIds.has(String(matchId))) {
@@ -1757,17 +1743,10 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
                   {filteredDatabase.map((m, i) => (
                     <tr key={i} className="hover:bg-slate-800/40 transition-colors">
                       <td className="p-3 font-mono text-[11px]">
-                        {isTemporaryId(m.id) ? (
-                          <span className="px-2 py-0.5 rounded bg-amber-500/15 border border-amber-500/40 text-amber-300 font-extrabold text-[10px] inline-flex items-center gap-1" title="ID temporaire : sera converti automatiquement en ID réel Bet261 dès réception des résultats">
-                            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-                            Temp #{m.id}
-                          </span>
-                        ) : (
-                          <span className="px-2 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 font-extrabold text-[10px] inline-flex items-center gap-1" title="ID Réel Officiel Bet261">
-                            <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                            #{m.id}
-                          </span>
-                        )}
+                        <span className="px-2 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 font-extrabold text-[10px] inline-flex items-center gap-1" title="ID Officiel Bet261">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                          #{m.id}
+                        </span>
                       </td>
                       <td className="p-3 font-mono text-cyan-400 font-extrabold text-[11px]">
                         <span className="px-2 py-0.5 rounded bg-cyan-500/10 border border-cyan-500/30">

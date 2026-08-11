@@ -275,32 +275,50 @@ export async function fetchInstantLeagueResults(
 
       const primaryCatId = seasonCatIds[0] || entryPointId;
 
-      // Enrich result rounds with playout data (real IDs, goals, scores) in parallel
+      // Enrich result rounds with playout data (real IDs, goals, scores) and round details (odds) in parallel
       await Promise.all(
         rounds.map(async (r) => {
           try {
             let rCatId = r.seasonId ? Number(r.seasonId) : primaryCatId;
-            let playoutRes = await fetchInstantLeaguePlayout(
-              r.roundNumber,
-              rCatId,
-              entryPointId,
-              activeToken
-            );
+            let [playoutRes, roundDetailsRes] = await Promise.all([
+              fetchInstantLeaguePlayout(
+                r.roundNumber,
+                rCatId,
+                entryPointId,
+                activeToken
+              ),
+              fetchInstantLeagueRound(
+                r.roundNumber,
+                rCatId,
+                activeToken,
+                entryPointId
+              ).catch(() => ({ data: null, status: 500 })),
+            ]);
             let playouts = playoutRes.data || [];
+            let roundMatches = roundDetailsRes.data?.matches || [];
 
             // Fallback to alternate subCategory if first attempt returned empty
             if (playouts.length === 0 && seasonCatIds.length > 1) {
               for (const altCatId of seasonCatIds) {
                 if (altCatId === rCatId) continue;
-                const altRes = await fetchInstantLeaguePlayout(
-                  r.roundNumber,
-                  altCatId,
-                  entryPointId,
-                  activeToken
-                );
+                const [altRes, altRoundRes] = await Promise.all([
+                  fetchInstantLeaguePlayout(
+                    r.roundNumber,
+                    altCatId,
+                    entryPointId,
+                    activeToken
+                  ),
+                  fetchInstantLeagueRound(
+                    r.roundNumber,
+                    altCatId,
+                    activeToken,
+                    entryPointId
+                  ).catch(() => ({ data: null, status: 500 })),
+                ]);
                 if (altRes.data && altRes.data.length > 0) {
                   rCatId = altCatId;
                   playouts = altRes.data;
+                  if (altRoundRes.data?.matches) roundMatches = altRoundRes.data.matches;
                   break;
                 }
               }
@@ -319,7 +337,18 @@ export async function fetchInstantLeagueResults(
                   return pH && pA && pH === hName && pA === aName;
                 }) || playouts[idx];
 
-                const realId = (m.id && m.id !== 0) ? m.id : (playoutItem?.id && playoutItem.id !== 0 ? playoutItem.id : undefined);
+                let roundItem = roundMatches.find((rm: any) => {
+                  if (m.id && m.id !== 0 && rm.id === m.id) return true;
+                  const rmH = norm(rm.homeTeam?.name || rm.name?.split(" vs ")[0] || "");
+                  const rmA = norm(rm.awayTeam?.name || rm.name?.split(" vs ")[1] || "");
+                  return rmH && rmA && rmH === hName && rmA === aName;
+                }) || roundMatches[idx];
+
+                const realId = (m.id && m.id !== 0)
+                  ? m.id
+                  : (playoutItem?.id && playoutItem.id !== 0
+                      ? playoutItem.id
+                      : (roundItem?.id && roundItem.id !== 0 ? roundItem.id : undefined));
 
                 let goals = m.goals || playoutItem?.goals || [];
                 let score = m.score;
@@ -339,7 +368,10 @@ export async function fetchInstantLeagueResults(
                   }
                 }
 
+                const eventBetTypes = m.eventBetTypes || m.odds || roundItem?.eventBetTypes || roundItem?.odds || playoutItem?.eventBetTypes || playoutItem?.odds || playoutItem?.markets || [];
+
                 return {
+                  ...roundItem,
                   ...playoutItem,
                   ...m,
                   id: realId || m.id,
@@ -349,13 +381,13 @@ export async function fetchInstantLeagueResults(
                   goals,
                   score: score || m.score,
                   halfTimeScore: halfTimeScore || m.halfTimeScore,
-                  eventBetTypes: m.eventBetTypes || m.odds || playoutItem?.eventBetTypes || playoutItem?.odds || playoutItem?.markets || [],
-                  homeOdds: m.homeOdds || playoutItem?.homeOdds,
-                  drawOdds: m.drawOdds || playoutItem?.drawOdds,
-                  awayOdds: m.awayOdds || playoutItem?.awayOdds,
-                  doubleChanceOdds: m.doubleChanceOdds || playoutItem?.doubleChanceOdds,
-                  overUnderOdds: m.overUnderOdds || playoutItem?.overUnderOdds,
-                  bothTeamsScoreOdds: m.bothTeamsScoreOdds || playoutItem?.bothTeamsScoreOdds,
+                  eventBetTypes,
+                  homeOdds: m.homeOdds || roundItem?.homeOdds || playoutItem?.homeOdds,
+                  drawOdds: m.drawOdds || roundItem?.drawOdds || playoutItem?.drawOdds,
+                  awayOdds: m.awayOdds || roundItem?.awayOdds || playoutItem?.awayOdds,
+                  doubleChanceOdds: m.doubleChanceOdds || roundItem?.doubleChanceOdds || playoutItem?.doubleChanceOdds,
+                  overUnderOdds: m.overUnderOdds || roundItem?.overUnderOdds || playoutItem?.overUnderOdds,
+                  bothTeamsScoreOdds: m.bothTeamsScoreOdds || roundItem?.bothTeamsScoreOdds || playoutItem?.bothTeamsScoreOdds,
                 };
               });
             }

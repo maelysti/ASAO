@@ -42,7 +42,7 @@ import { PasswordGateModal } from "./components/PasswordGateModal";
 
 import { RuleItem, AIRecapPrediction, ExtractedMatchRecord } from "./types";
 import { DEFAULT_RULES, processAllRules, runAIModeAnalysis } from "./utils/ruleEngine";
-import { getH2HAnalysisForMatch, getRealMatchId, isTemporaryId, getNumericFallbackId, mergeExtractedRecords, convertRoundResultsToExtractedRecords } from "./utils/globalAnalysisEngine";
+import { getH2HAnalysisForMatch, getRealMatchId, mergeExtractedRecords, convertRoundResultsToExtractedRecords } from "./utils/globalAnalysisEngine";
 
 import { AlertTriangle, Key, RefreshCw, Trophy, Layers, Activity, Database, Download, ListOrdered, Sliders, Zap, BarChart3, PanelLeftClose, PanelLeftOpen, ChevronLeft, ChevronRight, Wrench, Clock, Flame, Lock, Eye, BellRing, X } from "lucide-react";
 
@@ -295,16 +295,6 @@ export default function App() {
     return undefined;
   };
 
-  const getNumericFallbackId = (rn: any, hName: string, aName: string): number => {
-    let hash = 0;
-    const str = `R${rn}_${hName}_${aName}`;
-    for (let i = 0; i < str.length; i++) {
-      hash = (hash << 5) - hash + str.charCodeAt(i);
-      hash |= 0;
-    }
-    return Math.abs(hash) + 100000;
-  };
-
   const allMatchesByComp = useMemo(() => {
     const map: Record<number, { matches: any[]; categoryName: string }> = {};
 
@@ -347,13 +337,9 @@ export default function App() {
 
         const realMatchId = extractRealMatchId(incoming) ?? extractRealMatchId(existing);
 
-        const hName = (incoming.homeTeam?.name || incoming.homeTeamName || (typeof incoming.homeTeam === "string" ? incoming.homeTeam : "") || incoming.name?.split(" vs ")[0]?.trim() || existing?.homeTeam?.name || "DOM");
-        const aName = (incoming.awayTeam?.name || incoming.awayTeamName || (typeof incoming.awayTeam === "string" ? incoming.awayTeam : "") || incoming.name?.split(" vs ")[1]?.trim() || existing?.awayTeam?.name || "EXT");
         const resolvedRNum = rNum || incoming.roundNumber || incoming.round || existing?.roundNumber || 1;
 
-        const matchIdVal = (realMatchId !== undefined && realMatchId !== null && String(realMatchId).trim() !== "")
-          ? realMatchId
-          : getNumericFallbackId(resolvedRNum, hName, aName);
+        const matchIdVal = realMatchId ?? incoming.id ?? existing?.id ?? 0;
 
         if (!existing) {
           return {
@@ -1055,9 +1041,7 @@ export default function App() {
     const awayRankAtRound = seasonRankings.getEnteringRank(selectedRoundNumber, awayName);
 
     const realMatchId = extractRealMatchId(m) ?? extractRealMatchId(resultMatch);
-    const resolvedMatchId = realMatchId !== undefined && realMatchId !== null && String(realMatchId).trim() !== ""
-      ? realMatchId
-      : getNumericFallbackId(selectedRoundNumber, homeName, awayName);
+    const resolvedMatchId = realMatchId ?? m.id ?? resultMatch?.id ?? 0;
 
     const matchCatId =
       extractSeasonCatId(m, activeCategoryId) ||

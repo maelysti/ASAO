@@ -47,11 +47,6 @@ export function getRealMatchId(m: any): number | string | undefined {
  * Checks whether a given match ID is a temporary fallback or timestamp ID
  */
 export function isTemporaryId(id: number | string | undefined | null): boolean {
-  if (id === undefined || id === null || id === 0 || id === "0" || id === "") return true;
-  const num = Number(id);
-  if (isNaN(num)) return false;
-  if (num > 1000000000000) return true; // Date.now() timestamp
-  if (num >= 100000 && num <= 999999) return true; // Fallback hash ID
   return false;
 }
 
@@ -59,13 +54,7 @@ export function isTemporaryId(id: number | string | undefined | null): boolean {
  * Generates a consistent numeric fallback ID if no real ID is present
  */
 export function getNumericFallbackId(rn: any, hName: string, aName: string): number {
-  let hash = 0;
-  const str = `R${rn}_${hName}_${aName}`;
-  for (let i = 0; i < str.length; i++) {
-    hash = (hash << 5) - hash + str.charCodeAt(i);
-    hash |= 0;
-  }
-  return Math.abs(hash) + 100000;
+  return 0;
 }
 
 /**
@@ -389,8 +378,7 @@ export function convertRoundResultsToExtractedRecords(
       const awayName = m.awayTeam?.name || m.name?.split(" vs ")[1] || "Away";
 
       const rNum = r.roundNumber || (m as any).roundNumber || (m as any).round || 1;
-      const realMatchId = getRealMatchId(m);
-      const matchId = realMatchId !== undefined ? realMatchId : getNumericFallbackId(rNum, homeName, awayName);
+      const matchId = getRealMatchId(m) || m.id || (m as any).eventId || 0;
 
       const scoreStr = m.score || "0:0";
       const [h, a] = scoreStr.split(":").map((s) => parseInt(s, 10) || 0);
