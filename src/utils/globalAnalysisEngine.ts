@@ -409,9 +409,20 @@ export function convertRoundResultsToExtractedRecords(
 ): ExtractedMatchRecord[] {
   const records: ExtractedMatchRecord[] = [];
   rounds.forEach((r) => {
-    (r.matches || []).forEach((m, idx) => {
-      const homeName = m.homeTeam?.name || m.name?.split(" vs ")[0] || "Home";
-      const awayName = m.awayTeam?.name || m.name?.split(" vs ")[1] || "Away";
+    (r.matches || []).forEach((m) => {
+      let homeName = m.homeTeam?.name || (m as any).homeTeamName || "";
+      let awayName = m.awayTeam?.name || (m as any).awayTeamName || "";
+
+      if (!homeName || !awayName) {
+        const nameStr = m.name || "";
+        const parts = nameStr.split(/\s+(?:vs|VS|-|v|\/)\s+/);
+        if (parts.length >= 2) {
+          homeName = homeName || parts[0].trim();
+          awayName = awayName || parts[1].trim();
+        }
+      }
+      homeName = homeName || "Home";
+      awayName = awayName || "Away";
 
       const rNum = r.roundNumber || (m as any).roundNumber || (m as any).round || 1;
       const matchId = getRealMatchId(m) || m.id || (m as any).eventId || 0;
@@ -731,34 +742,61 @@ export function getH2HAnalysisForMatch(
   event: SportyEvent | CombinedMatchData,
   database: ExtractedMatchRecord[]
 ): H2HMatchAnalysisResult {
-  const home = (event.homeTeamName || "").trim().toLowerCase();
-  const away = (event.awayTeamName || "").trim().toLowerCase();
+  const norm = (s: string) =>
+    (s || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, "")
+      .replace(/^(fc|ac|sc|cd|ud|cf|real|st|sporting)/g, "")
+      .replace(/(fc|ac|sc|cd|ud|cf)$/g, "");
+
+  const home = norm(event.homeTeamName || "");
+  const away = norm(event.awayTeamName || "");
+
+  const isInvalidHome = !home || home.length < 2 || home === "dom" || home === "equipe1" || home === "home";
+  const isInvalidAway = !away || away.length < 2 || away === "ext" || away === "equipe2" || away === "away";
 
   // 1. Search direct head-to-head matches in database
-  const directMatches = database.filter((m) => {
-    const dbHome = (m.homeTeamName || "").trim().toLowerCase();
-    const dbAway = (m.awayTeamName || "").trim().toLowerCase();
-    return (
-      (dbHome.includes(home) || home.includes(dbHome)) &&
-      (dbAway.includes(away) || away.includes(dbAway))
-    ) || (
-      (dbHome.includes(away) || away.includes(dbAway)) &&
-      (dbAway.includes(home) || home.includes(dbHome))
-    );
-  });
+  const directMatches = (isInvalidHome || isInvalidAway)
+    ? []
+    : database.filter((m) => {
+        const dbHome = norm(m.homeTeamName || "");
+        const dbAway = norm(m.awayTeamName || "");
+        if (!dbHome || !dbAway || dbHome.length < 2 || dbAway.length < 2) return false;
+
+        const exactDirect = (dbHome === home && dbAway === away) || (dbHome === away && dbAway === home);
+        if (exactDirect) return true;
+
+        if (home.length >= 4 && away.length >= 4 && dbHome.length >= 4 && dbAway.length >= 4) {
+          const partialDirect =
+            ((dbHome.includes(home) || home.includes(dbHome)) && (dbAway.includes(away) || away.includes(dbAway))) ||
+            ((dbHome.includes(away) || away.includes(dbAway)) && (dbAway.includes(home) || home.includes(dbHome)));
+          return partialDirect;
+        }
+        return false;
+      });
 
   // 2. Search general recorded matches for Home team & Away team separately in database
-  const homeTeamMatches = database.filter((m) => {
-    const hName = (m.homeTeamName || "").trim().toLowerCase();
-    const aName = (m.awayTeamName || "").trim().toLowerCase();
-    return hName.includes(home) || aName.includes(home);
-  });
+  const homeTeamMatches = isInvalidHome
+    ? []
+    : database.filter((m) => {
+        const hName = norm(m.homeTeamName || "");
+        const aName = norm(m.awayTeamName || "");
+        if (!hName || !aName) return false;
+        if (hName === home || aName === home) return true;
+        if (home.length >= 4 && (hName.includes(home) || aName.includes(home))) return true;
+        return false;
+      });
 
-  const awayTeamMatches = database.filter((m) => {
-    const hName = (m.homeTeamName || "").trim().toLowerCase();
-    const aName = (m.awayTeamName || "").trim().toLowerCase();
-    return hName.includes(away) || aName.includes(away);
-  });
+  const awayTeamMatches = isInvalidAway
+    ? []
+    : database.filter((m) => {
+        const hName = norm(m.homeTeamName || "");
+        const aName = norm(m.awayTeamName || "");
+        if (!hName || !aName) return false;
+        if (hName === away || aName === away) return true;
+        if (away.length >= 4 && (hName.includes(away) || aName.includes(away))) return true;
+        return false;
+      });
 
   // Extract ranks & odds
   const isCombined = "categoryName" in event;

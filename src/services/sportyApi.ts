@@ -325,24 +325,30 @@ export async function fetchInstantLeagueResults(
             }
 
             if (r.matches && Array.isArray(r.matches)) {
-              r.matches = r.matches.map((m: any, idx: number) => {
+              r.matches = r.matches.map((m: any) => {
                 const norm = (s: string) => (s || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
-                const hName = norm(m.homeTeam?.name || m.name?.split(" vs ")[0] || "");
-                const aName = norm(m.awayTeam?.name || m.name?.split(" vs ")[1] || "");
+                const extractNames = (item: any) => {
+                  if (item.homeTeam?.name && item.awayTeam?.name) return { h: norm(item.homeTeam.name), a: norm(item.awayTeam.name) };
+                  if (item.homeTeamName && item.awayTeamName) return { h: norm(item.homeTeamName), a: norm(item.awayTeamName) };
+                  const nameStr = item.name || "";
+                  const parts = nameStr.split(/\s+(?:vs|VS|-|v|\/)\s+/);
+                  if (parts.length >= 2) return { h: norm(parts[0]), a: norm(parts[1]) };
+                  return { h: "", a: "" };
+                };
+
+                const { h: hName, a: aName } = extractNames(m);
 
                 let playoutItem = playouts.find((p: any) => {
-                  if (m.id && m.id !== 0 && p.id === m.id) return true;
-                  const pH = norm(p.homeTeam?.name || p.name?.split(" vs ")[0] || "");
-                  const pA = norm(p.awayTeam?.name || p.name?.split(" vs ")[1] || "");
-                  return pH && pA && pH === hName && pA === aName;
-                }) || playouts[idx];
+                  if (m.id && m.id !== 0 && String(p.id) === String(m.id)) return true;
+                  const { h: pH, a: pA } = extractNames(p);
+                  return pH && pA && hName && aName && pH === hName && pA === aName;
+                });
 
                 let roundItem = roundMatches.find((rm: any) => {
-                  if (m.id && m.id !== 0 && rm.id === m.id) return true;
-                  const rmH = norm(rm.homeTeam?.name || rm.name?.split(" vs ")[0] || "");
-                  const rmA = norm(rm.awayTeam?.name || rm.name?.split(" vs ")[1] || "");
-                  return rmH && rmA && rmH === hName && rmA === aName;
-                }) || roundMatches[idx];
+                  if (m.id && m.id !== 0 && String(rm.id) === String(m.id)) return true;
+                  const { h: rmH, a: rmA } = extractNames(rm);
+                  return rmH && rmA && hName && aName && rmH === hName && rmA === aName;
+                });
 
                 const realId = (m.id && m.id !== 0)
                   ? m.id
@@ -371,8 +377,8 @@ export async function fetchInstantLeagueResults(
                 const eventBetTypes = m.eventBetTypes || m.odds || roundItem?.eventBetTypes || roundItem?.odds || playoutItem?.eventBetTypes || playoutItem?.odds || playoutItem?.markets || [];
 
                 return {
-                  ...roundItem,
-                  ...playoutItem,
+                  ...(roundItem || {}),
+                  ...(playoutItem || {}),
                   ...m,
                   id: realId || m.id,
                   entryPointId,
