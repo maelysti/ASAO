@@ -427,10 +427,28 @@ export function convertRoundResultsToExtractedRecords(
       const rNum = r.roundNumber || (m as any).roundNumber || (m as any).round || 1;
       const matchId = getRealMatchId(m) || m.id || (m as any).eventId || 0;
 
-      const scoreStr = m.score || "0:0";
-      const [h, a] = scoreStr.split(":").map((s) => parseInt(s, 10) || 0);
+      // Ensure match has a real communicated final result
+      const scoreRaw = String(m.score || "").trim();
+      const statusStr = String((m as any).state || (m as any).preEventOrLive || (m as any).status || "").toLowerCase();
+      const isPreEvent = statusStr.includes("preevent") || statusStr.includes("upcoming") || statusStr.includes("notstarted") || statusStr.includes("scheduled");
 
-      const goalMins = (m.goals || []).map((g) => `${g.minute}'`).join(", ");
+      // Strictly extract ONLY matches with finished results communicated by system
+      if (!scoreRaw || scoreRaw === "-" || isPreEvent) {
+        return;
+      }
+
+      const scoreFormatted = scoreRaw.replace(":", "-").trim();
+      const parts = scoreFormatted.split("-").map((s) => parseInt(s, 10));
+      const h = !isNaN(parts[0]) ? parts[0] : 0;
+      const a = !isNaN(parts[1]) ? parts[1] : 0;
+
+      const htRaw = String(m.halfTimeScore || "").trim().replace(":", "-");
+      const halfTimeScore = htRaw && htRaw !== "-" ? htRaw : "0-0";
+
+      const goalMins = (m.goals || [])
+        .map((g) => (g.minute !== undefined && g.minute !== null ? `${g.minute}'` : ""))
+        .filter(Boolean)
+        .join(", ");
 
       const sNum =
         (r as any).seasonNumber ||
@@ -474,10 +492,10 @@ export function convertRoundResultsToExtractedRecords(
         seasonId: (r as any).seasonId || sNum,
         status: "Finished",
         expectedStart: r.expectedStart,
-        score: m.score,
-        halfTimeScore: m.halfTimeScore,
-        goalsCount: h + a,
-        goalMinutes: goalMins,
+        score: scoreFormatted,
+        halfTimeScore: halfTimeScore,
+        goalsCount: (m.goals && m.goals.length > 0) ? m.goals.length : (h + a),
+        goalMinutes: goalMins || (scoreFormatted === "0-0" ? "Aucun but (0-0)" : "Minutes non transmises"),
         goalsDetail: m.goals || [],
         homeOdds: odds.homeOdds,
         drawOdds: odds.drawOdds,

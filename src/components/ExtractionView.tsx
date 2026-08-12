@@ -47,7 +47,7 @@ import {
   extractAllOddsFromMatch,
   convertRoundResultsToExtractedRecords,
 } from "../utils/globalAnalysisEngine";
-import { fetchInstantLeagueResults, getStoredToken } from "../services/sportyApi";
+import { fetchInstantLeagueResults, getStoredToken, InstantLeagueRoundResult } from "../services/sportyApi";
 
 interface ExtractionViewProps {
   entryPoints: SportyEntryPoint[];
@@ -435,26 +435,46 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
       });
     });
 
-    // 2. Fetch all played round results (Round 1 to current round) directly from official API
+    // 2. Fetch all played round results (Round 1 to current round) competition-by-competition & round-by-round with full pagination
     for (const ep of targetedEntryPoints) {
-      try {
-        const resultsRes = await fetchInstantLeagueResults(ep.id, 0, 100, activeToken);
-        if (resultsRes.data && Array.isArray(resultsRes.data)) {
-          const rounds = resultsRes.data;
-          const apiRecords = convertRoundResultsToExtractedRecords(rounds, ep.id, ep.name);
+      let skip = 0;
+      const pageSize = 50;
+      let hasMore = true;
+      const compRounds: InstantLeagueRoundResult[] = [];
 
-          apiRecords.forEach((rec) => {
-            scannedCount++;
-            if (rec.score && rec.score !== "-" && rec.score !== "0:0" && rec.score !== "") {
-              const rNum = Number(rec.roundNumber) || 1;
-              if (rNum > maxRoundProcessed) maxRoundProcessed = rNum;
-              newExtracted.push(rec);
+      while (hasMore) {
+        try {
+          const resultsRes = await fetchInstantLeagueResults(ep.id, skip, pageSize, activeToken);
+          if (resultsRes.data && Array.isArray(resultsRes.data) && resultsRes.data.length > 0) {
+            compRounds.push(...resultsRes.data);
+            if (resultsRes.hasMore && resultsRes.data.length >= pageSize) {
+              skip += pageSize;
+            } else {
+              hasMore = false;
             }
-          });
+          } else {
+            hasMore = false;
+          }
+        } catch (err) {
+          console.warn(`Erreur résultats pour ligue ${ep.name}:`, err);
+          hasMore = false;
         }
-      } catch (err) {
-        console.warn(`Erreur résultats pour ligue ${ep.name}:`, err);
       }
+
+      // Sort rounds sequentially from Round 1 up to max round
+      compRounds.sort((a, b) => (a.roundNumber || 1) - (b.roundNumber || 1));
+
+      const apiRecords = convertRoundResultsToExtractedRecords(compRounds, ep.id, ep.name);
+
+      apiRecords.forEach((rec) => {
+        scannedCount++;
+        // Keep strictly finished matches with real communicated scores (0-0, 1-0, etc.)
+        if (rec.score && rec.score !== "-" && rec.score !== "") {
+          const rNum = Number(rec.roundNumber) || 1;
+          if (rNum > maxRoundProcessed) maxRoundProcessed = rNum;
+          newExtracted.push(rec);
+        }
+      });
     }
 
     setCurrentRoundProgress(maxRoundProcessed);
