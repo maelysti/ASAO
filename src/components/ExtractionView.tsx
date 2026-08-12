@@ -1135,10 +1135,11 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
           <div className="md:col-span-2 flex items-center gap-3">
             <button
               onClick={performExtractionStep}
-              className="flex-1 py-3 px-5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs rounded-2xl flex items-center justify-center gap-2.5 transition-all shadow-lg shadow-emerald-500/20 cursor-pointer border border-emerald-300/40"
+              disabled={isExtractingLoading}
+              className="flex-1 py-3 px-5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 disabled:opacity-50 text-slate-950 font-black text-xs rounded-2xl flex items-center justify-center gap-2.5 transition-all shadow-lg shadow-emerald-500/20 cursor-pointer border border-emerald-300/40"
             >
-              <Database className="w-4 h-4 fill-current" />
-              <span>Extraire les Matchs Actuels Maintenant</span>
+              <Database className={`w-4 h-4 fill-current ${isExtractingLoading ? 'animate-spin' : ''}`} />
+              <span>{isExtractingLoading ? "Extraction des journées en cours..." : "Extraire Toutes les Journées (J1 à Actuelle)"}</span>
             </button>
 
             <button
