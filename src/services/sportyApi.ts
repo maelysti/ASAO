@@ -583,8 +583,8 @@ export async function fetchInstantLeagueRound(
           goals,
           score,
           halfTimeScore,
-          state: score ? "Ended" : (m.state || "PreEvent"),
-          preEventOrLive: score ? "Finished" : (m.preEventOrLive || "PreEvent"),
+          state: (score || m.state === "Ended" || m.state === "Undisputed" || m.state === "Finished") ? "Finished" : (m.state || "PreEvent"),
+          preEventOrLive: (score || m.preEventOrLive === "Finished" || m.preEventOrLive === "Ended") ? "Finished" : (m.preEventOrLive || "PreEvent"),
         };
       });
 
@@ -838,8 +838,8 @@ export async function fetchAllDataForCompetitions(
                 : undefined,
               expectedStart: matchStart,
               expectedEnd: round.expectedEnd,
-              state: m.state || (m.score ? "Ended" : "PreEvent"),
-              preEventOrLive: m.preEventOrLive || (m.score ? "Finished" : "PreEvent"),
+              state: (m.score || m.state === "Ended" || m.state === "Undisputed" || m.state === "Finished") ? "Finished" : (m.state || "PreEvent"),
+              preEventOrLive: (m.score || m.preEventOrLive === "Finished" || m.preEventOrLive === "Ended") ? "Finished" : (m.preEventOrLive || "PreEvent"),
               eventBetTypes: m.eventBetTypes || [],
               score: m.score,
               halfTimeScore: m.halfTimeScore,
@@ -881,7 +881,7 @@ export function classifyMatchStatus(event: {
     return "live";
   }
 
-  if (state === "ended" || state === "finished" || preOrLive === "ended" || preOrLive === "finished") {
+  if (state === "ended" || state === "finished" || state === "undisputed" || preOrLive === "ended" || preOrLive === "finished" || preOrLive === "undisputed") {
     return "finished";
   }
 

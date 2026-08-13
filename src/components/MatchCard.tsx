@@ -121,8 +121,9 @@ export const MatchCard: React.FC<MatchCardProps> = ({ event, matchIndex, databas
 
   const isEndedOrFinished =
     statusCategory === "finished" ||
-    event.state === "Ended" ||
     event.state === "Finished" ||
+    event.state === "Ended" ||
+    event.state === "Undisputed" ||
     event.preEventOrLive === "Finished" ||
     event.preEventOrLive === "Ended" ||
     Boolean(rawScore);

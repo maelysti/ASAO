@@ -28,6 +28,9 @@ import {
   Plus,
   FileSpreadsheet,
   Table,
+  RotateCcw,
+  ArrowUpDown,
+  LayoutGrid,
 } from "lucide-react";
 import { ExtractedMatchRecord, SportyEntryPoint, RuleItem } from "../types";
 import { getH2HAnalysisForMatch, getRealMatchId } from "../utils/globalAnalysisEngine";
@@ -50,11 +53,40 @@ export const SCOPE_OPTIONS: {
 }[] = [
   { id: "ALL", label: "Tous les Champs", shortLabel: "Tout", icon: "🌐", desc: "Recherche globale multi-critères" },
   { id: "TEAMS", label: "Équipes & Matchs", shortLabel: "Équipes", icon: "🏟️", desc: "Noms des équipes (Domicile / Extérieur)" },
-  { id: "ODDS", label: "Cotes (1X2, Over, BTTS)", shortLabel: "Cotes", icon: "🎲", desc: "Valeurs exactes de cotes (ex: 1.85, 3.20)" },
+  { id: "ODDS", label: "Cotes (1X2, DC, O/U, GG)", shortLabel: "Cotes", icon: "🎲", desc: "Recherche ciblée sur les cotes de marchés" },
   { id: "RANKS", label: "Rang & Classement", shortLabel: "Rangs", icon: "📊", desc: "Positions d'équipe (1er, 5ème, 12ème...)" },
   { id: "SCORES", label: "Scores Exacts (FT/MT)", shortLabel: "Scores", icon: "⚽", desc: "Scores finaux ou mi-temps (ex: 2-1, 0-0)" },
-  { id: "ROUNDS", label: "Journées & Saisons", shortLabel: "Journées", icon: "📅", desc: "Numéros de journée (J1, J5) ou saisons" },
+  { id: "ROUNDS", label: "Journées & ID Event Cat.", shortLabel: "Journées/ID", icon: "📅", desc: "Numéros de journée (J1, J5) ou ID Event Category (#101)" },
   { id: "GOALS", label: "Minutage des Buts", shortLabel: "Minutes", icon: "⏱️", desc: "Minutages des buts marqués (ex: 12', 88')" },
+];
+
+export type OddsMarketSubFilter =
+  | "ALL"
+  | "1X2"
+  | "DC"
+  | "DC_1X"
+  | "DC_12"
+  | "DC_X2"
+  | "OU"
+  | "OVER_25"
+  | "UNDER_25"
+  | "BTTS"
+  | "BTTS_YES"
+  | "BTTS_NO";
+
+export const ODDS_MARKET_OPTIONS: { id: OddsMarketSubFilter; label: string; short: string }[] = [
+  { id: "ALL", label: "Toutes les Cotes", short: "Toutes Cotes" },
+  { id: "1X2", label: "Marché 1X2 (1, X, 2)", short: "1X2" },
+  { id: "DC", label: "Toutes Double Chance (1X, 12, X2)", short: "Toutes DC" },
+  { id: "DC_1X", label: "Cote 1X (Dom / Nul)", short: "Cote 1X" },
+  { id: "DC_12", label: "Cote 12 (Dom / Ext)", short: "Cote 12" },
+  { id: "DC_X2", label: "Cote X2 (Nul / Ext)", short: "Cote X2" },
+  { id: "OU", label: "Cotes Over / Under 2.5", short: "Over/Under" },
+  { id: "OVER_25", label: "Cote Over 2.5", short: "Cote > 2.5" },
+  { id: "UNDER_25", label: "Cote Under 2.5", short: "Cote < 2.5" },
+  { id: "BTTS", label: "Cotes BTTS (GG / NG)", short: "BTTS / GG" },
+  { id: "BTTS_YES", label: "Cote GG (Oui)", short: "Cote GG" },
+  { id: "BTTS_NO", label: "Cote NG (Non)", short: "Cote NG" },
 ];
 
 interface FindViewProps {
@@ -75,9 +107,16 @@ export const FindView: React.FC<FindViewProps> = ({
   // Targeted Search Scope ("ALL", "TEAMS", "ODDS", "RANKS", "SCORES", "ROUNDS", "GOALS")
   const [searchScope, setSearchScope] = useState<SearchScope>("ALL");
 
+  // Targeted Odds Market Sub-Filter
+  const [selectedOddsMarket, setSelectedOddsMarket] = useState<OddsMarketSubFilter>("ALL");
+
+  // Min / Max Odds Range Filter
+  const [minOdds, setMinOdds] = useState<string>("");
+  const [maxOdds, setMaxOdds] = useState<string>("");
+
   // Structured Filter Controls
   const [selectedComp, setSelectedComp] = useState<string | number>("ALL");
-  const [selectedSeason, setSelectedSeason] = useState<string | number>("ALL");
+  const [selectedEventCatId, setSelectedEventCatId] = useState<string | number>("ALL");
   const [selectedOutcome, setSelectedOutcome] = useState<"ALL" | "1" | "X" | "2">("ALL");
   const [selectedGoalMarket, setSelectedGoalMarket] = useState<
     "ALL" | "OVER_25" | "UNDER_25" | "BTTS_YES" | "BTTS_NO"
@@ -89,15 +128,32 @@ export const FindView: React.FC<FindViewProps> = ({
   // Copy notification state
   const [copiedId, setCopiedId] = useState<string | number | null>(null);
 
-  // Available Seasons list in database
-  const availableSeasons = useMemo(() => {
-    const set = new Set<string | number>();
+  // View Mode: "TABLE" (Excel spreadsheet grid) or "CARDS"
+  const [displayMode, setDisplayMode] = useState<"TABLE" | "CARDS">("TABLE");
+
+  // Table sorting controls
+  const [sortField, setSortField] = useState<string>("id");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+
+  // Available ID Event Categories in database
+  const availableEventCategories = useMemo(() => {
+    const map = new Map<string | number, { id: string | number; name: string; count: number }>();
     database.forEach((m) => {
-      if (m.seasonNumber !== undefined && m.seasonNumber !== null) {
-        set.add(m.seasonNumber);
+      const catId = m.eventCategoryId || m.competitionId;
+      if (catId !== undefined && catId !== null && catId !== 0) {
+        const existing = map.get(catId);
+        if (existing) {
+          existing.count++;
+        } else {
+          map.set(catId, {
+            id: catId,
+            name: m.competitionName || `ID Event Cat #${catId}`,
+            count: 1,
+          });
+        }
       }
     });
-    return Array.from(set).sort((a, b) => Number(b) - Number(a));
+    return Array.from(map.values()).sort((a, b) => Number(a.id) - Number(b.id));
   }, [database]);
 
   // Available Competitions list in database
@@ -118,17 +174,15 @@ export const FindView: React.FC<FindViewProps> = ({
     { label: "1 - 0", query: "1-0", category: "score" },
     { label: "1 - 1", query: "1-1", category: "score" },
     { label: "2 - 2", query: "2-2", category: "score" },
-    { label: "3 - 0", query: "3-0", category: "score" },
-    { label: "1 - 2", query: "1-2", category: "score" },
-    { label: "Victoire Domicile (1)", query: "1", outcome: "1" },
+    { label: "Victoire Dom (1)", query: "1", outcome: "1" },
     { label: "Match Nul (X)", query: "X", outcome: "X" },
-    { label: "Victoire Extérieur (2)", query: "2", outcome: "2" },
-    { label: "Over 2.5 Buts", query: ">2.5", goalMarket: "OVER_25" },
-    { label: "Les 2 Équipes Marquent (GG)", query: "GG", goalMarket: "BTTS_YES" },
+    { label: "Victoire Ext (2)", query: "2", outcome: "2" },
+    { label: "Cotes 1X2", oddsMarket: "1X2" },
+    { label: "Cote 1X", oddsMarket: "DC_1X" },
+    { label: "Cote X2", oddsMarket: "DC_X2" },
+    { label: "Over 2.5", query: ">2.5", goalMarket: "OVER_25" },
+    { label: "GG (BTTS)", query: "GG", goalMarket: "BTTS_YES" },
     { label: "Journée 1 (J1)", query: "J1" },
-    { label: "Journée 2 (J2)", query: "J2" },
-    { label: "Journée 3 (J3)", query: "J3" },
-    { label: "Journée 4 (J4)", query: "J4" },
     { label: "Journée 5 (J5)", query: "J5" },
   ];
 
@@ -139,12 +193,59 @@ export const FindView: React.FC<FindViewProps> = ({
       .trim()
       .replace(/[^a-z0-9]/g, "");
 
+  // Helper function to extract relevant odds numbers for market matching
+  const getOddsForSubMarket = (m: ExtractedMatchRecord, market: OddsMarketSubFilter): number[] => {
+    const list: number[] = [];
+    const h = m.homeOdds;
+    const d = m.drawOdds;
+    const a = m.awayOdds;
+    const dc1X = m.doubleChanceOdds?.dc1X;
+    const dc12 = m.doubleChanceOdds?.dc12;
+    const dcX2 = m.doubleChanceOdds?.dcX2;
+    const ov = m.overUnderOdds?.over25;
+    const un = m.overUnderOdds?.under25;
+    const bYes = m.bothTeamsScoreOdds?.yes;
+    const bNo = m.bothTeamsScoreOdds?.no;
+
+    if (market === "1X2" || market === "ALL") {
+      if (h) list.push(h);
+      if (d) list.push(d);
+      if (a) list.push(a);
+    }
+    if (market === "DC" || market === "DC_1X" || market === "ALL") {
+      if (dc1X) list.push(dc1X);
+    }
+    if (market === "DC" || market === "DC_12" || market === "ALL") {
+      if (dc12) list.push(dc12);
+    }
+    if (market === "DC" || market === "DC_X2" || market === "ALL") {
+      if (dcX2) list.push(dcX2);
+    }
+    if (market === "OU" || market === "OVER_25" || market === "ALL") {
+      if (ov) list.push(ov);
+    }
+    if (market === "OU" || market === "UNDER_25" || market === "ALL") {
+      if (un) list.push(un);
+    }
+    if (market === "BTTS" || market === "BTTS_YES" || market === "ALL") {
+      if (bYes) list.push(bYes);
+    }
+    if (market === "BTTS" || market === "BTTS_NO" || market === "ALL") {
+      if (bNo) list.push(bNo);
+    }
+
+    return list;
+  };
+
   // Multi-field Free Search & Filter Engine
   const filteredMatches = useMemo(() => {
     if (!database || database.length === 0) return [];
 
     const rawQ = searchQuery.trim().toLowerCase();
     const cleanQ = norm(searchQuery);
+
+    const parsedMinOdds = minOdds !== "" ? parseFloat(minOdds) : null;
+    const parsedMaxOdds = maxOdds !== "" ? parseFloat(maxOdds) : null;
 
     return database.filter((m) => {
       // 1. Competition Filter
@@ -153,9 +254,10 @@ export const FindView: React.FC<FindViewProps> = ({
         if (mCompId !== String(selectedComp)) return false;
       }
 
-      // 2. Season Filter
-      if (selectedSeason !== "ALL") {
-        if (String(m.seasonNumber || 1) !== String(selectedSeason)) return false;
+      // 2. ID Event Category Filter (Remplaces Season Filter)
+      if (selectedEventCatId !== "ALL") {
+        const mCatId = String(m.eventCategoryId || m.competitionId || 0);
+        if (mCatId !== String(selectedEventCatId)) return false;
       }
 
       // Parse Score
@@ -180,7 +282,19 @@ export const FindView: React.FC<FindViewProps> = ({
         if (selectedGoalMarket === "BTTS_NO" && !(hFT === 0 || aFT === 0)) return false;
       }
 
-      // 5. Free Text Multi-Term Matching
+      // 5. Min / Max Odds Range Filter
+      if (parsedMinOdds !== null || parsedMaxOdds !== null) {
+        const relevantOdds = getOddsForSubMarket(m, selectedOddsMarket);
+        if (relevantOdds.length === 0) return false;
+        const matchesOddsRange = relevantOdds.some((o) => {
+          if (parsedMinOdds !== null && o < parsedMinOdds) return false;
+          if (parsedMaxOdds !== null && o > parsedMaxOdds) return false;
+          return true;
+        });
+        if (!matchesOddsRange) return false;
+      }
+
+      // 6. Free Text Multi-Term Matching
       if (!rawQ) return true;
 
       // Prepare target fields for matching
@@ -188,17 +302,15 @@ export const FindView: React.FC<FindViewProps> = ({
       const awayTeam = (m.awayTeamName || "").toLowerCase();
       const matchName = (m.matchName || `${homeTeam} vs ${awayTeam}`).toLowerCase();
       const compName = (m.competitionName || "").toLowerCase();
-      const seasonName = (m.seasonName || `saison ${m.seasonNumber || 1}`).toLowerCase();
+      const catIdStr = String(m.eventCategoryId || m.competitionId || "");
       const roundStr = `j${m.roundNumber || 1} round ${m.roundNumber || 1} journée ${m.roundNumber || 1}`.toLowerCase();
       const goalMins = (m.goalMinutes || "").toLowerCase();
       const matchIdStr = String(m.id || "");
       const sourceStr = (m.source || "").toLowerCase();
       const oddsSummary = (m.allOddsSummary || "").toLowerCase();
 
-      // Check odds values directly
-      const hOddsStr = String(m.homeOdds || "");
-      const dOddsStr = String(m.drawOdds || "");
-      const aOddsStr = String(m.awayOdds || "");
+      // Check odds values according to selectedOddsMarket
+      const targetOddsValues = getOddsForSubMarket(m, selectedOddsMarket).map((o) => String(o));
 
       // Match check
       const terms = rawQ.split(/\s+/).filter((t) => t.length > 0);
@@ -217,28 +329,9 @@ export const FindView: React.FC<FindViewProps> = ({
           );
         }
 
-        // Targeted Scope: ODDS
+        // Targeted Scope: ODDS (with selectedOddsMarket precision)
         if (searchScope === "ODDS") {
-          const dc1X = String(m.doubleChanceOdds?.dc1X || "");
-          const dc12 = String(m.doubleChanceOdds?.dc12 || "");
-          const dcX2 = String(m.doubleChanceOdds?.dcX2 || "");
-          const ov25 = String(m.overUnderOdds?.over25 || "");
-          const un25 = String(m.overUnderOdds?.under25 || "");
-          const bYes = String(m.bothTeamsScoreOdds?.yes || "");
-          const bNo = String(m.bothTeamsScoreOdds?.no || "");
-          return (
-            hOddsStr.includes(term) ||
-            dOddsStr.includes(term) ||
-            aOddsStr.includes(term) ||
-            dc1X.includes(term) ||
-            dc12.includes(term) ||
-            dcX2.includes(term) ||
-            ov25.includes(term) ||
-            un25.includes(term) ||
-            bYes.includes(term) ||
-            bNo.includes(term) ||
-            oddsSummary.includes(term)
-          );
+          return targetOddsValues.some((ovStr) => ovStr.includes(term)) || oddsSummary.includes(term);
         }
 
         // Targeted Scope: RANKS
@@ -263,16 +356,15 @@ export const FindView: React.FC<FindViewProps> = ({
           );
         }
 
-        // Targeted Scope: ROUNDS
+        // Targeted Scope: ROUNDS & ID EVENT CATEGORY
         if (searchScope === "ROUNDS") {
-          const numOnly = term.replace(/^j|^s/i, "").trim();
+          const numOnly = term.replace(/^j|^cat|^#?/i, "").trim();
           const rNum = String(m.roundNumber || "");
-          const sNum = String(m.seasonNumber || "");
           return (
             rNum === numOnly ||
-            sNum === numOnly ||
+            catIdStr === numOnly ||
             roundStr.includes(term) ||
-            seasonName.includes(term)
+            catIdStr.includes(term)
           );
         }
 
@@ -294,9 +386,9 @@ export const FindView: React.FC<FindViewProps> = ({
           return String(m.roundNumber) === num;
         }
 
-        if (/^s\d+$/.test(term)) {
-          const num = term.replace("s", "");
-          return String(m.seasonNumber || 1) === num;
+        if (/^#?\d+$/.test(term)) {
+          const num = term.replace("#", "");
+          if (catIdStr === num) return true;
         }
 
         return (
@@ -304,7 +396,7 @@ export const FindView: React.FC<FindViewProps> = ({
           awayTeam.includes(term) ||
           matchName.includes(term) ||
           compName.includes(term) ||
-          seasonName.includes(term) ||
+          catIdStr.includes(term) ||
           roundStr.includes(term) ||
           ftScore.includes(term) ||
           htScore.includes(term) ||
@@ -312,16 +404,99 @@ export const FindView: React.FC<FindViewProps> = ({
           matchIdStr.includes(term) ||
           sourceStr.includes(term) ||
           oddsSummary.includes(term) ||
-          hOddsStr.includes(term) ||
-          dOddsStr.includes(term) ||
-          aOddsStr.includes(term) ||
+          targetOddsValues.some((ovStr) => ovStr.includes(term)) ||
           norm(homeTeam).includes(cleanTerm) ||
           norm(awayTeam).includes(cleanTerm) ||
           norm(compName).includes(cleanTerm)
         );
       });
     });
-  }, [database, searchQuery, searchScope, selectedComp, selectedSeason, selectedOutcome, selectedGoalMarket]);
+  }, [
+    database,
+    searchQuery,
+    searchScope,
+    selectedOddsMarket,
+    minOdds,
+    maxOdds,
+    selectedComp,
+    selectedEventCatId,
+    selectedOutcome,
+    selectedGoalMarket,
+  ]);
+
+  // Sort handler for Excel Table columns
+  const handleSort = (field: string) => {
+    if (sortField === field) {
+      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortField(field);
+      setSortDirection("asc");
+    }
+  };
+
+  // Sorted list of matches for Table View
+  const sortedMatches = useMemo(() => {
+    const list = [...filteredMatches];
+    list.sort((a, b) => {
+      let valA: any = a[sortField as keyof ExtractedMatchRecord];
+      let valB: any = b[sortField as keyof ExtractedMatchRecord];
+
+      if (sortField === "eventCategoryId") {
+        valA = a.eventCategoryId || a.competitionId || 0;
+        valB = b.eventCategoryId || b.competitionId || 0;
+      } else if (sortField === "roundNumber") {
+        valA = a.roundNumber || 1;
+        valB = b.roundNumber || 1;
+      } else if (sortField === "score") {
+        const partsA = (a.score || "0-0").split(/[:\-]/).map((n) => parseInt(n, 10) || 0);
+        const partsB = (b.score || "0-0").split(/[:\-]/).map((n) => parseInt(n, 10) || 0);
+        valA = (partsA[0] || 0) + (partsA[1] || 0);
+        valB = (partsB[0] || 0) + (partsB[1] || 0);
+      } else if (sortField === "outcome") {
+        const partsA = (a.score || "0-0").split(/[:\-]/).map((n) => parseInt(n, 10) || 0);
+        const partsB = (b.score || "0-0").split(/[:\-]/).map((n) => parseInt(n, 10) || 0);
+        valA = partsA[0] > partsA[1] ? "1" : partsA[1] > partsA[0] ? "2" : "X";
+        valB = partsB[0] > partsB[1] ? "1" : partsB[1] > partsB[0] ? "2" : "X";
+      }
+
+      if (valA === undefined || valA === null) valA = "";
+      if (valB === undefined || valB === null) valB = "";
+
+      if (typeof valA === "number" && typeof valB === "number") {
+        return sortDirection === "asc" ? valA - valB : valB - valA;
+      }
+      const strA = String(valA).toLowerCase();
+      const strB = String(valB).toLowerCase();
+      if (strA < strB) return sortDirection === "asc" ? -1 : 1;
+      if (strA > strB) return sortDirection === "asc" ? 1 : -1;
+      return 0;
+    });
+    return list;
+  }, [filteredMatches, sortField, sortDirection]);
+
+  // Number of active filter parameters
+  const activeFiltersCount = useMemo(() => {
+    let count = 0;
+    if (searchQuery.trim() !== "") count++;
+    if (searchScope !== "ALL") count++;
+    if (selectedOddsMarket !== "ALL") count++;
+    if (minOdds !== "" || maxOdds !== "") count++;
+    if (selectedComp !== "ALL") count++;
+    if (selectedEventCatId !== "ALL") count++;
+    if (selectedOutcome !== "ALL") count++;
+    if (selectedGoalMarket !== "ALL") count++;
+    return count;
+  }, [
+    searchQuery,
+    searchScope,
+    selectedOddsMarket,
+    minOdds,
+    maxOdds,
+    selectedComp,
+    selectedEventCatId,
+    selectedOutcome,
+    selectedGoalMarket,
+  ]);
 
   // Statistics calculation for filtered search results
   const searchStats = useMemo(() => {
@@ -461,6 +636,7 @@ export const FindView: React.FC<FindViewProps> = ({
         .odds-val { font-family: 'Courier New', monospace; font-weight: bold; color: #0284c7; }
         .goals-cell { color: #047857; font-family: 'Courier New', monospace; font-size: 11px; text-align: left; }
         .comp-tag { font-weight: bold; color: #1e293b; background-color: #e2e8f0; }
+        .cat-tag { font-weight: bold; color: #047857; font-family: 'Courier New', monospace; }
       </style>
     </head>
     <body>
@@ -495,7 +671,7 @@ export const FindView: React.FC<FindViewProps> = ({
           <tr>
             <th>ID Match</th>
             <th>Compétition</th>
-            <th>Saison</th>
+            <th>ID Event Category</th>
             <th>Journée</th>
             <th>Équipe Domicile</th>
             <th>Rang D.</th>
@@ -520,11 +696,12 @@ export const FindView: React.FC<FindViewProps> = ({
           ${filteredMatches.map((m) => {
             const ft = (m.score || "0-0").replace(":", "-");
             const ht = (m.halfTimeScore || "0-0").replace(":", "-");
+            const catId = m.eventCategoryId || m.competitionId || 0;
             return `
               <tr>
                 <td style="font-family:'Courier New', monospace; color:#64748b;">#${m.id}</td>
                 <td class="comp-tag">${m.competitionName || "Ligue"}</td>
-                <td>Saison ${m.seasonNumber || 1}</td>
+                <td class="cat-tag">#${catId}</td>
                 <td style="font-weight:bold;">Journée ${m.roundNumber || 1}</td>
                 <td class="team-cell">${m.homeTeamName}</td>
                 <td>${m.homeRank > 0 ? `#${m.homeRank}` : "-"}</td>
@@ -569,7 +746,7 @@ export const FindView: React.FC<FindViewProps> = ({
     const headers = [
       "ID",
       "Competition",
-      "Saison",
+      "ID_Event_Category",
       "Journee",
       "Equipe Domicile",
       "Equipe Exterieur",
@@ -592,7 +769,7 @@ export const FindView: React.FC<FindViewProps> = ({
     const rows = filteredMatches.map((m) => [
       m.id,
       `"${m.competitionName}"`,
-      m.seasonNumber || 1,
+      m.eventCategoryId || m.competitionId || 0,
       m.roundNumber || 1,
       `"${m.homeTeamName}"`,
       `"${m.awayTeamName}"`,
@@ -626,8 +803,11 @@ export const FindView: React.FC<FindViewProps> = ({
   const handleResetFilters = () => {
     setSearchQuery("");
     setSearchScope("ALL");
+    setSelectedOddsMarket("ALL");
+    setMinOdds("");
+    setMaxOdds("");
     setSelectedComp("ALL");
-    setSelectedSeason("ALL");
+    setSelectedEventCatId("ALL");
     setSelectedOutcome("ALL");
     setSelectedGoalMarket("ALL");
   };
@@ -642,7 +822,7 @@ export const FindView: React.FC<FindViewProps> = ({
           <div className="space-y-2">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 font-extrabold text-xs border border-amber-500/40 uppercase tracking-wider">
               <Search className="w-3.5 h-3.5 text-amber-400" />
-              <span>Moteur de Recherche Précis BDD</span>
+              <span>Moteur de Recherche Multi-Filtres Précis BDD</span>
             </div>
             <h1 className="text-2xl lg:text-3xl font-black text-white tracking-tight flex items-center gap-3">
               MOTEUR DE RECHERCHE FIND
@@ -651,7 +831,7 @@ export const FindView: React.FC<FindViewProps> = ({
               </span>
             </h1>
             <p className="text-xs lg:text-sm text-slate-300 max-w-2xl font-medium">
-              Recherchez précisément en ciblant le champ souhaité (Équipes, Cotes exactes, Rangs, Scores, Journée, Minutage) ou explorez toute la BDD.
+              Combinez plusieurs filtres simultanément (Marchés de cotes 1X2 / DC / Over / GG, Fourchettes de cotes, ID Event Category, Issue, Buts) ou effectuez une recherche libre.
             </p>
           </div>
 
@@ -753,10 +933,10 @@ export const FindView: React.FC<FindViewProps> = ({
                     : searchScope === "SCORES"
                     ? "Ex: 2-1, 0-0, 1-1, 3-2..."
                     : searchScope === "ROUNDS"
-                    ? "Ex: J1, J5, Saison 2..."
+                    ? "Ex: J1, J5, #101, #102..."
                     : searchScope === "GOALS"
                     ? "Ex: 12', 45', 88'..."
-                    : "Ex: Arsenal, 2-1, J5, 1.85, 0-0, Over..."
+                    : "Ex: Arsenal, 2-1, J5, 1.85, #101, Over..."
                 }
                 className="w-full pl-12 pr-28 py-3.5 bg-slate-950/90 border-2 border-amber-500/40 focus:border-amber-400 focus:ring-4 focus:ring-amber-500/20 text-white font-bold text-sm lg:text-base rounded-2xl placeholder:text-slate-500 transition-all shadow-inner"
               />
@@ -804,9 +984,12 @@ export const FindView: React.FC<FindViewProps> = ({
               onClick={() => {
                 if (tag.outcome) setSelectedOutcome(tag.outcome as any);
                 else if (tag.goalMarket) setSelectedGoalMarket(tag.goalMarket as any);
-                else {
+                else if (tag.oddsMarket) {
+                  setSearchScope("ODDS");
+                  setSelectedOddsMarket(tag.oddsMarket as any);
+                } else {
                   if (tag.category === "score") setSearchScope("SCORES");
-                  setSearchQuery(tag.query);
+                  setSearchQuery(tag.query || "");
                 }
               }}
               className="px-2.5 py-1 bg-slate-900/80 hover:bg-amber-500/20 hover:border-amber-500/50 text-slate-300 hover:text-amber-200 text-xs font-bold rounded-lg border border-slate-800 transition-all cursor-pointer flex items-center gap-1 shadow-sm active:scale-95"
@@ -817,18 +1000,31 @@ export const FindView: React.FC<FindViewProps> = ({
         </div>
       </div>
 
-      {/* Multi-Criteria Toolbar */}
-      <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 shadow-xl backdrop-blur-md flex flex-wrap items-center justify-between gap-4">
-        <div className="flex flex-wrap items-center gap-3 flex-1">
+      {/* Multi-Criteria Combined Filter Toolbar */}
+      <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 shadow-xl backdrop-blur-md space-y-3">
+        <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
+          <span className="text-xs font-black uppercase text-amber-400 tracking-wider flex items-center gap-2">
+            <Filter className="w-4 h-4 text-amber-400" />
+            Combinaison Multi-Filtres (Cumulables)
+          </span>
+          <span className="text-[11px] font-mono text-slate-400">
+            Filtres actifs appliqués simultanément
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {/* Competition Filter */}
-          <div className="flex items-center gap-2 min-w-[200px]">
-            <Trophy className="w-4 h-4 text-amber-400 shrink-0" />
+          <div className="flex flex-col gap-1">
+            <label className="text-[11px] font-bold text-slate-400 flex items-center gap-1.5">
+              <Trophy className="w-3.5 h-3.5 text-amber-400" />
+              Compétition / Ligue :
+            </label>
             <select
               value={selectedComp}
               onChange={(e) => setSelectedComp(e.target.value)}
-              className="flex-1 bg-slate-950 border border-slate-700 focus:border-amber-500 text-white text-xs font-bold rounded-xl px-3 py-2 cursor-pointer outline-none"
+              className="w-full bg-slate-950 border border-slate-700 focus:border-amber-500 text-white text-xs font-bold rounded-xl px-3 py-2 cursor-pointer outline-none"
             >
-              <option value="ALL">Toutes les ligues / compétitions</option>
+              <option value="ALL">Toutes les compétitions</option>
               {availableCompetitions.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
@@ -837,26 +1033,78 @@ export const FindView: React.FC<FindViewProps> = ({
             </select>
           </div>
 
-          {/* Season Filter */}
-          <div className="flex items-center gap-2 min-w-[160px]">
-            <Calendar className="w-4 h-4 text-emerald-400 shrink-0" />
+          {/* ID Event Category Filter (Replacing Season Filter) */}
+          <div className="flex flex-col gap-1">
+            <label className="text-[11px] font-bold text-slate-400 flex items-center gap-1.5">
+              <Layers className="w-3.5 h-3.5 text-emerald-400" />
+              ID Event Category :
+            </label>
             <select
-              value={selectedSeason}
-              onChange={(e) => setSelectedSeason(e.target.value)}
-              className="flex-1 bg-slate-950 border border-slate-700 focus:border-emerald-500 text-white text-xs font-bold rounded-xl px-3 py-2 cursor-pointer outline-none"
+              value={selectedEventCatId}
+              onChange={(e) => setSelectedEventCatId(e.target.value)}
+              className="w-full bg-slate-950 border border-slate-700 focus:border-emerald-500 text-white text-xs font-bold rounded-xl px-3 py-2 cursor-pointer outline-none"
             >
-              <option value="ALL">Toutes les saisons</option>
-              {availableSeasons.map((s) => (
-                <option key={s} value={s}>
-                  Saison {s}
+              <option value="ALL">Tous les ID Event Category</option>
+              {availableEventCategories.map((cat) => (
+                <option key={cat.id} value={cat.id}>
+                  ID #{cat.id} ({cat.name}) [{cat.count} m.]
                 </option>
               ))}
             </select>
           </div>
 
+          {/* Specific Odds Market Sub-Filter */}
+          <div className="flex flex-col gap-1">
+            <label className="text-[11px] font-bold text-slate-400 flex items-center gap-1.5">
+              <Zap className="w-3.5 h-3.5 text-cyan-400" />
+              Marché de Cotes Cible :
+            </label>
+            <select
+              value={selectedOddsMarket}
+              onChange={(e) => setSelectedOddsMarket(e.target.value as OddsMarketSubFilter)}
+              className="w-full bg-slate-950 border border-slate-700 focus:border-cyan-500 text-white text-xs font-bold rounded-xl px-3 py-2 cursor-pointer outline-none"
+            >
+              {ODDS_MARKET_OPTIONS.map((opt) => (
+                <option key={opt.id} value={opt.id}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Odds Range Filter (Min & Max) */}
+          <div className="flex flex-col gap-1">
+            <label className="text-[11px] font-bold text-slate-400 flex items-center gap-1.5">
+              <TrendingUp className="w-3.5 h-3.5 text-amber-400" />
+              Fourchette de Cote (Min - Max) :
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                step="0.05"
+                placeholder="Min (ex: 1.50)"
+                value={minOdds}
+                onChange={(e) => setMinOdds(e.target.value)}
+                className="w-1/2 bg-slate-950 border border-slate-700 focus:border-amber-500 text-white text-xs font-mono font-bold rounded-xl px-2.5 py-1.5 outline-none placeholder:text-slate-600"
+              />
+              <span className="text-slate-500 text-xs font-bold">-</span>
+              <input
+                type="number"
+                step="0.05"
+                placeholder="Max (ex: 2.20)"
+                value={maxOdds}
+                onChange={(e) => setMaxOdds(e.target.value)}
+                className="w-1/2 bg-slate-950 border border-slate-700 focus:border-amber-500 text-white text-xs font-mono font-bold rounded-xl px-2.5 py-1.5 outline-none placeholder:text-slate-600"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Secondary Row: Outcome & Goals Market */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-800/60">
           {/* Outcome Filter */}
           <div className="flex items-center gap-2">
-            <span className="text-xs font-black text-slate-400">Issue :</span>
+            <span className="text-xs font-black text-slate-400">Issue (1X2) :</span>
             <div className="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800">
               {(["ALL", "1", "X", "2"] as const).map((out) => (
                 <button
@@ -868,7 +1116,7 @@ export const FindView: React.FC<FindViewProps> = ({
                       : "text-slate-400 hover:text-white"
                   }`}
                 >
-                  {out === "ALL" ? "Tout" : out}
+                  {out === "ALL" ? "Tout" : out === "1" ? "Dom (1)" : out === "X" ? "Nul (X)" : "Ext (2)"}
                 </button>
               ))}
             </div>
@@ -880,9 +1128,9 @@ export const FindView: React.FC<FindViewProps> = ({
             <select
               value={selectedGoalMarket}
               onChange={(e) => setSelectedGoalMarket(e.target.value as any)}
-              className="bg-slate-950 border border-slate-700 focus:border-cyan-500 text-white text-xs font-bold rounded-xl px-3 py-2 cursor-pointer outline-none"
+              className="bg-slate-950 border border-slate-700 focus:border-cyan-500 text-white text-xs font-bold rounded-xl px-3 py-1.5 cursor-pointer outline-none"
             >
-              <option value="ALL">Tous les marchés</option>
+              <option value="ALL">Tous les résultats buts</option>
               <option value="OVER_25">Plus de 2.5 Buts (&gt; 2.5)</option>
               <option value="UNDER_25">Moins de 2.5 Buts (&lt; 2.5)</option>
               <option value="BTTS_YES">Les 2 Équipes Marquent (GG)</option>
@@ -947,13 +1195,68 @@ export const FindView: React.FC<FindViewProps> = ({
         </div>
       </div>
 
-      {/* Matching Results List */}
+      {/* Matching Results Section Header & Controls */}
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-black text-white uppercase tracking-wider flex items-center gap-2">
-            <Activity className="w-4 h-4 text-amber-400" />
-            <span>Résultats de Recherche ({filteredMatches.length} matchs)</span>
-          </h2>
+        <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900/90 border border-slate-800 rounded-2xl p-4 shadow-xl">
+          <div className="flex flex-wrap items-center gap-3">
+            <h2 className="text-sm font-black text-white uppercase tracking-wider flex items-center gap-2">
+              <Activity className="w-4 h-4 text-amber-400" />
+              <span>BDD Matchs</span>
+              <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-mono text-xs border border-amber-500/40">
+                {filteredMatches.length} / {database.length} matchs
+              </span>
+            </h2>
+
+            {/* Filter Status Badge */}
+            {activeFiltersCount > 0 && (
+              <span className="px-2.5 py-1 bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 text-xs font-bold rounded-lg flex items-center gap-1.5">
+                <Filter className="w-3 h-3 text-cyan-400" />
+                <span>{activeFiltersCount} filtre(s) actif(s)</span>
+              </span>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Filter Restore / Reset Button */}
+            {(activeFiltersCount > 0 || filteredMatches.length < database.length) && (
+              <button
+                onClick={handleResetFilters}
+                className="px-3 py-1.5 bg-gradient-to-r from-amber-500/20 to-emerald-500/20 hover:from-amber-500/30 hover:to-emerald-500/30 text-amber-300 border border-amber-500/40 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-md transition-all cursor-pointer active:scale-95"
+                title="Restaurer la base de données entière et réinitialiser tous les filtres"
+              >
+                <RotateCcw className="w-3.5 h-3.5 text-amber-400" />
+                <span>Restaurer Tous les Filtres</span>
+              </button>
+            )}
+
+            {/* View Mode Switcher: Excel Table Grid vs Cards */}
+            <div className="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800">
+              <button
+                onClick={() => setDisplayMode("TABLE")}
+                className={`px-3 py-1 rounded-lg text-xs font-black flex items-center gap-1.5 transition-all cursor-pointer ${
+                  displayMode === "TABLE"
+                    ? "bg-amber-500 text-slate-950 shadow-md"
+                    : "text-slate-400 hover:text-white"
+                }`}
+                title="Afficher les matchs sous forme de Tableau Excel structuré avec en-têtes"
+              >
+                <Table className="w-3.5 h-3.5" />
+                <span>Tableau Excel</span>
+              </button>
+              <button
+                onClick={() => setDisplayMode("CARDS")}
+                className={`px-3 py-1 rounded-lg text-xs font-black flex items-center gap-1.5 transition-all cursor-pointer ${
+                  displayMode === "CARDS"
+                    ? "bg-amber-500 text-slate-950 shadow-md"
+                    : "text-slate-400 hover:text-white"
+                }`}
+                title="Afficher les matchs sous forme de cartes d'analyse"
+              >
+                <LayoutGrid className="w-3.5 h-3.5" />
+                <span>Cartes</span>
+              </button>
+            </div>
+          </div>
         </div>
 
         {filteredMatches.length === 0 ? (
@@ -963,7 +1266,7 @@ export const FindView: React.FC<FindViewProps> = ({
               Aucun match ne correspond à votre recherche
             </h3>
             <p className="text-xs text-slate-400 max-w-md mx-auto">
-              Essayez de modifier votre mot-clé ou réinitialisez les filtres pour afficher l'ensemble de la base de données.
+              Essayez de modifier vos critères de recherche ou réinitialisez les filtres pour afficher l'ensemble de la base de données.
             </p>
             <button
               onClick={handleResetFilters}
@@ -972,9 +1275,314 @@ export const FindView: React.FC<FindViewProps> = ({
               Afficher Tous les Matchs BDD
             </button>
           </div>
+        ) : displayMode === "TABLE" ? (
+          /* EXCEL DATA TABLE VIEW */
+          <div className="overflow-x-auto rounded-2xl border border-slate-800 bg-slate-950/90 shadow-2xl backdrop-blur-md">
+            <table className="w-full text-left border-collapse min-w-[1300px]">
+              <thead>
+                <tr className="bg-slate-900/90 text-[10px] font-black uppercase tracking-wider text-amber-400 border-b border-slate-800 divide-x divide-slate-800/80 sticky top-0 z-10 select-none">
+                  <th onClick={() => handleSort("id")} className="p-2.5 cursor-pointer hover:bg-slate-800/80 transition-colors">
+                    <div className="flex items-center gap-1">
+                      <span>ID Match</span>
+                      <ArrowUpDown className="w-3 h-3 text-slate-500" />
+                    </div>
+                  </th>
+                  <th onClick={() => handleSort("eventCategoryId")} className="p-2.5 text-emerald-400 cursor-pointer hover:bg-slate-800/80 transition-colors">
+                    <div className="flex items-center gap-1">
+                      <span>Cat. ID</span>
+                      <ArrowUpDown className="w-3 h-3 text-emerald-500" />
+                    </div>
+                  </th>
+                  <th onClick={() => handleSort("competitionName")} className="p-2.5 cursor-pointer hover:bg-slate-800/80 transition-colors">
+                    <div className="flex items-center gap-1">
+                      <span>Compétition</span>
+                      <ArrowUpDown className="w-3 h-3 text-slate-500" />
+                    </div>
+                  </th>
+                  <th onClick={() => handleSort("roundNumber")} className="p-2.5 text-center cursor-pointer hover:bg-slate-800/80 transition-colors">
+                    <span>J.</span>
+                  </th>
+                  <th onClick={() => handleSort("homeTeamName")} className="p-2.5 cursor-pointer hover:bg-slate-800/80 transition-colors">
+                    <span>Équipe Domicile</span>
+                  </th>
+                  <th className="p-2.5 text-center text-slate-400">Rang D.</th>
+                  <th onClick={() => handleSort("score")} className="p-2.5 text-center cursor-pointer hover:bg-slate-800/80 transition-colors">
+                    <span>Score FT</span>
+                  </th>
+                  <th className="p-2.5 text-center text-slate-400">Score HT</th>
+                  <th onClick={() => handleSort("outcome")} className="p-2.5 text-center cursor-pointer hover:bg-slate-800/80 transition-colors">
+                    <span>Issue</span>
+                  </th>
+                  <th className="p-2.5 text-center text-slate-400">Buts</th>
+                  <th className="p-2.5 text-center text-slate-400">Rang E.</th>
+                  <th onClick={() => handleSort("awayTeamName")} className="p-2.5 cursor-pointer hover:bg-slate-800/80 transition-colors">
+                    <span>Équipe Extérieur</span>
+                  </th>
+                  <th onClick={() => handleSort("homeOdds")} className="p-2.5 text-center text-emerald-400 cursor-pointer hover:bg-slate-800/80 transition-colors">
+                    Cote 1
+                  </th>
+                  <th onClick={() => handleSort("drawOdds")} className="p-2.5 text-center text-amber-400 cursor-pointer hover:bg-slate-800/80 transition-colors">
+                    Cote X
+                  </th>
+                  <th onClick={() => handleSort("awayOdds")} className="p-2.5 text-center text-blue-400 cursor-pointer hover:bg-slate-800/80 transition-colors">
+                    Cote 2
+                  </th>
+                  <th className="p-2.5 text-center text-slate-300">1X</th>
+                  <th className="p-2.5 text-center text-slate-300">12</th>
+                  <th className="p-2.5 text-center text-slate-300">X2</th>
+                  <th className="p-2.5 text-center text-cyan-400">&gt;2.5</th>
+                  <th className="p-2.5 text-center text-slate-400">&lt;2.5</th>
+                  <th className="p-2.5 text-center text-emerald-400">GG</th>
+                  <th className="p-2.5 text-center text-slate-400">NG</th>
+                  <th className="p-2.5 text-slate-300">Min. Buts</th>
+                  <th className="p-2.5 text-center text-amber-400">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/60 font-mono text-xs">
+                {sortedMatches.map((m, idx) => {
+                  const strId = String(m.id);
+                  const isH2HExpanded = expandedH2H[strId] || false;
+                  const catId = m.eventCategoryId || m.competitionId || 0;
+                  const ftScore = (m.score || "0-0").replace(":", "-").trim();
+                  const htScore = (m.halfTimeScore || "0-0").replace(":", "-").trim();
+
+                  const scoreParts = ftScore.split(/[:\-]/).map((s) => parseInt(s.trim(), 10) || 0);
+                  const hScore = scoreParts[0] || 0;
+                  const aScore = scoreParts[1] || 0;
+                  const totalG = hScore + aScore;
+                  const outcome = hScore > aScore ? "1" : aScore > hScore ? "2" : "X";
+
+                  const outcomeBadge =
+                    outcome === "1"
+                      ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
+                      : outcome === "2"
+                      ? "bg-blue-500/20 text-blue-300 border-blue-500/40"
+                      : "bg-amber-500/20 text-amber-300 border-amber-500/40";
+
+                  const bgRow = idx % 2 === 0 ? "bg-slate-900/60" : "bg-slate-950/80";
+
+                  const is1X2Highlight = selectedOddsMarket === "1X2";
+                  const isDCHighlight = selectedOddsMarket.startsWith("DC");
+                  const isOUHighlight = selectedOddsMarket.startsWith("OU") || selectedOddsMarket.startsWith("OVER") || selectedOddsMarket.startsWith("UNDER");
+                  const isBTTSHighlight = selectedOddsMarket.startsWith("BTTS");
+
+                  const h2h = getH2HAnalysisForMatch(
+                    { homeTeamName: m.homeTeamName, awayTeamName: m.awayTeamName } as any,
+                    database
+                  );
+
+                  return (
+                    <React.Fragment key={strId}>
+                      <tr className={`${bgRow} hover:bg-amber-500/10 transition-colors divide-x divide-slate-800/40`}>
+                        {/* ID Match */}
+                        <td className="p-2.5 text-slate-400 font-bold text-[11px]">#{m.id}</td>
+
+                        {/* Event Category ID */}
+                        <td className="p-2.5">
+                          <span className="px-1.5 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 font-black text-[11px]">
+                            #{catId}
+                          </span>
+                        </td>
+
+                        {/* Compétition */}
+                        <td className="p-2.5 text-white font-sans font-bold text-xs max-w-[140px] truncate" title={m.competitionName}>
+                          {m.competitionName}
+                        </td>
+
+                        {/* Journée */}
+                        <td className="p-2.5 text-center text-slate-300 font-bold">J{m.roundNumber || 1}</td>
+
+                        {/* Équipe Domicile */}
+                        <td className="p-2.5 text-white font-sans font-black text-xs max-w-[150px] truncate" title={m.homeTeamName}>
+                          {m.homeTeamName}
+                        </td>
+
+                        {/* Rang Domicile */}
+                        <td className="p-2.5 text-center text-slate-400 text-[11px]">
+                          {m.homeRank > 0 ? `#${m.homeRank}` : "-"}
+                        </td>
+
+                        {/* Score FT */}
+                        <td className="p-2.5 text-center">
+                          <span className="px-2 py-0.5 rounded bg-slate-950 border border-slate-700 text-amber-400 font-black text-xs">
+                            {ftScore}
+                          </span>
+                        </td>
+
+                        {/* Score HT */}
+                        <td className="p-2.5 text-center text-slate-400 text-[11px]">({htScore})</td>
+
+                        {/* Issue 1X2 */}
+                        <td className="p-2.5 text-center">
+                          <span className={`px-2 py-0.5 rounded border font-black text-xs ${outcomeBadge}`}>
+                            {outcome}
+                          </span>
+                        </td>
+
+                        {/* Total Buts */}
+                        <td className="p-2.5 text-center text-slate-200 font-bold">{totalG}</td>
+
+                        {/* Rang Extérieur */}
+                        <td className="p-2.5 text-center text-slate-400 text-[11px]">
+                          {m.awayRank > 0 ? `#${m.awayRank}` : "-"}
+                        </td>
+
+                        {/* Équipe Extérieur */}
+                        <td className="p-2.5 text-white font-sans font-black text-xs max-w-[150px] truncate" title={m.awayTeamName}>
+                          {m.awayTeamName}
+                        </td>
+
+                        {/* Cote 1 */}
+                        <td className={`p-2.5 text-center text-emerald-400 font-bold ${is1X2Highlight ? "bg-amber-500/15" : ""}`}>
+                          {m.homeOdds || "-"}
+                        </td>
+
+                        {/* Cote X */}
+                        <td className={`p-2.5 text-center text-amber-400 font-bold ${is1X2Highlight ? "bg-amber-500/15" : ""}`}>
+                          {m.drawOdds || "-"}
+                        </td>
+
+                        {/* Cote 2 */}
+                        <td className={`p-2.5 text-center text-blue-400 font-bold ${is1X2Highlight ? "bg-amber-500/15" : ""}`}>
+                          {m.awayOdds || "-"}
+                        </td>
+
+                        {/* Cote 1X */}
+                        <td className={`p-2.5 text-center text-slate-300 ${isDCHighlight ? "bg-amber-500/15" : ""}`}>
+                          {m.doubleChanceOdds?.dc1X || "-"}
+                        </td>
+
+                        {/* Cote 12 */}
+                        <td className={`p-2.5 text-center text-slate-300 ${isDCHighlight ? "bg-amber-500/15" : ""}`}>
+                          {m.doubleChanceOdds?.dc12 || "-"}
+                        </td>
+
+                        {/* Cote X2 */}
+                        <td className={`p-2.5 text-center text-slate-300 ${isDCHighlight ? "bg-amber-500/15" : ""}`}>
+                          {m.doubleChanceOdds?.dcX2 || "-"}
+                        </td>
+
+                        {/* Cote >2.5 */}
+                        <td className={`p-2.5 text-center text-cyan-400 font-bold ${isOUHighlight ? "bg-amber-500/15" : ""}`}>
+                          {m.overUnderOdds?.over25 || "-"}
+                        </td>
+
+                        {/* Cote <2.5 */}
+                        <td className={`p-2.5 text-center text-slate-400 ${isOUHighlight ? "bg-amber-500/15" : ""}`}>
+                          {m.overUnderOdds?.under25 || "-"}
+                        </td>
+
+                        {/* Cote GG */}
+                        <td className={`p-2.5 text-center text-emerald-400 font-bold ${isBTTSHighlight ? "bg-amber-500/15" : ""}`}>
+                          {m.bothTeamsScoreOdds?.yes || "-"}
+                        </td>
+
+                        {/* Cote NG */}
+                        <td className={`p-2.5 text-center text-slate-400 ${isBTTSHighlight ? "bg-amber-500/15" : ""}`}>
+                          {m.bothTeamsScoreOdds?.no || "-"}
+                        </td>
+
+                        {/* Minutages Buts */}
+                        <td className="p-2.5 text-emerald-400 font-mono text-[11px] max-w-[120px] truncate" title={m.goalMinutes || ""}>
+                          {m.goalMinutes || "-"}
+                        </td>
+
+                        {/* Actions */}
+                        <td className="p-2.5 text-center">
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              onClick={() => handleCopyMatch(m)}
+                              className="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer"
+                              title="Copier la fiche match"
+                            >
+                              {copiedId === m.id ? (
+                                <Check className="w-3.5 h-3.5 text-emerald-400" />
+                              ) : (
+                                <Copy className="w-3.5 h-3.5" />
+                              )}
+                            </button>
+                            <button
+                              onClick={() => toggleH2H(m.id)}
+                              className={`p-1 rounded transition-colors cursor-pointer ${
+                                isH2HExpanded ? "bg-amber-500 text-slate-950" : "bg-slate-800 hover:bg-slate-700 text-slate-300"
+                              }`}
+                              title="Afficher l'historique H2H direct"
+                            >
+                              <Users className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+
+                      {/* Expandable H2H Row in Table */}
+                      {isH2HExpanded && (
+                        <tr className="bg-slate-950/95 border-b border-amber-500/30">
+                          <td colSpan={24} className="p-4 space-y-3 font-sans">
+                            <div className="flex items-center justify-between">
+                              <h4 className="text-xs font-black text-amber-400 uppercase tracking-wider flex items-center gap-2">
+                                <Users className="w-4 h-4 text-amber-400" />
+                                <span>Confrontations Directes H2H ({(h2h.directMatches || []).length}) : {m.homeTeamName} vs {m.awayTeamName}</span>
+                              </h4>
+                              {onCreateRuleFromDb && (
+                                <button
+                                  onClick={() =>
+                                    onCreateRuleFromDb({
+                                      id: `#RULE-${Date.now().toString().slice(-4)}`,
+                                      betType: "1X2",
+                                      generatedDate: new Date().toLocaleDateString("fr-FR"),
+                                      title: `Règle de match ${m.homeTeamName} vs ${m.awayTeamName}`,
+                                      conditionText: `IF Côte_Dom == ${m.homeOdds || 1.8} AND Journée == ${m.roundNumber || 1} THEN 1`,
+                                      assignedLeagueId: m.competitionId || "ALL",
+                                      assignedLeagueName: m.competitionName || "Toutes les ligues",
+                                      mode: "Manuel",
+                                      isActive: true,
+                                    })
+                                  }
+                                  className="px-2.5 py-1 bg-gradient-to-r from-amber-500 to-emerald-500 text-slate-950 font-black text-xs rounded-lg flex items-center gap-1 shadow cursor-pointer active:scale-95"
+                                >
+                                  <Plus className="w-3 h-3" />
+                                  <span>Créer Règle depuis ce Match</span>
+                                </button>
+                              )}
+                            </div>
+
+                            {(h2h.directMatches || []).length === 0 ? (
+                              <p className="text-xs text-slate-400 italic">
+                                Aucune autre confrontation directe enregistrée dans la BDD pour ces deux équipes.
+                              </p>
+                            ) : (
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 font-mono">
+                                {(h2h.directMatches || []).map((dm) => (
+                                  <div
+                                    key={dm.id}
+                                    className="bg-slate-900 border border-slate-800 rounded-xl p-2.5 flex items-center justify-between text-xs"
+                                  >
+                                    <div className="flex items-center gap-2 text-slate-200 font-bold">
+                                      <span>{dm.homeTeamName}</span>
+                                      <span className="font-mono text-amber-400 font-black px-2 py-0.5 bg-slate-950 rounded border border-slate-800">
+                                        {dm.score}
+                                      </span>
+                                      <span>{dm.awayTeamName}</span>
+                                    </div>
+                                    <div className="flex items-center gap-2 text-[11px] text-slate-400">
+                                      <span>J{dm.roundNumber} (Cat. #{dm.eventCategoryId || dm.competitionId})</span>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         ) : (
           <div className="grid grid-cols-1 gap-4">
-            {filteredMatches.map((m) => {
+            {sortedMatches.map((m) => {
               const strId = String(m.id);
               const isH2HExpanded = expandedH2H[strId] || false;
               const h2h = getH2HAnalysisForMatch(
@@ -984,27 +1592,29 @@ export const FindView: React.FC<FindViewProps> = ({
 
               const ftScore = (m.score || "0-0").replace(":", "-").trim();
               const htScore = (m.halfTimeScore || "0-0").replace(":", "-").trim();
+              const catId = m.eventCategoryId || m.competitionId || 0;
 
               return (
                 <div
                   key={strId}
                   className="bg-slate-900/90 border border-slate-800 hover:border-amber-500/40 rounded-3xl p-5 shadow-xl transition-all relative overflow-hidden backdrop-blur-md space-y-4"
                 >
-                  {/* Top Bar: Comp / Season / Round / ID */}
+                  {/* Top Bar: Comp / ID Event Category / Round / ID */}
                   <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-3">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="px-2.5 py-1 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs font-black flex items-center gap-1.5">
                         <Trophy className="w-3.5 h-3.5" />
                         {m.competitionName}
                       </span>
+                      <span className="px-2.5 py-1 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs font-black flex items-center gap-1">
+                        <Hash className="w-3.5 h-3.5 text-emerald-400" />
+                        ID Event Cat: #{catId}
+                      </span>
                       <span className="px-2.5 py-1 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 text-xs font-extrabold">
                         Journée {m.roundNumber || 1}
                       </span>
-                      <span className="px-2.5 py-1 rounded-lg bg-slate-800/80 border border-slate-700/80 text-slate-400 text-xs font-medium">
-                        Saison {m.seasonNumber || 1}
-                      </span>
                       <span className="px-2 py-0.5 rounded bg-slate-950 text-slate-400 font-mono text-[11px]">
-                        ID: #{m.id}
+                        Match ID: #{m.id}
                       </span>
                     </div>
 
@@ -1088,7 +1698,9 @@ export const FindView: React.FC<FindViewProps> = ({
                   {/* Full Odds Breakdown Grid */}
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
                     {/* 1X2 */}
-                    <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-2.5 text-center space-y-1">
+                    <div className={`border rounded-xl p-2.5 text-center space-y-1 transition-all ${
+                      selectedOddsMarket === "1X2" ? "bg-amber-500/10 border-amber-500/50 ring-1 ring-amber-500/30" : "bg-slate-950/80 border-slate-800"
+                    }`}>
                       <span className="text-[10px] font-black uppercase text-slate-400 block">1X2</span>
                       <div className="flex items-center justify-center gap-2 text-xs font-mono font-bold">
                         <span className="text-emerald-400">1: {m.homeOdds || "-"}</span>
@@ -1098,7 +1710,9 @@ export const FindView: React.FC<FindViewProps> = ({
                     </div>
 
                     {/* Double Chance */}
-                    <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-2.5 text-center space-y-1">
+                    <div className={`border rounded-xl p-2.5 text-center space-y-1 transition-all ${
+                      selectedOddsMarket.startsWith("DC") ? "bg-amber-500/10 border-amber-500/50 ring-1 ring-amber-500/30" : "bg-slate-950/80 border-slate-800"
+                    }`}>
                       <span className="text-[10px] font-black uppercase text-slate-400 block">Double Chance</span>
                       <div className="flex items-center justify-center gap-2 text-xs font-mono font-bold">
                         <span className="text-slate-200">1X: {m.doubleChanceOdds?.dc1X || "-"}</span>
@@ -1108,7 +1722,9 @@ export const FindView: React.FC<FindViewProps> = ({
                     </div>
 
                     {/* Over / Under */}
-                    <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-2.5 text-center space-y-1">
+                    <div className={`border rounded-xl p-2.5 text-center space-y-1 transition-all ${
+                      selectedOddsMarket.startsWith("OU") || selectedOddsMarket.startsWith("OVER") || selectedOddsMarket.startsWith("UNDER") ? "bg-amber-500/10 border-amber-500/50 ring-1 ring-amber-500/30" : "bg-slate-950/80 border-slate-800"
+                    }`}>
                       <span className="text-[10px] font-black uppercase text-slate-400 block">Over / Under 2.5</span>
                       <div className="flex items-center justify-center gap-2 text-xs font-mono font-bold">
                         <span className="text-cyan-400">&gt;2.5: {m.overUnderOdds?.over25 || "-"}</span>
@@ -1117,7 +1733,9 @@ export const FindView: React.FC<FindViewProps> = ({
                     </div>
 
                     {/* GG / NG */}
-                    <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-2.5 text-center space-y-1">
+                    <div className={`border rounded-xl p-2.5 text-center space-y-1 transition-all ${
+                      selectedOddsMarket.startsWith("BTTS") ? "bg-amber-500/10 border-amber-500/50 ring-1 ring-amber-500/30" : "bg-slate-950/80 border-slate-800"
+                    }`}>
                       <span className="text-[10px] font-black uppercase text-slate-400 block">BTTS (GG / NG)</span>
                       <div className="flex items-center justify-center gap-2 text-xs font-mono font-bold">
                         <span className="text-emerald-400">GG: {m.bothTeamsScoreOdds?.yes || "-"}</span>
@@ -1189,7 +1807,7 @@ export const FindView: React.FC<FindViewProps> = ({
                                 <span>{dm.awayTeamName}</span>
                               </div>
                               <div className="flex items-center gap-3 text-[11px] text-slate-400 font-mono">
-                                <span>J{dm.roundNumber} (S{dm.seasonNumber || 1})</span>
+                                <span>J{dm.roundNumber} (Cat. #{dm.eventCategoryId || dm.competitionId})</span>
                                 <span>MT: ({dm.halfTimeScore || "0-0"})</span>
                               </div>
                             </div>

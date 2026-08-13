@@ -415,7 +415,7 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
         seasonNumber: sNum,
         seasonName: sName,
         seasonId: sId,
-        status: m.state || m.preEventOrLive || "Terminé",
+        status: "Finished",
         expectedStart: m.expectedStart || m.startTime || "",
         score: finalScore,
         halfTimeScore: halfTimeScore,
@@ -733,6 +733,7 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
     }
     const exportData = extractedDatabase.map((m) => ({
       ...m,
+      status: "Finished",
       eventCategoryId: m.eventCategoryId || (m as any).rawMatch?.eventCategoryId || activeEventCategoryId,
     }));
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportData, null, 2));
@@ -781,7 +782,7 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
       m.roundNumber,
       `"${m.score || ""}"`,
       `"${m.halfTimeScore || ""}"`,
-      `"${m.status}"`,
+      `"${m.status === "Ended" || m.status === "Undisputed" || m.status === "Terminé" ? "Finished" : (m.status || "Finished")}"`,
       m.homeRankAtRound ?? m.homeRank,
       m.awayRankAtRound ?? m.awayRank,
       m.homeOdds || 0,
@@ -813,51 +814,65 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
       return;
     }
 
-    const exportRows = extractedDatabase.map((m) => ({
-      "ID Match": m.id,
-      "ID Event Category (Carte d'Identité)": m.eventCategoryId || (m as any).rawMatch?.eventCategoryId || activeEventCategoryId || "",
-      "Nom Match": m.matchName,
-      "Équipe Domicile": m.homeTeamName,
-      "Équipe Extérieur": m.awayTeamName,
-      "Compétition": m.competitionName,
-      "ID Ligue (Compétition)": m.competitionId,
-      "Saison": m.seasonNumber ? `Saison ${m.seasonNumber}` : (m.seasonName || "Saison 1"),
-      "Journée / Round": m.roundNumber,
-      "Rang Domicile (Au Round)": m.homeRankAtRound ?? m.homeRank,
-      "Rang Extérieur (Au Round)": m.awayRankAtRound ?? m.awayRank,
-      "Points Domicile": m.homePoints ?? 0,
-      "Points Extérieur": m.awayPoints ?? 0,
-      "Score Final": m.score || "",
-      "Score Mi-Temps": m.halfTimeScore || "",
-      "Statut Match": m.status,
-      "Date / Heure Match": m.expectedStart || "",
-      "Cote 1": m.homeOdds || 0,
-      "Cote X": m.drawOdds || 0,
-      "Cote 2": m.awayOdds || 0,
-      "Cote 1X": m.doubleChanceOdds?.dc1X || 0,
-      "Cote 12": m.doubleChanceOdds?.dc12 || 0,
-      "Cote X2": m.doubleChanceOdds?.dcX2 || 0,
-      "Cote Over 2.5": m.overUnderOdds?.over25 || 0,
-      "Cote Under 2.5": m.overUnderOdds?.under25 || 0,
-      "Cote GG (Oui)": m.bothTeamsScoreOdds?.yes || 0,
-      "Cote NG (Non)": m.bothTeamsScoreOdds?.no || 0,
-      "Minutes Buts": m.goalMinutes || "",
-      "Date Extraite": m.extractedAt,
-      "Source": m.source || "Live Extraction",
-    }));
+    const exportRows = extractedDatabase.map((m) => {
+      const catId = m.eventCategoryId || (m as any).rawMatch?.eventCategoryId || activeEventCategoryId || m.competitionId || 0;
+      const scoreParts = (m.score || "0-0").split(/[:\-]/).map((s) => parseInt(s.trim(), 10) || 0);
+      const hScore = scoreParts[0] || 0;
+      const aScore = scoreParts[1] || 0;
+      const totalGoals = hScore + aScore;
+      const outcome = hScore > aScore ? "1" : aScore > hScore ? "2" : "X";
+      const over25Market = totalGoals > 2.5 ? "Over 2.5" : "Under 2.5";
+      const bttsMarket = hScore > 0 && aScore > 0 ? "GG (Oui)" : "NG (Non)";
+
+      return {
+        "ID Match": m.id,
+        "ID Event Category (Carte d'Identité)": catId,
+        "Nom Match": m.matchName,
+        "Équipe Domicile": m.homeTeamName,
+        "Équipe Extérieur": m.awayTeamName,
+        "Compétition": m.competitionName,
+        "ID Ligue (Compétition)": m.competitionId,
+        "Journée / Round": m.roundNumber || 1,
+        "Score Final (FT)": m.score || "0-0",
+        "Score Mi-Temps (HT)": m.halfTimeScore || "0-0",
+        "Total Buts (FT)": totalGoals,
+        "Issue (1X2)": outcome,
+        "Marché > 2.5 Buts": over25Market,
+        "Marché BTTS / GG": bttsMarket,
+        "Rang Domicile (Au Round)": m.homeRankAtRound ?? m.homeRank ?? "-",
+        "Rang Extérieur (Au Round)": m.awayRankAtRound ?? m.awayRank ?? "-",
+        "Points Domicile": m.homePoints ?? 0,
+        "Points Extérieur": m.awayPoints ?? 0,
+        "Cote 1 (Dom)": m.homeOdds || null,
+        "Cote X (Nul)": m.drawOdds || null,
+        "Cote 2 (Ext)": m.awayOdds || null,
+        "Cote 1X (DC)": m.doubleChanceOdds?.dc1X || null,
+        "Cote 12 (DC)": m.doubleChanceOdds?.dc12 || null,
+        "Cote X2 (DC)": m.doubleChanceOdds?.dcX2 || null,
+        "Cote Over 2.5": m.overUnderOdds?.over25 || null,
+        "Cote Under 2.5": m.overUnderOdds?.under25 || null,
+        "Cote GG (Oui)": m.bothTeamsScoreOdds?.yes || null,
+        "Cote NG (Non)": m.bothTeamsScoreOdds?.no || null,
+        "Minutages des Buts": m.goalMinutes || "",
+        "Statut Match": m.status === "Ended" || m.status === "Undisputed" || m.status === "Terminé" ? "Finished" : (m.status || "Finished"),
+        "Date / Heure Match": m.expectedStart || "",
+        "Date Extraite": m.extractedAt,
+        "Source Data": m.source || "Live Extraction",
+      };
+    });
 
     const worksheet = XLSX.utils.json_to_sheet(exportRows);
     const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Matchs BDD");
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Base de Données Matchs");
 
     // Auto-adjust column widths
     const colWidths = Object.keys(exportRows[0] || {}).map((key) => {
       let maxLen = key.length;
       exportRows.forEach((row: any) => {
-        const valStr = String(row[key] || "");
+        const valStr = String(row[key] ?? "");
         if (valStr.length > maxLen) maxLen = valStr.length;
       });
-      return { wch: Math.min(maxLen + 3, 40) };
+      return { wch: Math.min(maxLen + 3, 45) };
     });
     worksheet["!cols"] = colWidths;
 
@@ -868,7 +883,184 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
 
     addLog(
       "SUCCESS",
-      `[EXPORT XLSX] 📊 ${extractedDatabase.length} enregistrements exportés en Excel (.xlsx) avec ID Event Category.`
+      `[EXPORT XLSX] 📊 ${extractedDatabase.length} enregistrements exportés avec succès en Excel (.xlsx) structuré.`
+    );
+  };
+
+  const handleExportStyledExcel = () => {
+    if (extractedDatabase.length === 0) {
+      addLog("WARN", "[EXPORT STYLED EXCEL] Aucune donnée à exporter. La base de données est vide.");
+      alert("Base de données vide. Veuillez d'abord effectuer une extraction.");
+      return;
+    }
+
+    const catId = activeEventCategoryId || "global";
+    const totalCount = extractedDatabase.length;
+    const dateStr = new Date().toLocaleDateString("fr-FR", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+    // Calculate averages for summary
+    let sum1 = 0, sumX = 0, sum2 = 0, sumOv = 0, countOdds = 0;
+    extractedDatabase.forEach((m) => {
+      if (m.homeOdds && m.drawOdds && m.awayOdds) {
+        sum1 += m.homeOdds;
+        sumX += m.drawOdds;
+        sum2 += m.awayOdds;
+        countOdds++;
+      }
+      if (m.overUnderOdds?.over25) {
+        sumOv += m.overUnderOdds.over25;
+      }
+    });
+
+    const avg1 = countOdds > 0 ? (sum1 / countOdds).toFixed(2) : "-";
+    const avgX = countOdds > 0 ? (sumX / countOdds).toFixed(2) : "-";
+    const avg2 = countOdds > 0 ? (sum2 / countOdds).toFixed(2) : "-";
+    const avgOv = countOdds > 0 ? (sumOv / countOdds).toFixed(2) : "-";
+
+    const rowsHtml = extractedDatabase
+      .map((m, idx) => {
+        const itemCatId = m.eventCategoryId || (m as any).rawMatch?.eventCategoryId || activeEventCategoryId || m.competitionId || 0;
+        const scoreParts = (m.score || "0-0").split(/[:\-]/).map((s) => parseInt(s.trim(), 10) || 0);
+        const hScore = scoreParts[0] || 0;
+        const aScore = scoreParts[1] || 0;
+        const totalGoals = hScore + aScore;
+        const outcome = hScore > aScore ? "1" : aScore > hScore ? "2" : "X";
+        const bg = idx % 2 === 0 ? "#ffffff" : "#f8fafc";
+
+        const outcomeColor = outcome === "1" ? "#047857" : outcome === "2" ? "#b91c1c" : "#d97706";
+
+        return `
+          <tr style="background-color: ${bg}; border-bottom: 1px solid #e2e8f0; text-align: center; font-size: 11px;">
+            <td style="font-family: monospace; font-weight: bold; color: #475569; padding: 6px;">#${m.id}</td>
+            <td style="font-family: monospace; font-weight: bold; color: #0284c7; background-color: #e0f2fe; padding: 6px;">#${itemCatId}</td>
+            <td style="text-align: left; font-weight: bold; color: #0f172a; padding: 6px;">${m.competitionName || "Ligue"}</td>
+            <td style="font-weight: bold; padding: 6px;">J${m.roundNumber || 1}</td>
+            <td style="text-align: right; font-weight: bold; color: #1e293b; padding: 6px;">${m.homeTeamName}</td>
+            <td style="font-weight: bold; color: #475569; padding: 6px;">${m.homeRankAtRound ? `#${m.homeRankAtRound}` : "-"}</td>
+            <td style="font-weight: bold; background-color: #1e293b; color: #ffffff; padding: 6px; font-size: 12px;">${m.score || "0-0"}</td>
+            <td style="color: #64748b; padding: 6px;">${m.halfTimeScore || "0-0"}</td>
+            <td style="font-weight: bold; color: ${outcomeColor}; padding: 6px;">${outcome}</td>
+            <td style="font-weight: bold; color: #0f172a; padding: 6px;">${totalGoals}</td>
+            <td style="font-weight: bold; color: #475569; padding: 6px;">${m.awayRankAtRound ? `#${m.awayRankAtRound}` : "-"}</td>
+            <td style="text-align: left; font-weight: bold; color: #1e293b; padding: 6px;">${m.awayTeamName}</td>
+            <td style="font-family: monospace; font-weight: bold; color: #047857; background-color: #ecfdf5; padding: 6px;">${m.homeOdds || "-"}</td>
+            <td style="font-family: monospace; font-weight: bold; color: #d97706; background-color: #fffbeb; padding: 6px;">${m.drawOdds || "-"}</td>
+            <td style="font-family: monospace; font-weight: bold; color: #b91c1c; background-color: #fef2f2; padding: 6px;">${m.awayOdds || "-"}</td>
+            <td style="font-family: monospace; color: #334155; padding: 6px;">${m.doubleChanceOdds?.dc1X || "-"}</td>
+            <td style="font-family: monospace; color: #334155; padding: 6px;">${m.doubleChanceOdds?.dc12 || "-"}</td>
+            <td style="font-family: monospace; color: #334155; padding: 6px;">${m.doubleChanceOdds?.dcX2 || "-"}</td>
+            <td style="font-family: monospace; font-weight: bold; color: #0284c7; background-color: #f0f9ff; padding: 6px;">${m.overUnderOdds?.over25 || "-"}</td>
+            <td style="font-family: monospace; color: #475569; padding: 6px;">${m.overUnderOdds?.under25 || "-"}</td>
+            <td style="font-family: monospace; font-weight: bold; color: #059669; padding: 6px;">${m.bothTeamsScoreOdds?.yes || "-"}</td>
+            <td style="font-family: monospace; color: #475569; padding: 6px;">${m.bothTeamsScoreOdds?.no || "-"}</td>
+            <td style="font-family: monospace; color: #047857; text-align: left; padding: 6px;">${m.goalMinutes || "-"}</td>
+            <td style="color: #64748b; font-size: 10px; padding: 6px;">${m.extractedAt || "-"}</td>
+          </tr>
+        `;
+      })
+      .join("");
+
+    const excelTemplate = `
+      <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+      <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+        <!--[if gte mso 9]>
+        <xml>
+          <x:ExcelWorkbook>
+            <x:ExcelWorksheets>
+              <x:ExcelWorksheet>
+                <x:Name>Base de Données Matchs</x:Name>
+                <x:WorksheetOptions>
+                  <x:DisplayGridlines/>
+                </x:WorksheetOptions>
+              </x:ExcelWorksheet>
+            </x:ExcelWorksheets>
+          </x:ExcelWorkbook>
+        </xml>
+        <![endif]-->
+        <style>
+          body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+          .title-banner { background-color: #0f172a; color: #ffffff; padding: 16px; text-align: center; }
+          .title-banner h2 { margin: 0; font-size: 18px; color: #f59e0b; text-transform: uppercase; }
+          .title-banner p { margin: 4px 0 0 0; font-size: 11px; color: #cbd5e1; }
+          table { border-collapse: collapse; width: 100%; margin-top: 10px; }
+          th { background-color: #1e293b; color: #f8fafc; font-size: 11px; font-weight: bold; text-transform: uppercase; padding: 8px; border: 1px solid #334155; }
+          .footer-summary { background-color: #0f172a; color: #fbbf24; font-weight: bold; font-size: 11px; text-align: center; }
+        </style>
+      </head>
+      <body>
+        <div class="title-banner">
+          <h2>RAPPORT D'EXTRACTION BDD SPORTY ARCHIVE - EXCEL STYLÉ</h2>
+          <p>ID Event Category : <b>#${catId}</b> | Total Matchs : <b>${totalCount}</b> | Exporté le : <b>${dateStr}</b></p>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>ID Match</th>
+              <th>ID Event Category</th>
+              <th>Compétition</th>
+              <th>Journée</th>
+              <th>Équipe Domicile</th>
+              <th>Rang D.</th>
+              <th>Score FT</th>
+              <th>Score MT</th>
+              <th>Issue 1X2</th>
+              <th>Total Buts</th>
+              <th>Rang E.</th>
+              <th>Équipe Extérieur</th>
+              <th>Cote 1</th>
+              <th>Cote X</th>
+              <th>Cote 2</th>
+              <th>Cote 1X</th>
+              <th>Cote 12</th>
+              <th>Cote X2</th>
+              <th>Cote > 2.5</th>
+              <th>Cote < 2.5</th>
+              <th>Cote GG</th>
+              <th>Cote NG</th>
+              <th>Minutes Buts</th>
+              <th>Date Extraite</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+          <tfoot>
+            <tr class="footer-summary">
+              <td colspan="4" style="padding: 10px; text-align: left;">MOYENNES & RÉSUMÉ TOTAL (${totalCount} Matchs)</td>
+              <td colspan="8"></td>
+              <td style="padding: 10px; color: #34d399;">${avg1}</td>
+              <td style="padding: 10px; color: #fbbf24;">${avgX}</td>
+              <td style="padding: 10px; color: #f87171;">${avg2}</td>
+              <td colspan="3"></td>
+              <td style="padding: 10px; color: #38bdf8;">${avgOv}</td>
+              <td colspan="5"></td>
+            </tr>
+          </tfoot>
+        </table>
+      </body>
+      </html>
+    `;
+
+    const blob = new Blob([excelTemplate], { type: "application/vnd.ms-excel;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `bdd_sporty_stylee_eventCat_${catId}_${new Date().toISOString().slice(0, 10)}.xls`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    addLog(
+      "SUCCESS",
+      `[EXPORT STYLED EXCEL] 🎨 ${totalCount} enregistrements exportés en Excel Stylé (.xls) avec en-tête, couleurs et moyennes.`
     );
   };
 
@@ -965,7 +1157,11 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
           seasonNumber: sNum,
           seasonId: sId,
           seasonName: item.seasonName || `Saison ${sNum}`,
-          status: item.status || item["Statut Match"] || (item.score ? "Finished" : "PreEvent"),
+          status: (() => {
+            const rawSt = String(item.status || item["Statut Match"] || "").toLowerCase();
+            const isFin = rawSt === "finished" || rawSt === "ended" || rawSt === "undisputed" || rawSt === "terminé" || Boolean(item.score || item["Score Final"]);
+            return isFin ? "Finished" : (item.status || "PreEvent");
+          })(),
           score: item.score || item["Score Final"] || "",
           halfTimeScore: item.halfTimeScore || item["Score Mi-Temps"] || "",
           homeOdds: typeof item.homeOdds === "number" ? item.homeOdds : parseFloat(item["Cote 1"] || item.homeOdds || "1.80"),
@@ -1052,8 +1248,11 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
     if (selectedSeasonFilter !== "ALL" && String(record.seasonNumber || record.seasonId || 1) !== String(selectedSeasonFilter)) {
       return false;
     }
-    if (selectedStatusFilter !== "ALL" && record.status !== selectedStatusFilter) {
-      return false;
+    if (selectedStatusFilter !== "ALL") {
+      const recStatus = (record.status === "Ended" || record.status === "Undisputed" || record.status === "Terminé") ? "Finished" : record.status;
+      if (recStatus !== selectedStatusFilter) {
+        return false;
+      }
     }
     if (searchQuery.trim() !== "") {
       const q = searchQuery.toLowerCase();
@@ -1390,10 +1589,18 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
                   <button
                     onClick={handleExportXLSX}
                     className="px-2.5 py-1 bg-emerald-600/30 hover:bg-emerald-600/40 text-emerald-300 border border-emerald-500/40 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer shadow-sm"
-                    title="Exporter la BDD en fichier Excel (.xlsx)"
+                    title="Exporter la BDD au format Excel structuré (.xlsx)"
                   >
                     <FileSpreadsheet className="w-3 h-3 text-emerald-400" />
-                    <span>XLSX (Excel)</span>
+                    <span>XLSX (Data)</span>
+                  </button>
+                  <button
+                    onClick={handleExportStyledExcel}
+                    className="px-2.5 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer shadow-sm"
+                    title="Exporter un rapport Excel stylé avec couleurs, en-têtes et moyennes (.xls)"
+                  >
+                    <Sparkles className="w-3 h-3 text-amber-400" />
+                    <span>Excel Stylé</span>
                   </button>
                   <button
                     onClick={() => setShowGoogleDriveModal(true)}
@@ -1641,10 +1848,19 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
                 <button
                   onClick={handleExportXLSX}
                   className="px-3.5 py-2 bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-300 border border-emerald-500/60 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-md shadow-emerald-950/40 transition-all cursor-pointer"
-                  title="Exporter la BDD au format Excel (.xlsx) avec en-têtes et ID Event Category"
+                  title="Exporter la BDD au format Excel structuré (.xlsx)"
                 >
                   <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Exporter XLSX (Excel)</span>
+                  <span>Exporter XLSX (Data)</span>
+                </button>
+
+                <button
+                  onClick={handleExportStyledExcel}
+                  className="px-3.5 py-2 bg-gradient-to-r from-amber-500/30 to-emerald-500/30 hover:from-amber-500/50 hover:to-emerald-500/50 text-amber-200 border border-amber-500/60 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-md shadow-amber-950/40 transition-all cursor-pointer"
+                  title="Exporter un rapport Excel stylé avec bannière, couleurs, en-têtes sombres et moyennes (.xls)"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Exporter Excel Stylé (.xls)</span>
                 </button>
 
                 <button
@@ -1734,7 +1950,7 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
                 className="px-3.5 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500 cursor-pointer"
               >
                 <option value="ALL">Tous les statuts</option>
-                <option value="Ended">Terminé (Ended)</option>
+                <option value="Finished">Terminé (Finished)</option>
                 <option value="InPlay">En Direct (InPlay)</option>
                 <option value="PreEvent">À venir (PreEvent)</option>
               </select>

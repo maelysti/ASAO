@@ -40,8 +40,8 @@ export interface SportyEvent {
   categoryId?: number;
   entryPointId: number;
   eventType: string; // e.g. "Match"
-  state: string; // e.g. "Undisputed", "Ended", "InPlay"
-  preEventOrLive: "PreEvent" | "Live" | "Finished" | "Ended" | string;
+  state: string; // e.g. "Finished", "InPlay", "PreEvent"
+  preEventOrLive: "PreEvent" | "Live" | "Finished" | string;
   willBeOfferedLive?: boolean;
   isVirtual?: boolean;
   eventBetTypes?: SportyBetType[];
@@ -199,7 +199,7 @@ export interface ExtractedMatchRecord {
   seasonNumber?: number | string;
   seasonName?: string;
   seasonId?: number | string;
-  status: string; // Live, PreEvent, Ended, Finished
+  status: string; // Live, PreEvent, Finished
   expectedStart?: string;
   score?: string;
   halfTimeScore?: string;

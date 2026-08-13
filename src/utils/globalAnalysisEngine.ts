@@ -602,7 +602,7 @@ export function calculateGlobalDatabaseStats(
     (m) =>
       m.score &&
       m.score.includes(":") &&
-      (m.status === "Ended" || m.status === "Finished" || m.status === "Terminé")
+      (m.status === "Finished" || m.status === "Ended" || m.status === "Undisputed" || m.status === "Terminé" || Boolean(m.score))
   );
 
   // If database is empty or small, fallback to incorporating all records with scores or simulated dataset
