@@ -130,7 +130,8 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
   ]);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const consoleBottomRef = useRef<HTMLDivElement | null>(null);
+  const consoleContainerRef = useRef<HTMLDivElement | null>(null);
+  const [autoScrollConsole, setAutoScrollConsole] = useState<boolean>(false);
 
   const addLog = (type: "INFO" | "SUCCESS" | "WARN" | "MATRIX", message: string) => {
     const time = new Date().toLocaleTimeString("fr-FR", {
@@ -144,11 +145,12 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
     ]);
   };
 
+  // Purely silent internal box scrolling only if enabled - NEVER scrolls the page or moves user view
   useEffect(() => {
-    if (consoleBottomRef.current) {
-      consoleBottomRef.current.scrollIntoView({ behavior: "smooth" });
+    if (autoScrollConsole && consoleContainerRef.current) {
+      consoleContainerRef.current.scrollTop = consoleContainerRef.current.scrollHeight;
     }
-  }, [logs]);
+  }, [logs, autoScrollConsole]);
 
   // Phase & Deduplication Tracking
   const [extractionPhase, setExtractionPhase] = useState<"PAST_ARCHIVE" | "LIVE_STREAM">("PAST_ARCHIVE");
@@ -1273,6 +1275,17 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
 
           <div className="flex items-center gap-2">
             <button
+              onClick={() => setAutoScrollConsole(!autoScrollConsole)}
+              className={`text-[10px] font-bold px-2 py-1 rounded border cursor-pointer transition-all ${
+                autoScrollConsole
+                  ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
+                  : "bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200"
+              }`}
+              title="Activer/Désactiver le défilement automatique interne de la console"
+            >
+              {autoScrollConsole ? "Défilement Auto : ACTIF" : "Défilement Auto : SILENCIEUX"}
+            </button>
+            <button
               onClick={() => setLogs([])}
               className="text-[10px] font-bold text-slate-500 hover:text-slate-300 px-2 py-1 rounded bg-slate-900 border border-slate-800 cursor-pointer"
             >
@@ -1281,7 +1294,7 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
           </div>
         </div>
 
-        <div className="mt-3 max-h-48 overflow-y-auto space-y-1 text-[11px] scrollbar-thin">
+        <div ref={consoleContainerRef} className="mt-3 max-h-48 overflow-y-auto space-y-1 text-[11px] scrollbar-thin">
           {logs.map((log) => (
             <div key={log.id} className="flex items-start gap-2 leading-relaxed">
               <span className="text-slate-600 font-bold shrink-0">[{log.timestamp}]</span>
@@ -1300,7 +1313,6 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
               </span>
             </div>
           ))}
-          <div ref={consoleBottomRef} />
         </div>
       </div>
 
