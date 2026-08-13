@@ -833,9 +833,8 @@ export function getH2HAnalysisForMatch(
       });
 
   // Extract ranks & odds
-  const isCombined = "categoryName" in event;
-  const homeRank = isCombined ? (event as CombinedMatchData).homeStats?.position || 4 : 4;
-  const awayRank = isCombined ? (event as CombinedMatchData).awayStats?.position || 10 : 10;
+  const homeRank = (event as any).homeStats?.position || (event as any).homeRankAtRound || (event as any).homeRank || 10;
+  const awayRank = (event as any).awayStats?.position || (event as any).awayRankAtRound || (event as any).awayRank || 10;
 
   const mainBet = event.eventBetTypes?.find(
     (bt) => bt.name?.toUpperCase().includes("1X2") || bt.betTypeId === 30083
@@ -861,6 +860,10 @@ export function getH2HAnalysisForMatch(
         const parts = m.score.split(":");
         hS = parseInt(parts[0], 10) || 0;
         aS = parseInt(parts[1], 10) || 0;
+      } else if (m.score && m.score.includes("-")) {
+        const parts = m.score.split("-");
+        hS = parseInt(parts[0], 10) || 0;
+        aS = parseInt(parts[1], 10) || 0;
       }
       const sum = hS + aS;
       totG += sum;
@@ -883,39 +886,86 @@ export function getH2HAnalysisForMatch(
 
   const totH2H = directMatches.length;
 
+  // Calculate empirical odds interval statistics from database FIRST for probability weighting
+  let oddsIntervalStats: H2HMatchAnalysisResult["oddsIntervalStats"];
+  if (database && database.length > 0 && homeOdds > 1.01) {
+    const minOdds = Math.max(1.01, parseFloat((homeOdds - 0.25).toFixed(2)));
+    const maxOdds = parseFloat((homeOdds + 0.25).toFixed(2));
+    const similarOddsMatches = database.filter((m) => {
+      const hO = m.homeOdds;
+      return hO && hO >= minOdds && hO <= maxOdds;
+    });
+
+    if (similarOddsMatches.length >= 2) {
+      let hw = 0, dr = 0, aw = 0, ov25 = 0, btts = 0;
+      similarOddsMatches.forEach((m) => {
+        const parts = (m.score || "0-0").split(/[:\-]/).map((s) => parseInt(s.trim(), 10) || 0);
+        const hS = parts[0] || 0;
+        const aS = parts[1] || 0;
+        const sum = hS + aS;
+        if (hS > aS) hw++;
+        else if (hS === aS) dr++;
+        else aw++;
+
+        if (sum > 2) ov25++;
+        if (hS > 0 && aS > 0) btts++;
+      });
+
+      const totalSim = similarOddsMatches.length;
+      oddsIntervalStats = {
+        sampleSize: totalSim,
+        homeWinPct: Math.round((hw / totalSim) * 100),
+        drawPct: Math.round((dr / totalSim) * 100),
+        awayWinPct: Math.round((aw / totalSim) * 100),
+        over25Pct: Math.round((ov25 / totalSim) * 100),
+        bttsPct: Math.round((btts / totalSim) * 100),
+        oddsRangeLabel: `Cote Dom [${minOdds.toFixed(2)} - ${maxOdds.toFixed(2)}]`,
+      };
+    }
+  }
+
   // Calculate high precision probabilities from multi-factor weighting
-  // Factors: Direct H2H (40%), Ranking/Standing gap (35%), Implied Market Odds (25%)
   const rankDiff = awayRank - homeRank; // Positive = Home better rank
 
-  // Base implied probabilities from odds
-  const implHome = (1 / homeOdds) * 0.88;
-  const implDraw = (1 / drawOdds) * 0.88;
-  const implAway = (1 / awayOdds) * 0.88;
+  // Base normalized implied probabilities from market odds
+  const rawImplSum = (1 / homeOdds) + (1 / drawOdds) + (1 / awayOdds) || 1;
+  const implHome = (1 / homeOdds) / rawImplSum;
+  const implDraw = (1 / drawOdds) / rawImplSum;
+  const implAway = (1 / awayOdds) / rawImplSum;
 
-  let homeWinPct: number;
-  let drawPctVal: number;
-  let awayWinPct: number;
+  let rawHomeProb = 0;
+  let rawDrawProb = 0;
+  let rawAwayProb = 0;
 
   if (totH2H >= 2) {
-    homeWinPct = Math.round((hWins / totH2H) * 50 + implHome * 30 + (rankDiff > 0 ? 20 : 0));
-    drawPctVal = Math.round((dWins / totH2H) * 50 + implDraw * 30 + (Math.abs(rankDiff) <= 2 ? 20 : 10));
-    awayWinPct = Math.round((aWins / totH2H) * 50 + implAway * 30 + (rankDiff < 0 ? 20 : 0));
+    // Priority 1: Direct H2H
+    rawHomeProb = (hWins / totH2H) * 0.50 + implHome * 0.35 + (rankDiff > 2 ? 0.15 : rankDiff < -2 ? -0.10 : 0.05);
+    rawDrawProb = (dWins / totH2H) * 0.50 + implDraw * 0.35 + (Math.abs(rankDiff) <= 2 ? 0.15 : 0.05);
+    rawAwayProb = (aWins / totH2H) * 0.50 + implAway * 0.35 + (rankDiff < -2 ? 0.15 : rankDiff > 2 ? -0.10 : 0.05);
+  } else if (oddsIntervalStats && oddsIntervalStats.sampleSize >= 2) {
+    // Priority 2: Empirical BDD Odds Bracket
+    const bHome = oddsIntervalStats.homeWinPct / 100;
+    const bDraw = oddsIntervalStats.drawPct / 100;
+    const bAway = oddsIntervalStats.awayWinPct / 100;
+    rawHomeProb = bHome * 0.55 + implHome * 0.35 + (rankDiff > 3 ? 0.10 : 0);
+    rawDrawProb = bDraw * 0.55 + implDraw * 0.35 + (Math.abs(rankDiff) <= 3 ? 0.10 : 0);
+    rawAwayProb = bAway * 0.55 + implAway * 0.35 + (rankDiff < -3 ? 0.10 : 0);
   } else {
-    // Profiling fallback
-    homeWinPct = Math.round(implHome * 60 + (rankDiff > 0 ? 25 : 10));
-    drawPctVal = Math.round(implDraw * 60 + (Math.abs(rankDiff) <= 3 ? 20 : 10));
-    awayWinPct = Math.round(implAway * 60 + (rankDiff < 0 ? 25 : 10));
+    // Priority 3: Market Implied + Rank Gap
+    rawHomeProb = implHome * 0.75 + (rankDiff > 3 ? 0.20 : rankDiff < -3 ? 0.05 : 0.12);
+    rawDrawProb = implDraw * 0.75 + (Math.abs(rankDiff) <= 3 ? 0.20 : 0.10);
+    rawAwayProb = implAway * 0.75 + (rankDiff < -3 ? 0.20 : rankDiff > 3 ? 0.05 : 0.12);
   }
 
   // Normalize percentages to sum to 100
-  const sumPct = homeWinPct + drawPctVal + awayWinPct || 1;
-  homeWinPct = Math.round((homeWinPct / sumPct) * 100);
-  drawPctVal = Math.round((drawPctVal / sumPct) * 100);
-  awayWinPct = Math.max(0, 100 - homeWinPct - drawPctVal);
+  const sumProb = rawHomeProb + rawDrawProb + rawAwayProb || 1;
+  let homeWinPct = Math.round((rawHomeProb / sumProb) * 100);
+  let drawPctVal = Math.round((rawDrawProb / sumProb) * 100);
+  let awayWinPct = Math.max(0, 100 - homeWinPct - drawPctVal);
 
-  const over15Pct = totH2H > 0 ? Math.round((over15Count / totH2H) * 100) : 78;
-  const over25Pct = totH2H > 0 ? Math.round((over25Count / totH2H) * 100) : 62;
-  const bttsPct = totH2H > 0 ? Math.round((bttsCount / totH2H) * 100) : 55;
+  const over15Pct = totH2H > 0 ? Math.round((over15Count / totH2H) * 100) : (oddsIntervalStats ? oddsIntervalStats.over25Pct + 15 : 78);
+  const over25Pct = totH2H > 0 ? Math.round((over25Count / totH2H) * 100) : (oddsIntervalStats ? oddsIntervalStats.over25Pct : 62);
+  const bttsPct = totH2H > 0 ? Math.round((bttsCount / totH2H) * 100) : (oddsIntervalStats ? oddsIntervalStats.bttsPct : 55);
 
   const avgG = totH2H > 0 ? parseFloat((totG / totH2H).toFixed(2)) : 2.65;
 
@@ -963,7 +1013,7 @@ export function getH2HAnalysisForMatch(
   }
   databaseEvidence.push(`Classement : ${event.homeTeamName} (#${homeRank}) vs ${event.awayTeamName} (#${awayRank}) - Écart de ${Math.abs(rankDiff)} rangs`);
 
-  // Master Rule Selection Algorithm
+  // Master Rule Selection Algorithm (Strictly Coherent with Probabilities & Odds)
   let ruleId = "RÉG-01";
   let ruleName = "Dominance Domicile Absolue";
   let conditionSummary = "Domicile Top 5 + Cote < 1.95";
@@ -972,54 +1022,69 @@ export function getH2HAnalysisForMatch(
   let riskLevel: "TRÈS FAIBLE" | "FAIBLE" | "MODÉRÉ" | "ÉLEVÉ" = "FAIBLE";
   let whyText = "";
 
-  if (totH2H >= 2 && hWins / totH2H >= 0.65) {
-    ruleId = "RÉG-02";
-    ruleName = "Forteresse H2H Directe (Historique Dominant)";
-    conditionSummary = `${Math.round((hWins / totH2H) * 100)}% de victoires dans les H2H enregistrés`;
-    actionBet = "1X (Double Chance Domicile)";
-    ruleConf = Math.min(94, Math.round((hWins / totH2H) * 100 + 10));
-    riskLevel = "TRÈS FAIBLE";
-    whyText = `L'historique des ${totH2H} affrontements directs démontre une suprématie nette de ${event.homeTeamName} avec ${hWins} victoires. Le pari 1X offre une couverture de sécurité maximale.`;
-  } else if (homeRank <= 4 && homeWinPct >= 55 && homeOdds <= 1.85) {
-    ruleId = "RÉG-01";
-    ruleName = "Dominance Domicile Absolue (Favori Majeur)";
-    conditionSummary = `Rang Domicile #${homeRank} + Probabilité Victoire ${homeWinPct}%`;
-    actionBet = homeOdds <= 1.55 ? "1 (Victoire Directe)" : "1X";
-    ruleConf = Math.min(92, homeWinPct + 12);
-    riskLevel = "TRÈS FAIBLE";
-    whyText = `${event.homeTeamName} est positionné #${homeRank} au classement avec une probabilité calculée de ${homeWinPct}%. La cote (${homeOdds.toFixed(2)}) confirme la solidité du favori.`;
-  } else if (awayRank <= 3 && awayWinPct >= 50 && awayOdds <= 2.20) {
-    ruleId = "RÉG-03";
-    ruleName = "Suprématie Visiteur (Top 3 Extérieur)";
-    conditionSummary = `Visiteur Rang #${awayRank} surclasse Domicile Rang #${homeRank}`;
-    actionBet = "X2 (Double Chance Visiteur)";
-    ruleConf = Math.min(89, awayWinPct + 15);
-    riskLevel = "FAIBLE";
-    whyText = `${event.awayTeamName} (Rang #${awayRank}) présente une forme supérieure à l'extérieur face au Domicile (Rang #${homeRank}). Prédiction X2 basée sur le différentiel de classe.`;
+  const isAwayStronger = awayWinPct > homeWinPct + 4 || awayOdds < homeOdds - 0.20;
+  const isHomeStronger = homeWinPct > awayWinPct + 4 || homeOdds < awayOdds - 0.20;
+
+  if (isAwayStronger) {
+    if (awayWinPct >= 55 || awayOdds <= 1.80 || (totH2H >= 2 && aWins / totH2H >= 0.60)) {
+      ruleId = "RÉG-03";
+      ruleName = "Suprématie Visiteur (Favori Extérieur)";
+      conditionSummary = `Probabilité Extérieur ${awayWinPct}% (Cote ${awayOdds.toFixed(2)})`;
+      actionBet = awayOdds <= 1.55 ? "2 (Victoire Extérieur)" : "X2 (Double Chance Visiteur)";
+      ruleConf = Math.min(94, awayWinPct + drawPctVal);
+      riskLevel = "FAIBLE";
+      whyText = `Les données de la BDD et les cotes indiquent une supériorité de ${event.awayTeamName} (${awayWinPct}% de chances de victoire). Le pari ${actionBet} est l'option la plus cohérente.`;
+    } else {
+      ruleId = "RÉG-05";
+      ruleName = "Sécurité Double Chance X2";
+      conditionSummary = `Cumul Visiteur/Nul = ${awayWinPct + drawPctVal}%`;
+      actionBet = "X2";
+      ruleConf = Math.min(92, awayWinPct + drawPctVal);
+      riskLevel = "TRÈS FAIBLE";
+      whyText = `Le modèle et la BDD donnent l'avantage à ${event.awayTeamName}. La couverture X2 réunit ${awayWinPct + drawPctVal}% des probabilités historiques.`;
+    }
+  } else if (isHomeStronger) {
+    if (totH2H >= 2 && hWins / totH2H >= 0.65) {
+      ruleId = "RÉG-02";
+      ruleName = "Forteresse H2H Directe (Historique Dominant)";
+      conditionSummary = `${Math.round((hWins / totH2H) * 100)}% de victoires dans les H2H enregistrés`;
+      actionBet = "1X (Double Chance Domicile)";
+      ruleConf = Math.min(94, Math.round((hWins / totH2H) * 100 + 10));
+      riskLevel = "TRÈS FAIBLE";
+      whyText = `L'historique des ${totH2H} affrontements directs démontre une suprématie de ${event.homeTeamName} avec ${hWins} victoires. Le pari 1X offre une couverture de sécurité maximale.`;
+    } else if (homeWinPct >= 55 && homeOdds <= 1.85) {
+      ruleId = "RÉG-01";
+      ruleName = "Dominance Domicile Absolue (Favori Majeur)";
+      conditionSummary = `Probabilité Domicile ${homeWinPct}% (Cote ${homeOdds.toFixed(2)})`;
+      actionBet = homeOdds <= 1.55 ? "1 (Victoire Directe)" : "1X";
+      ruleConf = Math.min(92, homeWinPct + 12);
+      riskLevel = "TRÈS FAIBLE";
+      whyText = `${event.homeTeamName} est favori avec une probabilité calculée de ${homeWinPct}%. La cote (${homeOdds.toFixed(2)}) confirme la solidité du pari.`;
+    } else {
+      ruleId = "RÉG-05";
+      ruleName = "Sécurité Double Chance 1X";
+      conditionSummary = `Cumul Domicile/Nul = ${homeWinPct + drawPctVal}%`;
+      actionBet = "1X";
+      ruleConf = Math.min(92, homeWinPct + drawPctVal);
+      riskLevel = "TRÈS FAIBLE";
+      whyText = `En combinant les chances de victoire à domicile (${homeWinPct}%) et de match nul (${drawPctVal}%), l'option 1X couvre ${homeWinPct + drawPctVal}% des scénarios.`;
+    }
   } else if (over25Pct >= 70 || avgG >= 2.90) {
     ruleId = "RÉG-04";
     ruleName = "Machine à Buts (Tendance Over 2.5)";
     conditionSummary = `Moyenne H2H de ${avgG} buts/match (${over25Pct}% Over 2.5)`;
     actionBet = "Over 2.5 (Plus de 2.5 Buts)";
-    ruleConf = Math.min(90, over25Pct + 10);
+    ruleConf = Math.min(90, over25Pct);
     riskLevel = "FAIBLE";
-    whyText = `Les confrontations enregistrées dépassent la moyenne de buts du championnat (${avgG} buts/match). Idéal pour viser le marché des buts.`;
-  } else if (homeWinPct + drawPctVal >= 78) {
-    ruleId = "RÉG-05";
-    ruleName = "Sécurité Double Chance 1X";
-    conditionSummary = `Cumul Domicile/Nul = ${homeWinPct + drawPctVal}%`;
-    actionBet = "1X";
-    ruleConf = Math.min(91, homeWinPct + drawPctVal);
-    riskLevel = "TRÈS FAIBLE";
-    whyText = `En combinant les chances de victoire à domicile (${homeWinPct}%) et de match nul (${drawPctVal}%), l'option 1X couvre 4 issues sur 5 selon le modèle historique.`;
+    whyText = `Match indécis sur le vainqueur mais forte tendance aux buts (${over25Pct}% Over 2.5). Recommandation sur le marché des buts.`;
   } else {
     ruleId = "RÉG-06";
-    ruleName = "Arbitrage & Sécurité (Dissidence de Cotes)";
-    conditionSummary = "Signaux équilibrés ou cotes proches -> Arbitrage Sécurité";
-    actionBet = homeWinPct >= awayWinPct ? "1X" : "X2";
-    ruleConf = 82;
+    ruleName = "Arbitrage & Sécurité (Cotes Équilibrées)";
+    conditionSummary = "Forces équilibrées -> Couverture Double Chance";
+    actionBet = awayWinPct > homeWinPct ? "X2" : "1X";
+    ruleConf = Math.max(78, awayWinPct > homeWinPct ? awayWinPct + drawPctVal : homeWinPct + drawPctVal);
     riskLevel = "MODÉRÉ";
-    whyText = `Proximité dans les cotes et le classement entre les deux équipes. Recommandation d'arbitrage en Double Chance pour ne pas prendre de risque inutile.`;
+    whyText = `Proximité dans les cotes et le classement entre les deux équipes. Recommandation d'arbitrage en Double Chance (${actionBet}) pour éviter les risques.`;
   }
 
   const predictionFormatted = actionBet.startsWith("1 (")
@@ -1032,45 +1097,9 @@ export function getH2HAnalysisForMatch(
     ? "2"
     : actionBet.includes("Over 2.5")
     ? "Over 2.5"
+    : awayWinPct > homeWinPct
+    ? "X2"
     : "1X";
-
-  // Calculate empirical odds interval statistics from database
-  let oddsIntervalStats: H2HMatchAnalysisResult["oddsIntervalStats"];
-  if (database && database.length > 0 && homeOdds > 1.01) {
-    const minOdds = Math.max(1.01, parseFloat((homeOdds - 0.20).toFixed(2)));
-    const maxOdds = parseFloat((homeOdds + 0.20).toFixed(2));
-    const similarOddsMatches = database.filter((m) => {
-      const hO = m.homeOdds;
-      return hO && hO >= minOdds && hO <= maxOdds;
-    });
-
-    if (similarOddsMatches.length >= 2) {
-      let hw = 0, dr = 0, aw = 0, ov25 = 0, btts = 0;
-      similarOddsMatches.forEach((m) => {
-        const parts = (m.score || "0-0").split(/[:\-]/).map((s) => parseInt(s.trim(), 10) || 0);
-        const hS = parts[0] || 0;
-        const aS = parts[1] || 0;
-        const sum = hS + aS;
-        if (hS > aS) hw++;
-        else if (hS === aS) dr++;
-        else aw++;
-
-        if (sum > 2) ov25++;
-        if (hS > 0 && aS > 0) btts++;
-      });
-
-      const totalSim = similarOddsMatches.length;
-      oddsIntervalStats = {
-        sampleSize: totalSim,
-        homeWinPct: Math.round((hw / totalSim) * 100),
-        drawPct: Math.round((dr / totalSim) * 100),
-        awayWinPct: Math.round((aw / totalSim) * 100),
-        over25Pct: Math.round((ov25 / totalSim) * 100),
-        bttsPct: Math.round((btts / totalSim) * 100),
-        oddsRangeLabel: `Cote Dom [${minOdds.toFixed(2)} - ${maxOdds.toFixed(2)}]`,
-      };
-    }
-  }
 
   // Calculate empirical backtesting for rule in database
   let ruleBacktestInDb: H2HMatchAnalysisResult["ruleBacktestInDb"];
