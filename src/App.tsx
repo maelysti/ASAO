@@ -44,6 +44,11 @@ import { PasswordGateModal } from "./components/PasswordGateModal";
 import { RuleItem, AIRecapPrediction, ExtractedMatchRecord } from "./types";
 import { DEFAULT_RULES, processAllRules, runAIModeAnalysis } from "./utils/ruleEngine";
 import { getH2HAnalysisForMatch, getRealMatchId, mergeExtractedRecords, convertRoundResultsToExtractedRecords } from "./utils/globalAnalysisEngine";
+import {
+  loadExtractedDatabaseFromIndexedDB,
+  saveExtractedDatabaseToIndexedDB,
+  clearExtractedDatabaseInIndexedDB,
+} from "./utils/indexedDbStorage";
 
 import { AlertTriangle, Key, RefreshCw, Trophy, Layers, Activity, Database, Download, ListOrdered, Sliders, Zap, BarChart3, PanelLeftClose, PanelLeftOpen, ChevronLeft, ChevronRight, Wrench, Clock, Flame, Lock, Eye, BellRing, X, Search } from "lucide-react";
 
@@ -126,8 +131,26 @@ export default function App() {
   const [aiRecaps, setAiRecaps] = useState<AIRecapPrediction[]>([]);
   const [isScanningAI, setIsScanningAI] = useState<boolean>(false);
 
-  // Extraction & Database State
+  // Extraction & Database State (IndexedDB backed)
   const [extractedDatabase, setExtractedDatabase] = useState<ExtractedMatchRecord[]>([]);
+  const isDbLoadedRef = useRef<boolean>(false);
+
+  // Load from IndexedDB on initial mount
+  useEffect(() => {
+    loadExtractedDatabaseFromIndexedDB().then((records) => {
+      if (records && records.length > 0) {
+        setExtractedDatabase(records);
+      }
+      isDbLoadedRef.current = true;
+    });
+  }, []);
+
+  // Save to IndexedDB whenever extractedDatabase changes (once loaded)
+  useEffect(() => {
+    if (isDbLoadedRef.current) {
+      saveExtractedDatabaseToIndexedDB(extractedDatabase);
+    }
+  }, [extractedDatabase]);
   const [isExtracting, setIsExtracting] = useState<boolean>(false);
   const [autoExtractInterval, setAutoExtractInterval] = useState<number>(2);
 
@@ -555,7 +578,9 @@ export default function App() {
 
   const handleClearDatabase = useCallback(() => {
     if (confirm("Voulez-vous vraiment vider toute la base de données extraite ?")) {
-      setExtractedDatabase([]);
+      clearExtractedDatabaseInIndexedDB().finally(() => {
+        setExtractedDatabase([]);
+      });
     }
   }, []);
 
