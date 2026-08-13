@@ -26,9 +26,36 @@ import {
   Hash,
   Activity,
   Plus,
+  FileSpreadsheet,
+  Table,
 } from "lucide-react";
 import { ExtractedMatchRecord, SportyEntryPoint, RuleItem } from "../types";
 import { getH2HAnalysisForMatch, getRealMatchId } from "../utils/globalAnalysisEngine";
+
+export type SearchScope =
+  | "ALL"
+  | "TEAMS"
+  | "ODDS"
+  | "RANKS"
+  | "SCORES"
+  | "ROUNDS"
+  | "GOALS";
+
+export const SCOPE_OPTIONS: {
+  id: SearchScope;
+  label: string;
+  shortLabel: string;
+  icon: string;
+  desc: string;
+}[] = [
+  { id: "ALL", label: "Tous les Champs", shortLabel: "Tout", icon: "🌐", desc: "Recherche globale multi-critères" },
+  { id: "TEAMS", label: "Équipes & Matchs", shortLabel: "Équipes", icon: "🏟️", desc: "Noms des équipes (Domicile / Extérieur)" },
+  { id: "ODDS", label: "Cotes (1X2, Over, BTTS)", shortLabel: "Cotes", icon: "🎲", desc: "Valeurs exactes de cotes (ex: 1.85, 3.20)" },
+  { id: "RANKS", label: "Rang & Classement", shortLabel: "Rangs", icon: "📊", desc: "Positions d'équipe (1er, 5ème, 12ème...)" },
+  { id: "SCORES", label: "Scores Exacts (FT/MT)", shortLabel: "Scores", icon: "⚽", desc: "Scores finaux ou mi-temps (ex: 2-1, 0-0)" },
+  { id: "ROUNDS", label: "Journées & Saisons", shortLabel: "Journées", icon: "📅", desc: "Numéros de journée (J1, J5) ou saisons" },
+  { id: "GOALS", label: "Minutage des Buts", shortLabel: "Minutes", icon: "⏱️", desc: "Minutages des buts marqués (ex: 12', 88')" },
+];
 
 interface FindViewProps {
   database: ExtractedMatchRecord[];
@@ -44,6 +71,9 @@ export const FindView: React.FC<FindViewProps> = ({
 }) => {
   // Free text search query
   const [searchQuery, setSearchQuery] = useState<string>("");
+
+  // Targeted Search Scope ("ALL", "TEAMS", "ODDS", "RANKS", "SCORES", "ROUNDS", "GOALS")
+  const [searchScope, setSearchScope] = useState<SearchScope>("ALL");
 
   // Structured Filter Controls
   const [selectedComp, setSelectedComp] = useState<string | number>("ALL");
@@ -176,7 +206,82 @@ export const FindView: React.FC<FindViewProps> = ({
       return terms.every((term) => {
         const cleanTerm = norm(term);
 
-        // Check exact or partial score matches like "2-1", "0-0", "1:0"
+        // Targeted Scope: TEAMS
+        if (searchScope === "TEAMS") {
+          return (
+            homeTeam.includes(term) ||
+            awayTeam.includes(term) ||
+            matchName.includes(term) ||
+            norm(homeTeam).includes(cleanTerm) ||
+            norm(awayTeam).includes(cleanTerm)
+          );
+        }
+
+        // Targeted Scope: ODDS
+        if (searchScope === "ODDS") {
+          const dc1X = String(m.doubleChanceOdds?.dc1X || "");
+          const dc12 = String(m.doubleChanceOdds?.dc12 || "");
+          const dcX2 = String(m.doubleChanceOdds?.dcX2 || "");
+          const ov25 = String(m.overUnderOdds?.over25 || "");
+          const un25 = String(m.overUnderOdds?.under25 || "");
+          const bYes = String(m.bothTeamsScoreOdds?.yes || "");
+          const bNo = String(m.bothTeamsScoreOdds?.no || "");
+          return (
+            hOddsStr.includes(term) ||
+            dOddsStr.includes(term) ||
+            aOddsStr.includes(term) ||
+            dc1X.includes(term) ||
+            dc12.includes(term) ||
+            dcX2.includes(term) ||
+            ov25.includes(term) ||
+            un25.includes(term) ||
+            bYes.includes(term) ||
+            bNo.includes(term) ||
+            oddsSummary.includes(term)
+          );
+        }
+
+        // Targeted Scope: RANKS
+        if (searchScope === "RANKS") {
+          const numOnly = term.replace(/[^0-9]/g, "");
+          const hR = String(m.homeRank || "");
+          const aR = String(m.awayRank || "");
+          if (numOnly) {
+            return hR === numOnly || aR === numOnly;
+          }
+          return hR.includes(term) || aR.includes(term);
+        }
+
+        // Targeted Scope: SCORES
+        if (searchScope === "SCORES") {
+          const normTermScore = term.replace(":", "-");
+          return (
+            ftScore.includes(normTermScore) ||
+            htScore.includes(normTermScore) ||
+            ftScore.includes(term) ||
+            htScore.includes(term)
+          );
+        }
+
+        // Targeted Scope: ROUNDS
+        if (searchScope === "ROUNDS") {
+          const numOnly = term.replace(/^j|^s/i, "").trim();
+          const rNum = String(m.roundNumber || "");
+          const sNum = String(m.seasonNumber || "");
+          return (
+            rNum === numOnly ||
+            sNum === numOnly ||
+            roundStr.includes(term) ||
+            seasonName.includes(term)
+          );
+        }
+
+        // Targeted Scope: GOALS
+        if (searchScope === "GOALS") {
+          return goalMins.includes(term);
+        }
+
+        // Targeted Scope: ALL (Default Multi-field)
         if (term.includes("-") || term.includes(":")) {
           const normTermScore = term.replace(":", "-");
           if (ftScore.includes(normTermScore) || htScore.includes(normTermScore)) {
@@ -184,19 +289,16 @@ export const FindView: React.FC<FindViewProps> = ({
           }
         }
 
-        // Check Journée shorthand e.g. "j5", "j12"
         if (/^j\d+$/.test(term)) {
           const num = term.replace("j", "");
           return String(m.roundNumber) === num;
         }
 
-        // Check Saison shorthand e.g. "s1", "s2"
         if (/^s\d+$/.test(term)) {
           const num = term.replace("s", "");
           return String(m.seasonNumber || 1) === num;
         }
 
-        // General term search against all string fields
         return (
           homeTeam.includes(term) ||
           awayTeam.includes(term) ||
@@ -219,7 +321,7 @@ export const FindView: React.FC<FindViewProps> = ({
         );
       });
     });
-  }, [database, searchQuery, selectedComp, selectedSeason, selectedOutcome, selectedGoalMarket]);
+  }, [database, searchQuery, searchScope, selectedComp, selectedSeason, selectedOutcome, selectedGoalMarket]);
 
   // Statistics calculation for filtered search results
   const searchStats = useMemo(() => {
@@ -307,6 +409,160 @@ export const FindView: React.FC<FindViewProps> = ({
     setTimeout(() => setCopiedId(null), 2000);
   };
 
+  // Export filtered matches to Styled Excel (.xls)
+  const handleExportStyledExcel = () => {
+    if (filteredMatches.length === 0) return;
+
+    const title = "RAPPORT DE RECHERCHE - BASE DE DONNÉES VIRTUAL FOOTBALL";
+    const dateStr = new Date().toLocaleDateString("fr-FR", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+    const activeScopeObj = SCOPE_OPTIONS.find((s) => s.id === searchScope);
+    const scopeLabel = activeScopeObj ? `${activeScopeObj.icon} ${activeScopeObj.label}` : "Tous les champs";
+
+    const html = `
+    <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+    <head>
+      <meta charset="utf-8" />
+      <!--[if gte mso 9]>
+      <xml>
+        <x:ExcelWorkbook>
+          <x:ExcelWorksheets>
+            <x:ExcelWorksheet>
+              <x:Name>Recherche BDD</x:Name>
+              <x:WorksheetOptions>
+                <x:DisplayGridlines/>
+              </x:WorksheetOptions>
+            </x:ExcelWorksheet>
+          </x:ExcelWorksheets>
+        </x:ExcelWorkbook>
+      </xml>
+      <![endif]-->
+      <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; font-size: 12px; color: #0f172a; margin: 20px; }
+        .title-banner { background-color: #0f172a; color: #f59e0b; padding: 14px 18px; font-size: 16px; font-weight: bold; border-radius: 8px; margin-bottom: 8px; border: 1px solid #334155; }
+        .meta-line { font-size: 11px; color: #475569; margin-bottom: 16px; font-style: italic; }
+        .kpi-table { border-collapse: collapse; margin-bottom: 20px; width: 100%; }
+        .kpi-table td { border: 1px solid #cbd5e1; padding: 10px; text-align: center; font-size: 12px; }
+        .kpi-label { background-color: #f1f5f9; font-weight: bold; color: #334155; }
+        .kpi-val { background-color: #ffffff; font-weight: bold; color: #0369a1; font-size: 13px; }
+        table.data-table { border-collapse: collapse; width: 100%; font-size: 12px; }
+        table.data-table th { background-color: #0f172a; color: #f59e0b; font-weight: bold; border: 1px solid #334155; padding: 10px 8px; text-transform: uppercase; font-size: 11px; text-align: center; }
+        table.data-table td { border: 1px solid #cbd5e1; padding: 8px 10px; text-align: center; vertical-align: middle; }
+        table.data-table tr:nth-child(even) { background-color: #f8fafc; }
+        .team-cell { font-weight: bold; color: #0f172a; text-align: left; background-color: #ffffff; }
+        .score-badge { font-weight: bold; font-family: 'Courier New', monospace; font-size: 13px; background-color: #fef3c7; color: #92400e; border: 1px solid #f59e0b; padding: 4px 8px; }
+        .ht-badge { font-family: 'Courier New', monospace; color: #64748b; font-size: 11px; }
+        .odds-val { font-family: 'Courier New', monospace; font-weight: bold; color: #0284c7; }
+        .goals-cell { color: #047857; font-family: 'Courier New', monospace; font-size: 11px; text-align: left; }
+        .comp-tag { font-weight: bold; color: #1e293b; background-color: #e2e8f0; }
+      </style>
+    </head>
+    <body>
+      <div class="title-banner">📊 ${title}</div>
+      <div class="meta-line">
+        Généré le : ${dateStr} | Total enregistrements : <b>${filteredMatches.length}</b> | Filtre Texte : <b>"${searchQuery || "Tous"}"</b> | Champ Cible : <b>${scopeLabel}</b>
+      </div>
+
+      <table class="kpi-table">
+        <tr>
+          <td class="kpi-label">Matchs Filtrés</td>
+          <td class="kpi-label">Victoires Dom (1)</td>
+          <td class="kpi-label">Nuls (X)</td>
+          <td class="kpi-label">Victoires Ext (2)</td>
+          <td class="kpi-label">% Over 2.5</td>
+          <td class="kpi-label">% GG (BTTS)</td>
+          <td class="kpi-label">Moyenne Buts</td>
+        </tr>
+        <tr>
+          <td class="kpi-val">${searchStats.total}</td>
+          <td class="kpi-val">${searchStats.homeWins} (${searchStats.homeWinPct}%)</td>
+          <td class="kpi-val">${searchStats.draws} (${searchStats.drawPct}%)</td>
+          <td class="kpi-val">${searchStats.awayWins} (${searchStats.awayWinPct}%)</td>
+          <td class="kpi-val">${searchStats.over25Pct}%</td>
+          <td class="kpi-val">${searchStats.bttsPct}%</td>
+          <td class="kpi-val">${searchStats.avgGoals}</td>
+        </tr>
+      </table>
+
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>ID Match</th>
+            <th>Compétition</th>
+            <th>Saison</th>
+            <th>Journée</th>
+            <th>Équipe Domicile</th>
+            <th>Rang D.</th>
+            <th>Score FT</th>
+            <th>Score MT</th>
+            <th>Équipe Extérieur</th>
+            <th>Rang E.</th>
+            <th>Cote 1</th>
+            <th>Cote X</th>
+            <th>Cote 2</th>
+            <th>Cote 1X</th>
+            <th>Cote 12</th>
+            <th>Cote X2</th>
+            <th>Over 2.5</th>
+            <th>Under 2.5</th>
+            <th>BTTS Oui</th>
+            <th>BTTS Non</th>
+            <th>Minutes des Buts</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${filteredMatches.map((m) => {
+            const ft = (m.score || "0-0").replace(":", "-");
+            const ht = (m.halfTimeScore || "0-0").replace(":", "-");
+            return `
+              <tr>
+                <td style="font-family:'Courier New', monospace; color:#64748b;">#${m.id}</td>
+                <td class="comp-tag">${m.competitionName || "Ligue"}</td>
+                <td>Saison ${m.seasonNumber || 1}</td>
+                <td style="font-weight:bold;">Journée ${m.roundNumber || 1}</td>
+                <td class="team-cell">${m.homeTeamName}</td>
+                <td>${m.homeRank > 0 ? `#${m.homeRank}` : "-"}</td>
+                <td><span class="score-badge">${ft}</span></td>
+                <td class="ht-badge">${ht}</td>
+                <td class="team-cell">${m.awayTeamName}</td>
+                <td>${m.awayRank > 0 ? `#${m.awayRank}` : "-"}</td>
+                <td class="odds-val">${m.homeOdds || "-"}</td>
+                <td class="odds-val">${m.drawOdds || "-"}</td>
+                <td class="odds-val">${m.awayOdds || "-"}</td>
+                <td>${m.doubleChanceOdds?.dc1X || "-"}</td>
+                <td>${m.doubleChanceOdds?.dc12 || "-"}</td>
+                <td>${m.doubleChanceOdds?.dcX2 || "-"}</td>
+                <td>${m.overUnderOdds?.over25 || "-"}</td>
+                <td>${m.overUnderOdds?.under25 || "-"}</td>
+                <td>${m.bothTeamsScoreOdds?.yes || "-"}</td>
+                <td>${m.bothTeamsScoreOdds?.no || "-"}</td>
+                <td class="goals-cell">${m.goalMinutes || "Aucun"}</td>
+              </tr>
+            `;
+          }).join("")}
+        </tbody>
+      </table>
+    </body>
+    </html>
+    `;
+
+    const blob = new Blob([html], { type: "application/vnd.ms-excel;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `rapport_recherche_bdd_style_${new Date().toISOString().slice(0, 10)}.xls`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   // Export filtered matches to CSV
   const handleExportCSV = () => {
     if (filteredMatches.length === 0) return;
@@ -369,6 +625,7 @@ export const FindView: React.FC<FindViewProps> = ({
   // Reset all search criteria
   const handleResetFilters = () => {
     setSearchQuery("");
+    setSearchScope("ALL");
     setSelectedComp("ALL");
     setSelectedSeason("ALL");
     setSelectedOutcome("ALL");
@@ -385,7 +642,7 @@ export const FindView: React.FC<FindViewProps> = ({
           <div className="space-y-2">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 font-extrabold text-xs border border-amber-500/40 uppercase tracking-wider">
               <Search className="w-3.5 h-3.5 text-amber-400" />
-              <span>Moteur de Recherche Libre BDD</span>
+              <span>Moteur de Recherche Précis BDD</span>
             </div>
             <h1 className="text-2xl lg:text-3xl font-black text-white tracking-tight flex items-center gap-3">
               MOTEUR DE RECHERCHE FIND
@@ -394,22 +651,32 @@ export const FindView: React.FC<FindViewProps> = ({
               </span>
             </h1>
             <p className="text-xs lg:text-sm text-slate-300 max-w-2xl font-medium">
-              Saisissez n'importe quel élément dans la barre (nom d'équipe, score exact, journée, saison, cote, minutage des buts) pour inspecter instantanément les résultats réels et les confrontations directes.
+              Recherchez précisément en ciblant le champ souhaité (Équipes, Cotes exactes, Rangs, Scores, Journée, Minutage) ou explorez toute la BDD.
             </p>
           </div>
 
-          <div className="flex items-center gap-3 shrink-0">
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <button
+              onClick={handleExportStyledExcel}
+              disabled={filteredMatches.length === 0}
+              className="px-4 py-2.5 bg-gradient-to-r from-amber-500 via-amber-600 to-orange-600 hover:from-amber-400 hover:to-orange-500 disabled:opacity-40 text-slate-950 text-xs font-black rounded-xl border border-amber-400/50 flex items-center gap-2 transition-all cursor-pointer shadow-lg shadow-amber-500/20 active:scale-95"
+              title="Exporter rapport Excel enrichi avec mise en forme, bordures, couleurs et statistiques"
+            >
+              <FileSpreadsheet className="w-4 h-4 text-slate-950" />
+              <span>Excel Stylé (.xls)</span>
+            </button>
             <button
               onClick={handleExportCSV}
               disabled={filteredMatches.length === 0}
-              className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-amber-300 text-xs font-black rounded-xl border border-slate-700 flex items-center gap-2 transition-all cursor-pointer shadow-md active:scale-95"
+              className="px-3.5 py-2.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-slate-200 text-xs font-bold rounded-xl border border-slate-700 flex items-center gap-2 transition-all cursor-pointer shadow-md active:scale-95"
+              title="Exporter fichier texte CSV UTF-8"
             >
               <Download className="w-4 h-4 text-amber-400" />
-              <span>Exporter CSV ({filteredMatches.length})</span>
+              <span>CSV ({filteredMatches.length})</span>
             </button>
             <button
               onClick={handleResetFilters}
-              className="px-4 py-2.5 bg-slate-900/80 hover:bg-slate-800 text-slate-300 hover:text-white text-xs font-bold rounded-xl border border-slate-700/80 flex items-center gap-2 transition-all cursor-pointer active:scale-95"
+              className="px-3.5 py-2.5 bg-slate-900/80 hover:bg-slate-800 text-slate-300 hover:text-white text-xs font-bold rounded-xl border border-slate-700/80 flex items-center gap-2 transition-all cursor-pointer active:scale-95"
             >
               <X className="w-4 h-4 text-slate-400" />
               <span>Réinitialiser</span>
@@ -417,29 +684,111 @@ export const FindView: React.FC<FindViewProps> = ({
           </div>
         </div>
 
-        {/* Big Search Input Field */}
-        <div className="mt-6 relative z-10">
-          <div className="relative flex items-center">
-            <Search className="w-6 h-6 text-amber-400 absolute left-4.5 pointer-events-none" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Tapez ce que vous voulez... Ex: Arsenal, 2-1, 0-0, J5, Saison 1, 1.85, Over..."
-              className="w-full pl-13 pr-28 py-4 bg-slate-950/90 border-2 border-amber-500/40 focus:border-amber-400 focus:ring-4 focus:ring-amber-500/20 text-white font-bold text-sm lg:text-base rounded-2xl placeholder:text-slate-500 transition-all shadow-inner"
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery("")}
-                className="absolute right-16 p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors cursor-pointer"
-                title="Effacer la recherche"
+        {/* Scope Selector Pills (Où chercher ?) */}
+        <div className="mt-6 relative z-10 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-black text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+              <Sliders className="w-3.5 h-3.5 text-amber-400" />
+              Où souhaitez-vous chercher ? (Préciser le Domaine) :
+            </span>
+            <span className="text-[11px] font-mono text-slate-400">
+              Cible active : <strong className="text-amber-300">{SCOPE_OPTIONS.find(s => s.id === searchScope)?.label}</strong>
+            </span>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {SCOPE_OPTIONS.map((opt) => {
+              const isActive = searchScope === opt.id;
+              return (
+                <button
+                  key={opt.id}
+                  onClick={() => setSearchScope(opt.id)}
+                  className={`px-3 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 transition-all cursor-pointer border ${
+                    isActive
+                      ? "bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 border-amber-300 shadow-md shadow-amber-500/20 ring-2 ring-amber-400/40 scale-105"
+                      : "bg-slate-900/90 text-slate-300 hover:text-white hover:bg-slate-800 border-slate-800"
+                  }`}
+                  title={opt.desc}
+                >
+                  <span className="text-sm">{opt.icon}</span>
+                  <span>{opt.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Big Search Input Field with Scope Selector */}
+        <div className="mt-4 relative z-10">
+          <div className="flex flex-col md:flex-row items-stretch gap-2.5">
+            {/* Embedded Scope Dropdown for Mobile / Quick Access */}
+            <div className="md:w-60 shrink-0 relative">
+              <select
+                value={searchScope}
+                onChange={(e) => setSearchScope(e.target.value as SearchScope)}
+                className="w-full h-full bg-slate-950/90 border-2 border-amber-500/40 text-amber-300 font-extrabold text-xs rounded-2xl px-3.5 py-3.5 cursor-pointer outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-500/20"
               >
-                <X className="w-4 h-4" />
-              </button>
-            )}
-            <div className="absolute right-4 px-2.5 py-1 bg-amber-500/20 border border-amber-500/30 rounded-lg text-amber-300 font-mono text-xs font-black">
-              {filteredMatches.length}
+                {SCOPE_OPTIONS.map((opt) => (
+                  <option key={opt.id} value={opt.id} className="bg-slate-950 text-white font-bold py-2">
+                    {opt.icon} {opt.label}
+                  </option>
+                ))}
+              </select>
             </div>
+
+            {/* Input Input Field */}
+            <div className="relative flex-1 flex items-center">
+              <Search className="w-5 h-5 text-amber-400 absolute left-4 pointer-events-none" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder={
+                  searchScope === "TEAMS"
+                    ? "Ex: Arsenal, Real Madrid, Bayern..."
+                    : searchScope === "ODDS"
+                    ? "Ex: 1.85, 3.20, 2.10, 1.45..."
+                    : searchScope === "RANKS"
+                    ? "Ex: 1, 3, 5, 12..."
+                    : searchScope === "SCORES"
+                    ? "Ex: 2-1, 0-0, 1-1, 3-2..."
+                    : searchScope === "ROUNDS"
+                    ? "Ex: J1, J5, Saison 2..."
+                    : searchScope === "GOALS"
+                    ? "Ex: 12', 45', 88'..."
+                    : "Ex: Arsenal, 2-1, J5, 1.85, 0-0, Over..."
+                }
+                className="w-full pl-12 pr-28 py-3.5 bg-slate-950/90 border-2 border-amber-500/40 focus:border-amber-400 focus:ring-4 focus:ring-amber-500/20 text-white font-bold text-sm lg:text-base rounded-2xl placeholder:text-slate-500 transition-all shadow-inner"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-16 p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                  title="Effacer la recherche"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+              <div className="absolute right-3.5 px-2.5 py-1 bg-amber-500/20 border border-amber-500/30 rounded-lg text-amber-300 font-mono text-xs font-black">
+                {filteredMatches.length} match{filteredMatches.length > 1 ? "s" : ""}
+              </div>
+            </div>
+          </div>
+
+          {/* Scope Indicator Helper Banner */}
+          <div className="mt-2 text-[11px] text-amber-200/80 bg-amber-500/10 border border-amber-500/20 rounded-xl px-3.5 py-1.5 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              <span>
+                <strong>{SCOPE_OPTIONS.find((s) => s.id === searchScope)?.icon} Mode {SCOPE_OPTIONS.find((s) => s.id === searchScope)?.label} :</strong>{" "}
+                {SCOPE_OPTIONS.find((s) => s.id === searchScope)?.desc}
+              </span>
+            </div>
+            {searchQuery && (
+              <span className="font-mono text-[10px] text-amber-400/90 hidden sm:inline">
+                Filtre : "{searchQuery}"
+              </span>
+            )}
           </div>
         </div>
 
@@ -455,7 +804,10 @@ export const FindView: React.FC<FindViewProps> = ({
               onClick={() => {
                 if (tag.outcome) setSelectedOutcome(tag.outcome as any);
                 else if (tag.goalMarket) setSelectedGoalMarket(tag.goalMarket as any);
-                else setSearchQuery(tag.query);
+                else {
+                  if (tag.category === "score") setSearchScope("SCORES");
+                  setSearchQuery(tag.query);
+                }
               }}
               className="px-2.5 py-1 bg-slate-900/80 hover:bg-amber-500/20 hover:border-amber-500/50 text-slate-300 hover:text-amber-200 text-xs font-bold rounded-lg border border-slate-800 transition-all cursor-pointer flex items-center gap-1 shadow-sm active:scale-95"
             >
