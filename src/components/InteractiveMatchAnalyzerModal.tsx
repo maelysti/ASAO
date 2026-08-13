@@ -67,6 +67,54 @@ export const InteractiveMatchAnalyzerModal: React.FC<InteractiveMatchAnalyzerMod
     });
   }, [event, database]);
 
+  // Check matching database records by Rank & Odds profile
+  const sameRankOddsRecords = useMemo(() => {
+    if (!database || database.length === 0) return [];
+    const hRank = homeStats?.position || (event as any)?.homeRankAtRound || (event as any)?.homeRank || 0;
+    const aRank = awayStats?.position || (event as any)?.awayRankAtRound || (event as any)?.awayRank || 0;
+
+    const currentOddsSorted = [homeOdds, drawOdds, awayOdds].filter((o) => o > 1).sort((a, b) => a - b);
+
+    return database.filter((m) => {
+      const dbHRank = m.homeRankAtRound || m.homeRank || 0;
+      const dbARank = m.awayRankAtRound || m.awayRank || 0;
+
+      let rankMatch = false;
+      if (hRank > 0 && aRank > 0 && dbHRank > 0 && dbARank > 0) {
+        const exactMatch = (dbHRank === hRank && dbARank === aRank) || (dbHRank === aRank && dbARank === hRank);
+        const closeRanks = Math.abs(dbHRank - hRank) <= 1 && Math.abs(dbARank - aRank) <= 1;
+        const rankDiffMatch = Math.abs(dbHRank - dbARank) === Math.abs(hRank - aRank);
+        rankMatch = exactMatch || closeRanks || rankDiffMatch;
+      }
+
+      let oddsMatch = false;
+      const mHOdds = m.homeOdds || 0;
+      const mDOdds = m.drawOdds || 0;
+      const mAOdds = m.awayOdds || 0;
+      const dbOddsSorted = [mHOdds, mDOdds, mAOdds].filter((o) => o > 1).sort((a, b) => a - b);
+
+      if (currentOddsSorted.length === 3 && dbOddsSorted.length === 3) {
+        const diff0 = Math.abs(currentOddsSorted[0] - dbOddsSorted[0]);
+        const diff1 = Math.abs(currentOddsSorted[1] - dbOddsSorted[1]);
+        const diff2 = Math.abs(currentOddsSorted[2] - dbOddsSorted[2]);
+        if (diff0 <= 0.25 && diff1 <= 0.35 && diff2 <= 0.45) {
+          oddsMatch = true;
+        }
+      } else if (homeOdds > 1 && mHOdds > 1) {
+        if (
+          Math.abs(mHOdds - homeOdds) <= 0.30 ||
+          Math.abs(mHOdds - awayOdds) <= 0.30 ||
+          Math.abs(mAOdds - homeOdds) <= 0.30 ||
+          Math.abs(mAOdds - awayOdds) <= 0.30
+        ) {
+          oddsMatch = true;
+        }
+      }
+
+      return rankMatch || oddsMatch;
+    });
+  }, [database, event, homeStats, awayStats, homeOdds, drawOdds, awayOdds]);
+
   const hasBddData = database.length > 0;
 
   // Analysis simulation progress
@@ -466,6 +514,61 @@ export const InteractiveMatchAnalyzerModal: React.FC<InteractiveMatchAnalyzerMod
                   </div>
                 </div>
               </div>
+
+              {/* BDD SAME RANK & ODDS MATCHES PROOF BLOCK */}
+              {sameRankOddsRecords.length > 0 && (
+                <div className="bg-[#0d131f] border border-emerald-500/30 p-4 rounded-xl space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-black uppercase text-white tracking-wider flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-emerald-400" />
+                      <span>PREUVES HISTORIQUES BDD (MÊME RANG & COTES)</span>
+                    </h3>
+                    <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[10px] font-mono px-2 py-0.5 rounded-full font-bold">
+                      {sameRankOddsRecords.length} Cas Identiques en BDD
+                    </span>
+                  </div>
+
+                  <p className="text-[11px] text-slate-400">
+                    Matchs réels enregistrés dans la BDD présentant la même confrontation de rangs et/ou le même profil de cotes :
+                  </p>
+
+                  <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
+                    {sameRankOddsRecords.slice(0, 8).map((rec, idx) => (
+                      <div
+                        key={idx}
+                        className="bg-slate-950 p-2.5 rounded-lg border border-slate-800 flex items-center justify-between text-xs font-mono"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="text-slate-400 font-bold truncate max-w-[120px] sm:max-w-[180px]">
+                            {rec.homeTeamName}
+                          </span>
+                          <span className="text-[10px] text-slate-500">
+                            (R{rec.homeRankAtRound || "?"})
+                          </span>
+                          <span className="text-slate-600">vs</span>
+                          <span className="text-slate-400 font-bold truncate max-w-[120px] sm:max-w-[180px]">
+                            {rec.awayTeamName}
+                          </span>
+                          <span className="text-[10px] text-slate-500">
+                            (R{rec.awayRankAtRound || "?"})
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-3 shrink-0">
+                          {rec.homeOdds ? (
+                            <span className="text-[10px] text-slate-500 hidden sm:inline">
+                              Cotes: {rec.homeOdds.toFixed(2)} / {rec.drawOdds?.toFixed(2) || "-"} / {rec.awayOdds?.toFixed(2) || "-"}
+                            </span>
+                          ) : null}
+                          <span className="px-2 py-0.5 rounded bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 font-black text-xs">
+                            {rec.score || "0 - 0"}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

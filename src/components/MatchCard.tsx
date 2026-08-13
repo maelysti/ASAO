@@ -501,38 +501,80 @@ export const MatchCard: React.FC<MatchCardProps> = ({ event, matchIndex, databas
         </div>
       </div>
 
-      {/* Simplified BDD Prediction Badge */}
+      {/* Simplified & Empirical BDD Prediction Block */}
       {h2h && (
-        <div className="bg-gradient-to-r from-emerald-950/40 via-slate-900 to-teal-950/40 border border-emerald-500/30 rounded-xl p-2.5 shadow-md flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 min-w-0">
-            <div className="p-1.5 rounded-lg bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 shrink-0">
-              <Sparkles className="w-4 h-4" />
+        <div className="bg-gradient-to-r from-emerald-950/50 via-slate-900 to-teal-950/50 border border-emerald-500/35 rounded-xl p-3 shadow-md space-y-2">
+          {/* Top row: Bet prediction + Confidence badge */}
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="p-1.5 rounded-lg bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 shrink-0 shadow">
+                <Sparkles className="w-4 h-4" />
+              </div>
+              <div className="min-w-0">
+                <div className="text-[10px] uppercase font-black tracking-wider text-emerald-400 flex items-center gap-1.5">
+                  <span>PRONOSTIC BDD</span>
+                  <span className="text-slate-600">•</span>
+                  <span className="text-slate-400 font-normal font-mono">
+                    {h2h.directMatchesCount > 0 ? `${h2h.directMatchesCount} H2H BDD` : "Profil Cotes & Rang BDD"}
+                  </span>
+                </div>
+                <div className="text-sm font-black text-white truncate flex items-center gap-1.5 mt-0.5">
+                  <span className="text-emerald-300 font-mono text-base tracking-wide">
+                    {h2h.applicableRule?.actionBet || h2h.prediction}
+                  </span>
+                </div>
+              </div>
             </div>
-            <div className="min-w-0">
-              <div className="text-[10px] uppercase font-black tracking-wider text-emerald-400/90 flex items-center gap-1.5">
-                <span>PRONOSTIC BDD</span>
-                <span className="text-slate-500">•</span>
-                <span className="text-slate-400 font-normal font-mono">
-                  {h2h.directMatchesCount > 0 ? `${h2h.directMatchesCount} H2H BDD` : "Cotes & Profil BDD"}
-                </span>
-              </div>
-              <div className="text-xs font-black text-white truncate flex items-center gap-1.5 mt-0.5">
-                <span className="text-emerald-300 font-mono text-sm">
-                  {h2h.applicableRule?.actionBet || h2h.prediction}
-                </span>
-              </div>
+
+            <div className="flex flex-col items-end shrink-0">
+              <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 font-mono font-black text-xs shadow">
+                {h2h.confidence}% Confiance
+              </span>
+              <span className="text-[9px] text-slate-400 mt-0.5 font-bold">
+                {h2h.applicableRule?.riskLevel === "TRÈS FAIBLE" || h2h.applicableRule?.riskLevel === "FAIBLE"
+                  ? "🟢 Risque Faible"
+                  : "🟡 Risque Modéré"}
+              </span>
             </div>
           </div>
 
-          <div className="flex flex-col items-end shrink-0">
-            <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 font-mono font-black text-[11px] shadow">
-              {h2h.confidence}% Confiance
-            </span>
-            <span className="text-[9px] text-slate-400 mt-0.5 font-bold">
-              {h2h.applicableRule?.riskLevel === "TRÈS FAIBLE" || h2h.applicableRule?.riskLevel === "FAIBLE"
-                ? "🟢 Risque Faible"
-                : "🟡 Risque Modéré"}
-            </span>
+          {/* Empirical BDD Proofs */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-1.5 border-t border-slate-800/80 text-[10.5px]">
+            {/* 1. Odds Bracket Proof */}
+            {h2h.oddsIntervalStats ? (
+              <div className="bg-slate-950/60 rounded-lg p-1.5 border border-slate-800/80 flex items-center justify-between text-slate-300">
+                <span className="text-slate-400 font-mono">
+                  BDD ({h2h.oddsIntervalStats.oddsRangeLabel}, N={h2h.oddsIntervalStats.sampleSize})
+                </span>
+                <span className="font-mono font-bold text-emerald-400">
+                  {h2h.oddsIntervalStats.homeWinPct}% 1 • {h2h.oddsIntervalStats.drawPct}% X • {h2h.oddsIntervalStats.awayWinPct}% 2
+                </span>
+              </div>
+            ) : (
+              <div className="bg-slate-950/60 rounded-lg p-1.5 border border-slate-800/80 flex items-center justify-between text-slate-300">
+                <span className="text-slate-400">Tendance BDD (1X2)</span>
+                <span className="font-mono font-bold text-emerald-400">
+                  {h2h.detailedProbabilities?.homeWinPct}% 1 • {h2h.detailedProbabilities?.drawPct}% X • {h2h.detailedProbabilities?.awayWinPct}% 2
+                </span>
+              </div>
+            )}
+
+            {/* 2. Rule Backtest Proof */}
+            {h2h.ruleBacktestInDb ? (
+              <div className="bg-slate-950/60 rounded-lg p-1.5 border border-slate-800/80 flex items-center justify-between text-slate-300">
+                <span className="text-slate-400">Validation Règle BDD</span>
+                <span className="font-mono font-bold text-teal-300">
+                  {h2h.ruleBacktestInDb.successRate}% ({h2h.ruleBacktestInDb.validatedCount}/{h2h.ruleBacktestInDb.totalMatchingInDb} cas)
+                </span>
+              </div>
+            ) : (
+              <div className="bg-slate-950/60 rounded-lg p-1.5 border border-slate-800/80 flex items-center justify-between text-slate-300">
+                <span className="text-slate-400">Buts Attendus BDD</span>
+                <span className="font-mono font-bold text-teal-300">
+                  {h2h.detailedProbabilities?.over25Pct}% Over 2.5
+                </span>
+              </div>
+            )}
           </div>
         </div>
       )}

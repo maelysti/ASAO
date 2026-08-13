@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { X, Shield, Clock, Trophy, Code, Copy, Check, Activity, Sparkles, Layers, Hash, Database, BarChart2, Swords, Calendar, TrendingUp, CheckCircle2 } from "lucide-react";
 import { SportyEvent, ExtractedMatchRecord, RuleItem } from "../types";
 import { classifyMatchStatus, CombinedMatchData, getTeamLogoUrl } from "../services/sportyApi";
@@ -16,7 +16,7 @@ interface MatchDetailModalProps {
 export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({ event, database = [], activeRules, onClose }) => {
   const [copied, setCopied] = useState(false);
   const [showRawJson, setShowRawJson] = useState(false);
-  const [activeH2hTab, setActiveH2hTab] = useState<"direct" | "home" | "away">("direct");
+  const [activeH2hTab, setActiveH2hTab] = useState<"direct" | "rank_odds" | "home" | "away">("direct");
 
   const homeName = (event?.homeTeamName || "").trim().toLowerCase();
   const awayName = (event?.awayTeamName || "").trim().toLowerCase();
@@ -35,6 +35,131 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({ event, datab
       );
     });
   }, [database, homeName, awayName]);
+
+  const isCombined = event ? "categoryName" in event : false;
+  const homeStats = isCombined ? (event as CombinedMatchData).homeStats : undefined;
+  const awayStats = isCombined ? (event as CombinedMatchData).awayStats : undefined;
+
+  // Filter matches with matching Rank profile & Odds profile from database (regardless of team names or odd positions)
+  const sameRankOddsRecords = useMemo(() => {
+    if (!database || database.length === 0 || !event) return [];
+
+    const hRank = homeStats?.position || (event as any)?.homeRankAtRound || (event as any)?.homeRank || 0;
+    const aRank = awayStats?.position || (event as any)?.awayRankAtRound || (event as any)?.awayRank || 0;
+
+    let hOdds = 0, dOdds = 0, aOdds = 0;
+    if ("eventBetTypes" in event && event.eventBetTypes) {
+      const mainBt = event.eventBetTypes.find((bt: any) => bt.name?.toUpperCase().includes("1X2") || bt.betTypeId === 30083);
+      hOdds = mainBt?.eventBetTypeItems?.find((i: any) => i.shortName === "1")?.odds || 0;
+      dOdds = mainBt?.eventBetTypeItems?.find((i: any) => i.shortName === "X")?.odds || 0;
+      aOdds = mainBt?.eventBetTypeItems?.find((i: any) => i.shortName === "2")?.odds || 0;
+    }
+    if (!hOdds) {
+      hOdds = (event as any).homeOdds || 0;
+      dOdds = (event as any).drawOdds || 0;
+      aOdds = (event as any).awayOdds || 0;
+    }
+
+    const currentOddsSorted = [hOdds, dOdds, aOdds].filter((o) => o > 1).sort((a, b) => a - b);
+
+    const matches = database.filter((m) => {
+      const dbHRank = m.homeRankAtRound || m.homeRank || 0;
+      const dbARank = m.awayRankAtRound || m.awayRank || 0;
+
+      let rankMatch = false;
+      if (hRank > 0 && aRank > 0 && dbHRank > 0 && dbARank > 0) {
+        const exactMatch = (dbHRank === hRank && dbARank === aRank) || (dbHRank === aRank && dbARank === hRank);
+        const closeRanks = Math.abs(dbHRank - hRank) <= 1 && Math.abs(dbARank - aRank) <= 1;
+        const rankDiffMatch = Math.abs(dbHRank - dbARank) === Math.abs(hRank - aRank);
+        rankMatch = exactMatch || closeRanks || rankDiffMatch;
+      }
+
+      let oddsMatch = false;
+      const mHOdds = m.homeOdds || 0;
+      const mDOdds = m.drawOdds || 0;
+      const mAOdds = m.awayOdds || 0;
+      const dbOddsSorted = [mHOdds, mDOdds, mAOdds].filter((o) => o > 1).sort((a, b) => a - b);
+
+      if (currentOddsSorted.length === 3 && dbOddsSorted.length === 3) {
+        const diff0 = Math.abs(currentOddsSorted[0] - dbOddsSorted[0]);
+        const diff1 = Math.abs(currentOddsSorted[1] - dbOddsSorted[1]);
+        const diff2 = Math.abs(currentOddsSorted[2] - dbOddsSorted[2]);
+        if (diff0 <= 0.25 && diff1 <= 0.35 && diff2 <= 0.45) {
+          oddsMatch = true;
+        }
+      } else if (hOdds > 1 && mHOdds > 1) {
+        if (
+          Math.abs(mHOdds - hOdds) <= 0.30 ||
+          Math.abs(mHOdds - aOdds) <= 0.30 ||
+          Math.abs(mAOdds - hOdds) <= 0.30 ||
+          Math.abs(mAOdds - aOdds) <= 0.30
+        ) {
+          oddsMatch = true;
+        }
+      }
+
+      return rankMatch || oddsMatch;
+    });
+
+    return matches.sort((a, b) => {
+      const dbHRa = a.homeRankAtRound || a.homeRank || 0;
+      const dbARa = a.awayRankAtRound || a.awayRank || 0;
+      const scoreA = (dbHRa === hRank && dbARa === aRank ? 3 : 0) + (a.homeOdds && Math.abs((a.homeOdds || 0) - hOdds) < 0.2 ? 2 : 0);
+
+      const dbHRb = b.homeRankAtRound || b.homeRank || 0;
+      const dbARb = b.awayRankAtRound || b.awayRank || 0;
+      const scoreB = (dbHRb === hRank && dbARb === aRank ? 3 : 0) + (b.homeOdds && Math.abs((b.homeOdds || 0) - hOdds) < 0.2 ? 2 : 0);
+
+      return scoreB - scoreA;
+    });
+  }, [database, event, homeStats, awayStats]);
+
+  // Statistics for Same Rank & Odds BDD Matches
+  const sameRankOddsStats = useMemo(() => {
+    if (sameRankOddsRecords.length === 0) return null;
+    let homeW = 0, drawW = 0, awayW = 0, totalGoals = 0, over25 = 0, btts = 0;
+
+    sameRankOddsRecords.forEach((m) => {
+      let hS = 0, aS = 0;
+      if (m.score && m.score.includes(":")) {
+        const parts = m.score.split(":");
+        hS = parseInt(parts[0], 10) || 0;
+        aS = parseInt(parts[1], 10) || 0;
+      } else if (m.score && m.score.includes("-")) {
+        const parts = m.score.split("-");
+        hS = parseInt(parts[0], 10) || 0;
+        aS = parseInt(parts[1], 10) || 0;
+      }
+      const sum = hS + aS;
+      totalGoals += sum;
+      if (sum > 2) over25++;
+      if (hS > 0 && aS > 0) btts++;
+      if (hS > aS) homeW++;
+      else if (hS === aS) drawW++;
+      else awayW++;
+    });
+
+    const count = sameRankOddsRecords.length;
+    return {
+      count,
+      homeW,
+      drawW,
+      awayW,
+      homeWPct: Math.round((homeW / count) * 100),
+      drawWPct: Math.round((drawW / count) * 100),
+      awayWPct: Math.round((awayW / count) * 100),
+      avgGoals: parseFloat((totalGoals / count).toFixed(2)),
+      over25Pct: Math.round((over25 / count) * 100),
+      bttsPct: Math.round((btts / count) * 100),
+    };
+  }, [sameRankOddsRecords]);
+
+  // Auto-select 'rank_odds' if direct H2H is empty
+  useEffect(() => {
+    if (directH2HRecords.length === 0 && sameRankOddsRecords.length > 0) {
+      setActiveH2hTab("rank_odds");
+    }
+  }, [directH2HRecords.length, sameRankOddsRecords.length]);
 
   // Filter home team past matches from database
   const homeTeamPastRecords = useMemo(() => {
@@ -114,12 +239,13 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({ event, datab
   if (!event) return null;
 
   const h2h = getH2HAnalysisForMatch(event, database);
-  const isCombined = "categoryName" in event;
   const status = classifyMatchStatus(event as any);
 
   const activeRecordsToDisplay =
     activeH2hTab === "direct"
       ? directH2HRecords
+      : activeH2hTab === "rank_odds"
+      ? sameRankOddsRecords
       : activeH2hTab === "home"
       ? homeTeamPastRecords
       : awayTeamPastRecords;
@@ -154,8 +280,6 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({ event, datab
     : (event as SportyEvent).categories?.[0] || "Football";
 
   const roundNum = isCombined ? (event as CombinedMatchData).roundNumber : undefined;
-  const homeStats = isCombined ? (event as CombinedMatchData).homeStats : undefined;
-  const awayStats = isCombined ? (event as CombinedMatchData).awayStats : undefined;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fadeIn">
@@ -397,10 +521,10 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({ event, datab
                   </div>
 
                   {/* Filter Tabs */}
-                  <div className="flex items-center gap-1 bg-slate-900 p-1 rounded-xl border border-slate-800 text-[11px] font-bold">
+                  <div className="flex items-center gap-1 bg-slate-900 p-1 rounded-xl border border-slate-800 text-[11px] font-bold overflow-x-auto">
                     <button
                       onClick={() => setActiveH2hTab("direct")}
-                      className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
+                      className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer shrink-0 ${
                         activeH2hTab === "direct"
                           ? "bg-amber-500 text-slate-950 font-black"
                           : "text-slate-400 hover:text-slate-200"
@@ -409,8 +533,19 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({ event, datab
                       H2H Directs ({directH2HRecords.length})
                     </button>
                     <button
+                      onClick={() => setActiveH2hTab("rank_odds")}
+                      className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer shrink-0 flex items-center gap-1.5 ${
+                        activeH2hTab === "rank_odds"
+                          ? "bg-emerald-500 text-slate-950 font-black shadow-md shadow-emerald-500/20"
+                          : "text-slate-300 hover:text-white bg-emerald-950/40 border border-emerald-500/30"
+                      }`}
+                    >
+                      <Sparkles className={`w-3.5 h-3.5 ${activeH2hTab === "rank_odds" ? "text-slate-950" : "text-emerald-400"}`} />
+                      <span>Même Rang & Cotes BDD ({sameRankOddsRecords.length})</span>
+                    </button>
+                    <button
                       onClick={() => setActiveH2hTab("home")}
-                      className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
+                      className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer shrink-0 ${
                         activeH2hTab === "home"
                           ? "bg-indigo-600 text-white font-black"
                           : "text-slate-400 hover:text-slate-200"
@@ -420,7 +555,7 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({ event, datab
                     </button>
                     <button
                       onClick={() => setActiveH2hTab("away")}
-                      className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
+                      className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer shrink-0 ${
                         activeH2hTab === "away"
                           ? "bg-purple-600 text-white font-black"
                           : "text-slate-400 hover:text-slate-200"
@@ -449,6 +584,28 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({ event, datab
                     <div className="bg-slate-950/60 p-2 rounded-lg border border-slate-800/80">
                       <span className="text-[10px] text-slate-400 block font-sans">Moy. Buts / Over 2.5</span>
                       <span className="font-extrabold text-cyan-300 text-sm">{directStats.avgGoals} ({directStats.over25Pct}%)</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Rank & Odds BDD Stats Bar */}
+                {activeH2hTab === "rank_odds" && sameRankOddsStats && (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-gradient-to-r from-emerald-950/50 via-slate-900 to-teal-950/50 border border-emerald-500/40 p-3 rounded-xl text-center text-xs font-mono shadow-md">
+                    <div className="bg-slate-950/70 p-2 rounded-lg border border-slate-800">
+                      <span className="text-[10px] text-slate-400 block font-sans font-bold">Victoires 1 (Dom)</span>
+                      <span className="font-black text-emerald-400 text-sm">{sameRankOddsStats.homeW} ({sameRankOddsStats.homeWPct}%)</span>
+                    </div>
+                    <div className="bg-slate-950/70 p-2 rounded-lg border border-slate-800">
+                      <span className="text-[10px] text-slate-400 block font-sans font-bold">Matchs Nuls X</span>
+                      <span className="font-black text-amber-400 text-sm">{sameRankOddsStats.drawW} ({sameRankOddsStats.drawWPct}%)</span>
+                    </div>
+                    <div className="bg-slate-950/70 p-2 rounded-lg border border-slate-800">
+                      <span className="text-[10px] text-slate-400 block font-sans font-bold">Victoires 2 (Ext)</span>
+                      <span className="font-black text-teal-300 text-sm">{sameRankOddsStats.awayW} ({sameRankOddsStats.awayWPct}%)</span>
+                    </div>
+                    <div className="bg-slate-950/70 p-2 rounded-lg border border-slate-800">
+                      <span className="text-[10px] text-slate-400 block font-sans font-bold">Moy. Buts / Over 2.5</span>
+                      <span className="font-black text-cyan-300 text-sm">{sameRankOddsStats.avgGoals} ({sameRankOddsStats.over25Pct}%)</span>
                     </div>
                   </div>
                 )}
@@ -548,6 +705,20 @@ export const MatchDetailModal: React.FC<MatchDetailModalProps> = ({ event, datab
                               </div>
                             </div>
                           </div>
+
+                          {/* Rank & Odds BDD Proof Tag */}
+                          {(rec.homeRankAtRound || rec.homeOdds) && (
+                            <div className="pt-1 border-t border-slate-800/60 flex flex-wrap items-center justify-between gap-1 text-[9.5px] font-mono text-slate-400">
+                              <span className="text-slate-400 font-bold">
+                                Rang BDD: <strong className="text-indigo-300">R{rec.homeRankAtRound || "?"}</strong> vs <strong className="text-purple-300">R{rec.awayRankAtRound || "?"}</strong>
+                              </span>
+                              {rec.homeOdds ? (
+                                <span className="text-emerald-400 font-bold">
+                                  Cotes BDD: 1 ({rec.homeOdds.toFixed(2)}) • X ({rec.drawOdds?.toFixed(2) || "-"}) • 2 ({rec.awayOdds?.toFixed(2) || "-"})
+                                </span>
+                              ) : null}
+                            </div>
+                          )}
 
                           {/* Goal detail list if available */}
                           {rec.goalsDetail && rec.goalsDetail.length > 0 ? (

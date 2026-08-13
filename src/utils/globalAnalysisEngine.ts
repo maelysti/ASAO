@@ -563,6 +563,20 @@ export interface H2HMatchAnalysisResult {
     bttsPct: number;
   };
   databaseEvidence?: string[];
+  oddsIntervalStats?: {
+    sampleSize: number;
+    homeWinPct: number;
+    drawPct: number;
+    awayWinPct: number;
+    over25Pct: number;
+    bttsPct: number;
+    oddsRangeLabel: string;
+  };
+  ruleBacktestInDb?: {
+    totalMatchingInDb: number;
+    validatedCount: number;
+    successRate: number;
+  };
 }
 
 export interface GlobalDatabaseStats {
@@ -907,9 +921,36 @@ export function getH2HAnalysisForMatch(
 
   // Build Database Evidence List
   const databaseEvidence: string[] = [];
+
+  // Search matches with matching rank & odds pattern in BDD regardless of team names
+  const currentOddsSorted = [homeOdds, drawOdds, awayOdds].filter((o) => o > 1).sort((a, b) => a - b);
+  const sameRankOddsMatches = database.filter((m) => {
+    const dbHRank = m.homeRankAtRound || m.homeRank || 0;
+    const dbARank = m.awayRankAtRound || m.awayRank || 0;
+    let rMatch = false;
+    if (homeRank > 0 && awayRank > 0 && dbHRank > 0 && dbARank > 0) {
+      rMatch = (dbHRank === homeRank && dbARank === awayRank) || (dbHRank === awayRank && dbARank === homeRank) || Math.abs(dbHRank - dbARank) === Math.abs(homeRank - awayRank);
+    }
+
+    const mHOdds = m.homeOdds || 0;
+    const mDOdds = m.drawOdds || 0;
+    const mAOdds = m.awayOdds || 0;
+    const dbOddsSorted = [mHOdds, mDOdds, mAOdds].filter((o) => o > 1).sort((a, b) => a - b);
+
+    let oMatch = false;
+    if (currentOddsSorted.length === 3 && dbOddsSorted.length === 3) {
+      if (Math.abs(currentOddsSorted[0] - dbOddsSorted[0]) <= 0.25 && Math.abs(currentOddsSorted[1] - dbOddsSorted[1]) <= 0.35) {
+        oMatch = true;
+      }
+    }
+    return rMatch || oMatch;
+  });
+
   if (totH2H > 0) {
     databaseEvidence.push(`${totH2H} confrontation(s) directe(s) enregistrée(s) : ${hWins}V Domicile, ${dWins}N, ${aWins}V Visiteur`);
     databaseEvidence.push(`Moyenne de buts H2H : ${avgG} buts/match (${over25Pct}% Over 2.5)`);
+  } else if (sameRankOddsMatches.length > 0) {
+    databaseEvidence.push(`🎯 BDD : ${sameRankOddsMatches.length} match(s) de même rang (R${homeRank} vs R${awayRank}) & cotes équivalentes (~${homeOdds.toFixed(2)} / ${drawOdds.toFixed(2)} / ${awayOdds.toFixed(2)})`);
   } else {
     databaseEvidence.push(`Profil créé à partir des cotes officielles (1: ${homeOdds.toFixed(2)}, X: ${drawOdds.toFixed(2)}, 2: ${awayOdds.toFixed(2)})`);
   }
@@ -993,6 +1034,78 @@ export function getH2HAnalysisForMatch(
     ? "Over 2.5"
     : "1X";
 
+  // Calculate empirical odds interval statistics from database
+  let oddsIntervalStats: H2HMatchAnalysisResult["oddsIntervalStats"];
+  if (database && database.length > 0 && homeOdds > 1.01) {
+    const minOdds = Math.max(1.01, parseFloat((homeOdds - 0.20).toFixed(2)));
+    const maxOdds = parseFloat((homeOdds + 0.20).toFixed(2));
+    const similarOddsMatches = database.filter((m) => {
+      const hO = m.homeOdds;
+      return hO && hO >= minOdds && hO <= maxOdds;
+    });
+
+    if (similarOddsMatches.length >= 2) {
+      let hw = 0, dr = 0, aw = 0, ov25 = 0, btts = 0;
+      similarOddsMatches.forEach((m) => {
+        const parts = (m.score || "0-0").split(/[:\-]/).map((s) => parseInt(s.trim(), 10) || 0);
+        const hS = parts[0] || 0;
+        const aS = parts[1] || 0;
+        const sum = hS + aS;
+        if (hS > aS) hw++;
+        else if (hS === aS) dr++;
+        else aw++;
+
+        if (sum > 2) ov25++;
+        if (hS > 0 && aS > 0) btts++;
+      });
+
+      const totalSim = similarOddsMatches.length;
+      oddsIntervalStats = {
+        sampleSize: totalSim,
+        homeWinPct: Math.round((hw / totalSim) * 100),
+        drawPct: Math.round((dr / totalSim) * 100),
+        awayWinPct: Math.round((aw / totalSim) * 100),
+        over25Pct: Math.round((ov25 / totalSim) * 100),
+        bttsPct: Math.round((btts / totalSim) * 100),
+        oddsRangeLabel: `Cote Dom [${minOdds.toFixed(2)} - ${maxOdds.toFixed(2)}]`,
+      };
+    }
+  }
+
+  // Calculate empirical backtesting for rule in database
+  let ruleBacktestInDb: H2HMatchAnalysisResult["ruleBacktestInDb"];
+  if (database && database.length > 0) {
+    const matchingInDb = database.filter((m) => {
+      if (ruleId === "RÉG-01") return (m.homeRankAtRound || m.homeRank || 10) <= 5 && (m.homeOdds || 3) <= 2.00;
+      if (ruleId === "RÉG-02") return (m.homeOdds || 3) <= 2.20;
+      if (ruleId === "RÉG-03") return (m.awayRankAtRound || m.awayRank || 1) <= 4 && (m.awayOdds || 5) <= 2.40;
+      if (ruleId === "RÉG-04") return (m.overUnderOdds?.over25 || 3) <= 2.00;
+      return (m.homeOdds || 3) <= 2.20;
+    });
+
+    if (matchingInDb.length >= 2) {
+      let winCount = 0;
+      matchingInDb.forEach((m) => {
+        const parts = (m.score || "0-0").split(/[:\-]/).map((s) => parseInt(s.trim(), 10) || 0);
+        const hS = parts[0] || 0;
+        const aS = parts[1] || 0;
+        const sum = hS + aS;
+        if (predictionFormatted === "1X" && hS >= aS) winCount++;
+        else if (predictionFormatted === "X2" && aS >= hS) winCount++;
+        else if (predictionFormatted === "1" && hS > aS) winCount++;
+        else if (predictionFormatted === "2" && aS > hS) winCount++;
+        else if (predictionFormatted === "Over 2.5" && sum > 2) winCount++;
+        else if (hS >= aS) winCount++;
+      });
+
+      ruleBacktestInDb = {
+        totalMatchingInDb: matchingInDb.length,
+        validatedCount: winCount,
+        successRate: Math.round((winCount / matchingInDb.length) * 100),
+      };
+    }
+  }
+
   return {
     matchId: event.id,
     homeTeam: event.homeTeamName,
@@ -1028,5 +1141,7 @@ export function getH2HAnalysisForMatch(
       bttsPct,
     },
     databaseEvidence,
+    oddsIntervalStats,
+    ruleBacktestInDb,
   };
 }
