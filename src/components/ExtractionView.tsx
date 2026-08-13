@@ -819,10 +819,10 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
       await exportXlsxData(extractedDatabase as any, activeEventCategoryId);
       addLog(
         "SUCCESS",
-        `[EXPORT XLSX] 📊 ${extractedDatabase.length} enregistrements exportés avec succès en vrai fichier Excel (.xlsx) natif avec en-têtes figeables, couleurs et filtres automatiques.`
+        `[EXPORT XLSX] 📊 ${extractedDatabase.length} enregistrements exportés en fichier Excel (.xlsx) natif avec Onglet BDD, Tableau TCD Pivot (selon l'image) et Recherche Rapide dynamique (=FILTER).`
       );
     } catch (err: any) {
-      addLog("ERROR", `[EXPORT XLSX] Erreur lors de la génération du fichier Excel: ${err?.message || err}`);
+      addLog("WARN", `[EXPORT XLSX] Erreur lors de la génération du fichier Excel: ${err?.message || err}`);
       console.error(err);
     }
   };
@@ -838,10 +838,10 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
       await exportStyledExcelReport(extractedDatabase as any, activeEventCategoryId);
       addLog(
         "SUCCESS",
-        `[EXPORT STYLED EXCEL] 🎨 ${extractedDatabase.length} enregistrements exportés en Excel Stylé (.xlsx) natif avec bannière, en-têtes sombres figeables, badges de couleur et moyennes.`
+        `[EXPORT STYLED EXCEL] 🎨 ${extractedDatabase.length} enregistrements exportés en Excel Stylé (.xlsx) natif avec Rapport, Tableau Pivot TCD et Recherche Rapide (=FILTER).`
       );
     } catch (err: any) {
-      addLog("ERROR", `[EXPORT STYLED EXCEL] Erreur lors de la génération du rapport Excel: ${err?.message || err}`);
+      addLog("WARN", `[EXPORT STYLED EXCEL] Erreur lors de la génération du rapport Excel: ${err?.message || err}`);
       console.error(err);
     }
   };

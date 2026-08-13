@@ -464,11 +464,12 @@ export function convertRoundResultsToExtractedRecords(
         `Saison ${sNum}`;
 
       const eventCatId =
-        (r as any).eventCategoryId ||
-        (r as any).seasonId ||
         (m as any).eventCategoryId ||
-        (m as any).seasonId ||
-        competitionId;
+        (m as any).rawMatch?.eventCategoryId ||
+        (r as any).eventCategoryId ||
+        (m as any).categoryId ||
+        competitionId ||
+        0;
 
       const odds = extractAllOddsFromMatch(m);
 
