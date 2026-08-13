@@ -862,8 +862,11 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
     });
 
     const worksheet = XLSX.utils.json_to_sheet(exportRows);
+    const range = XLSX.utils.decode_range(worksheet["!ref"] || "A1");
+    worksheet["!autofilter"] = { ref: XLSX.utils.encode_range(range) };
+
     const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Base de Données Matchs");
+    XLSX.utils.book_append_sheet(workbook, worksheet, "BDD Matchs Sporty");
 
     // Auto-adjust column widths
     const colWidths = Object.keys(exportRows[0] || {}).map((key) => {
@@ -872,7 +875,7 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
         const valStr = String(row[key] ?? "");
         if (valStr.length > maxLen) maxLen = valStr.length;
       });
-      return { wch: Math.min(maxLen + 3, 45) };
+      return { wch: Math.min(Math.max(maxLen + 4, 12), 48) };
     });
     worksheet["!cols"] = colWidths;
 
@@ -883,7 +886,7 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
 
     addLog(
       "SUCCESS",
-      `[EXPORT XLSX] 📊 ${extractedDatabase.length} enregistrements exportés avec succès en Excel (.xlsx) structuré.`
+      `[EXPORT XLSX] 📊 ${extractedDatabase.length} enregistrements exportés avec succès en Excel (.xlsx) structuré avec filtres automatiques activés.`
     );
   };
 
@@ -1048,11 +1051,11 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
       </html>
     `;
 
-    const blob = new Blob([excelTemplate], { type: "application/vnd.ms-excel;charset=utf-8" });
+    const blob = new Blob([excelTemplate], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `bdd_sporty_stylee_eventCat_${catId}_${new Date().toISOString().slice(0, 10)}.xls`;
+    link.download = `bdd_sporty_stylee_eventCat_${catId}_${new Date().toISOString().slice(0, 10)}.xlsx`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -1060,7 +1063,7 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
 
     addLog(
       "SUCCESS",
-      `[EXPORT STYLED EXCEL] 🎨 ${totalCount} enregistrements exportés en Excel Stylé (.xls) avec en-tête, couleurs et moyennes.`
+      `[EXPORT STYLED EXCEL] 🎨 ${totalCount} enregistrements exportés en Excel Stylé (.xlsx) avec en-tête, couleurs et moyennes.`
     );
   };
 
@@ -1848,19 +1851,19 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
                 <button
                   onClick={handleExportXLSX}
                   className="px-3.5 py-2 bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-300 border border-emerald-500/60 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-md shadow-emerald-950/40 transition-all cursor-pointer"
-                  title="Exporter la BDD au format Excel structuré (.xlsx)"
+                  title="Exporter la BDD au format Excel structuré (.xlsx) avec filtres automatiques activés"
                 >
                   <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Exporter XLSX (Data)</span>
+                  <span>Exporter XLSX (AutoFiltres)</span>
                 </button>
 
                 <button
                   onClick={handleExportStyledExcel}
                   className="px-3.5 py-2 bg-gradient-to-r from-amber-500/30 to-emerald-500/30 hover:from-amber-500/50 hover:to-emerald-500/50 text-amber-200 border border-amber-500/60 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-md shadow-amber-950/40 transition-all cursor-pointer"
-                  title="Exporter un rapport Excel stylé avec bannière, couleurs, en-têtes sombres et moyennes (.xls)"
+                  title="Exporter un rapport Excel stylé avec bannière, couleurs, en-têtes sombres et moyennes (.xlsx)"
                 >
                   <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Exporter Excel Stylé (.xls)</span>
+                  <span>Exporter Excel Stylé (.xlsx)</span>
                 </button>
 
                 <button

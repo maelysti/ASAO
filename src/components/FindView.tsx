@@ -114,6 +114,13 @@ export const FindView: React.FC<FindViewProps> = ({
   const [minOdds, setMinOdds] = useState<string>("");
   const [maxOdds, setMaxOdds] = useState<string>("");
 
+  // Column Header Filter States (Excel Style)
+  const [activeHeaderPopup, setActiveHeaderPopup] = useState<string | null>(null);
+  const [colFilterMatchId, setColFilterMatchId] = useState<string>("");
+  const [colFilterHomeTeam, setColFilterHomeTeam] = useState<string>("");
+  const [colFilterAwayTeam, setColFilterAwayTeam] = useState<string>("");
+  const [colFilterRound, setColFilterRound] = useState<string>("");
+
   // Structured Filter Controls
   const [selectedComp, setSelectedComp] = useState<string | number>("ALL");
   const [selectedEventCatId, setSelectedEventCatId] = useState<string | number>("ALL");
@@ -294,6 +301,21 @@ export const FindView: React.FC<FindViewProps> = ({
         if (!matchesOddsRange) return false;
       }
 
+      // 6. Excel Column Header Specific Filters
+      if (colFilterMatchId.trim() !== "") {
+        if (!String(m.id).toLowerCase().includes(colFilterMatchId.trim().toLowerCase())) return false;
+      }
+      if (colFilterHomeTeam.trim() !== "") {
+        if (!(m.homeTeamName || "").toLowerCase().includes(colFilterHomeTeam.trim().toLowerCase())) return false;
+      }
+      if (colFilterAwayTeam.trim() !== "") {
+        if (!(m.awayTeamName || "").toLowerCase().includes(colFilterAwayTeam.trim().toLowerCase())) return false;
+      }
+      if (colFilterRound.trim() !== "") {
+        const targetR = colFilterRound.trim().replace(/^j/i, "");
+        if (String(m.roundNumber || 1) !== targetR) return false;
+      }
+
       // 6. Free Text Multi-Term Matching
       if (!rawQ) return true;
 
@@ -422,6 +444,10 @@ export const FindView: React.FC<FindViewProps> = ({
     selectedEventCatId,
     selectedOutcome,
     selectedGoalMarket,
+    colFilterMatchId,
+    colFilterHomeTeam,
+    colFilterAwayTeam,
+    colFilterRound,
   ]);
 
   // Sort handler for Excel Table columns
@@ -485,6 +511,10 @@ export const FindView: React.FC<FindViewProps> = ({
     if (selectedEventCatId !== "ALL") count++;
     if (selectedOutcome !== "ALL") count++;
     if (selectedGoalMarket !== "ALL") count++;
+    if (colFilterMatchId.trim() !== "") count++;
+    if (colFilterHomeTeam.trim() !== "") count++;
+    if (colFilterAwayTeam.trim() !== "") count++;
+    if (colFilterRound.trim() !== "") count++;
     return count;
   }, [
     searchQuery,
@@ -496,6 +526,10 @@ export const FindView: React.FC<FindViewProps> = ({
     selectedEventCatId,
     selectedOutcome,
     selectedGoalMarket,
+    colFilterMatchId,
+    colFilterHomeTeam,
+    colFilterAwayTeam,
+    colFilterRound,
   ]);
 
   // Statistics calculation for filtered search results
@@ -810,6 +844,11 @@ export const FindView: React.FC<FindViewProps> = ({
     setSelectedEventCatId("ALL");
     setSelectedOutcome("ALL");
     setSelectedGoalMarket("ALL");
+    setColFilterMatchId("");
+    setColFilterHomeTeam("");
+    setColFilterAwayTeam("");
+    setColFilterRound("");
+    setActiveHeaderPopup(null);
   };
 
   return (
@@ -1259,6 +1298,86 @@ export const FindView: React.FC<FindViewProps> = ({
           </div>
         </div>
 
+        {/* ACTIVE FILTERS BANNER TOOLBAR */}
+        {activeFiltersCount > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-3 bg-amber-500/10 border border-amber-500/30 rounded-2xl p-3 text-xs text-amber-200 shadow-lg">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-black text-amber-400 flex items-center gap-1.5">
+                <Filter className="w-3.5 h-3.5 text-amber-400" />
+                Filtres Excel Actifs ({activeFiltersCount}) :
+              </span>
+              {selectedComp !== "ALL" && (
+                <span className="px-2 py-0.5 bg-amber-500/20 border border-amber-500/40 rounded-lg text-amber-300 flex items-center gap-1">
+                  Ligue: #{selectedComp}
+                  <X className="w-3 h-3 cursor-pointer hover:text-white" onClick={() => setSelectedComp("ALL")} />
+                </span>
+              )}
+              {selectedEventCatId !== "ALL" && (
+                <span className="px-2 py-0.5 bg-emerald-500/20 border border-emerald-500/40 rounded-lg text-emerald-300 flex items-center gap-1">
+                  Cat. ID: #{selectedEventCatId}
+                  <X className="w-3 h-3 cursor-pointer hover:text-white" onClick={() => setSelectedEventCatId("ALL")} />
+                </span>
+              )}
+              {selectedOutcome !== "ALL" && (
+                <span className="px-2 py-0.5 bg-amber-500/20 border border-amber-500/40 rounded-lg text-amber-300 flex items-center gap-1">
+                  Issue: {selectedOutcome}
+                  <X className="w-3 h-3 cursor-pointer hover:text-white" onClick={() => setSelectedOutcome("ALL")} />
+                </span>
+              )}
+              {selectedGoalMarket !== "ALL" && (
+                <span className="px-2 py-0.5 bg-cyan-500/20 border border-cyan-500/40 rounded-lg text-cyan-300 flex items-center gap-1">
+                  Marché: {selectedGoalMarket}
+                  <X className="w-3 h-3 cursor-pointer hover:text-white" onClick={() => setSelectedGoalMarket("ALL")} />
+                </span>
+              )}
+              {colFilterMatchId && (
+                <span className="px-2 py-0.5 bg-amber-500/20 border border-amber-500/40 rounded-lg text-amber-300 flex items-center gap-1">
+                  ID: #{colFilterMatchId}
+                  <X className="w-3 h-3 cursor-pointer hover:text-white" onClick={() => setColFilterMatchId("")} />
+                </span>
+              )}
+              {colFilterHomeTeam && (
+                <span className="px-2 py-0.5 bg-amber-500/20 border border-amber-500/40 rounded-lg text-amber-300 flex items-center gap-1">
+                  Dom: {colFilterHomeTeam}
+                  <X className="w-3 h-3 cursor-pointer hover:text-white" onClick={() => setColFilterHomeTeam("")} />
+                </span>
+              )}
+              {colFilterAwayTeam && (
+                <span className="px-2 py-0.5 bg-amber-500/20 border border-amber-500/40 rounded-lg text-amber-300 flex items-center gap-1">
+                  Ext: {colFilterAwayTeam}
+                  <X className="w-3 h-3 cursor-pointer hover:text-white" onClick={() => setColFilterAwayTeam("")} />
+                </span>
+              )}
+              {colFilterRound && (
+                <span className="px-2 py-0.5 bg-amber-500/20 border border-amber-500/40 rounded-lg text-amber-300 flex items-center gap-1">
+                  Journée: J{colFilterRound}
+                  <X className="w-3 h-3 cursor-pointer hover:text-white" onClick={() => setColFilterRound("")} />
+                </span>
+              )}
+              {(minOdds !== "" || maxOdds !== "") && (
+                <span className="px-2 py-0.5 bg-amber-500/20 border border-amber-500/40 rounded-lg text-amber-300 flex items-center gap-1">
+                  Cotes: {minOdds || "0"} - {maxOdds || "∞"}
+                  <X
+                    className="w-3 h-3 cursor-pointer hover:text-white"
+                    onClick={() => {
+                      setMinOdds("");
+                      setMaxOdds("");
+                    }}
+                  />
+                </span>
+              )}
+            </div>
+
+            <button
+              onClick={handleResetFilters}
+              className="px-3 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs rounded-xl flex items-center gap-1.5 shadow cursor-pointer transition-all shrink-0"
+            >
+              <RotateCcw className="w-3 h-3" />
+              Réinitialiser Tous les Filtres
+            </button>
+          </div>
+        )}
+
         {filteredMatches.length === 0 ? (
           <div className="bg-slate-900/60 border border-slate-800 rounded-3xl p-12 text-center space-y-3">
             <Search className="w-12 h-12 text-slate-600 mx-auto" />
@@ -1276,58 +1395,405 @@ export const FindView: React.FC<FindViewProps> = ({
             </button>
           </div>
         ) : displayMode === "TABLE" ? (
-          /* EXCEL DATA TABLE VIEW */
-          <div className="overflow-x-auto rounded-2xl border border-slate-800 bg-slate-950/90 shadow-2xl backdrop-blur-md">
-            <table className="w-full text-left border-collapse min-w-[1300px]">
-              <thead>
-                <tr className="bg-slate-900/90 text-[10px] font-black uppercase tracking-wider text-amber-400 border-b border-slate-800 divide-x divide-slate-800/80 sticky top-0 z-10 select-none">
-                  <th onClick={() => handleSort("id")} className="p-2.5 cursor-pointer hover:bg-slate-800/80 transition-colors">
-                    <div className="flex items-center gap-1">
-                      <span>ID Match</span>
-                      <ArrowUpDown className="w-3 h-3 text-slate-500" />
+          /* EXCEL DATA TABLE VIEW WITH FROZEN HEADER & DIRECT COLUMN FILTERS */
+          <div className="overflow-x-auto overflow-y-auto max-h-[720px] rounded-2xl border border-slate-800 bg-slate-950/90 shadow-2xl backdrop-blur-md relative">
+            <table className="w-full text-left border-collapse min-w-[1350px]">
+              <thead className="sticky top-0 z-30 bg-slate-900 border-b-2 border-amber-500/30 shadow-xl select-none">
+                <tr className="text-[10px] font-black uppercase tracking-wider text-amber-400 divide-x divide-slate-800/80">
+                  {/* ID Match */}
+                  <th className="p-2.5 relative">
+                    <div className="flex items-center justify-between gap-1">
+                      <span onClick={() => handleSort("id")} className="cursor-pointer hover:text-white transition-colors flex items-center gap-1">
+                        ID Match <ArrowUpDown className="w-3 h-3 text-slate-500" />
+                      </span>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setActiveHeaderPopup(activeHeaderPopup === "id" ? null : "id"); }}
+                        className={`p-1 rounded transition-colors ${colFilterMatchId ? "bg-amber-500 text-slate-950 font-bold" : "text-slate-400 hover:text-amber-400"}`}
+                        title="Filtrer par ID Match"
+                      >
+                        <Filter className="w-3 h-3" />
+                      </button>
                     </div>
+                    {/* Filter Popup */}
+                    {activeHeaderPopup === "id" && (
+                      <div className="absolute left-0 top-full mt-1 w-52 bg-slate-900 border border-amber-500/50 rounded-2xl p-3 shadow-2xl z-50 text-xs normal-case font-normal text-slate-200 space-y-2">
+                        <div className="flex items-center justify-between font-bold text-amber-400 text-[11px]">
+                          <span>Filtrer ID Match</span>
+                          <X className="w-3.5 h-3.5 cursor-pointer text-slate-400 hover:text-white" onClick={() => setActiveHeaderPopup(null)} />
+                        </div>
+                        <input
+                          type="text"
+                          placeholder="Rechercher ID..."
+                          value={colFilterMatchId}
+                          onChange={(e) => setColFilterMatchId(e.target.value)}
+                          className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-amber-500"
+                        />
+                        <div className="flex justify-between items-center pt-1 border-t border-slate-800">
+                          <button onClick={() => setColFilterMatchId("")} className="text-[10px] text-slate-400 hover:text-amber-300">Effacer</button>
+                          <button onClick={handleResetFilters} className="text-[10px] text-amber-400 hover:underline">Réinitialiser Tout</button>
+                        </div>
+                      </div>
+                    )}
                   </th>
-                  <th onClick={() => handleSort("eventCategoryId")} className="p-2.5 text-emerald-400 cursor-pointer hover:bg-slate-800/80 transition-colors">
-                    <div className="flex items-center gap-1">
-                      <span>Cat. ID</span>
-                      <ArrowUpDown className="w-3 h-3 text-emerald-500" />
+
+                  {/* Cat ID */}
+                  <th className="p-2.5 text-emerald-400 relative">
+                    <div className="flex items-center justify-between gap-1">
+                      <span onClick={() => handleSort("eventCategoryId")} className="cursor-pointer hover:text-white transition-colors flex items-center gap-1">
+                        Cat. ID <ArrowUpDown className="w-3 h-3 text-emerald-500" />
+                      </span>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setActiveHeaderPopup(activeHeaderPopup === "catId" ? null : "catId"); }}
+                        className={`p-1 rounded transition-colors ${selectedEventCatId !== "ALL" ? "bg-emerald-500 text-slate-950 font-bold" : "text-slate-400 hover:text-emerald-400"}`}
+                        title="Filtrer par Cat. ID"
+                      >
+                        <Filter className="w-3 h-3" />
+                      </button>
                     </div>
+                    {/* Filter Popup */}
+                    {activeHeaderPopup === "catId" && (
+                      <div className="absolute left-0 top-full mt-1 w-60 bg-slate-900 border border-emerald-500/50 rounded-2xl p-3 shadow-2xl z-50 text-xs normal-case font-normal text-slate-200 space-y-2">
+                        <div className="flex items-center justify-between font-bold text-emerald-400 text-[11px]">
+                          <span>Filtrer ID Event Category</span>
+                          <X className="w-3.5 h-3.5 cursor-pointer text-slate-400 hover:text-white" onClick={() => setActiveHeaderPopup(null)} />
+                        </div>
+                        <select
+                          value={selectedEventCatId}
+                          onChange={(e) => setSelectedEventCatId(e.target.value)}
+                          className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500 cursor-pointer"
+                        >
+                          <option value="ALL">Toutes les catégories</option>
+                          {availableEventCategories.map((cat) => (
+                            <option key={String(cat.id)} value={cat.id}>
+                              #{cat.id} - {cat.name} ({cat.count})
+                            </option>
+                          ))}
+                        </select>
+                        <div className="flex justify-between items-center pt-1 border-t border-slate-800">
+                          <button onClick={() => setSelectedEventCatId("ALL")} className="text-[10px] text-slate-400 hover:text-emerald-300">Effacer</button>
+                          <button onClick={handleResetFilters} className="text-[10px] text-emerald-400 hover:underline">Réinitialiser Tout</button>
+                        </div>
+                      </div>
+                    )}
                   </th>
-                  <th onClick={() => handleSort("competitionName")} className="p-2.5 cursor-pointer hover:bg-slate-800/80 transition-colors">
-                    <div className="flex items-center gap-1">
-                      <span>Compétition</span>
-                      <ArrowUpDown className="w-3 h-3 text-slate-500" />
+
+                  {/* Compétition */}
+                  <th className="p-2.5 relative">
+                    <div className="flex items-center justify-between gap-1">
+                      <span onClick={() => handleSort("competitionName")} className="cursor-pointer hover:text-white transition-colors flex items-center gap-1">
+                        Compétition <ArrowUpDown className="w-3 h-3 text-slate-500" />
+                      </span>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setActiveHeaderPopup(activeHeaderPopup === "comp" ? null : "comp"); }}
+                        className={`p-1 rounded transition-colors ${selectedComp !== "ALL" ? "bg-amber-500 text-slate-950 font-bold" : "text-slate-400 hover:text-amber-400"}`}
+                        title="Filtrer par Compétition"
+                      >
+                        <Filter className="w-3 h-3" />
+                      </button>
                     </div>
+                    {/* Filter Popup */}
+                    {activeHeaderPopup === "comp" && (
+                      <div className="absolute left-0 top-full mt-1 w-64 bg-slate-900 border border-amber-500/50 rounded-2xl p-3 shadow-2xl z-50 text-xs normal-case font-normal text-slate-200 space-y-2">
+                        <div className="flex items-center justify-between font-bold text-amber-400 text-[11px]">
+                          <span>Filtrer par Compétition</span>
+                          <X className="w-3.5 h-3.5 cursor-pointer text-slate-400 hover:text-white" onClick={() => setActiveHeaderPopup(null)} />
+                        </div>
+                        <select
+                          value={selectedComp}
+                          onChange={(e) => setSelectedComp(e.target.value)}
+                          className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-amber-500 cursor-pointer"
+                        >
+                          <option value="ALL">Toutes les compétitions</option>
+                          {availableCompetitions.map((comp) => (
+                            <option key={String(comp.id)} value={comp.id}>
+                              {comp.name}
+                            </option>
+                          ))}
+                        </select>
+                        <div className="flex justify-between items-center pt-1 border-t border-slate-800">
+                          <button onClick={() => setSelectedComp("ALL")} className="text-[10px] text-slate-400 hover:text-amber-300">Effacer</button>
+                          <button onClick={handleResetFilters} className="text-[10px] text-amber-400 hover:underline">Réinitialiser Tout</button>
+                        </div>
+                      </div>
+                    )}
                   </th>
-                  <th onClick={() => handleSort("roundNumber")} className="p-2.5 text-center cursor-pointer hover:bg-slate-800/80 transition-colors">
-                    <span>J.</span>
+
+                  {/* Journée (J.) */}
+                  <th className="p-2.5 text-center relative">
+                    <div className="flex items-center justify-center gap-1">
+                      <span onClick={() => handleSort("roundNumber")} className="cursor-pointer hover:text-white transition-colors">J.</span>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setActiveHeaderPopup(activeHeaderPopup === "round" ? null : "round"); }}
+                        className={`p-1 rounded transition-colors ${colFilterRound ? "bg-amber-500 text-slate-950 font-bold" : "text-slate-400 hover:text-amber-400"}`}
+                        title="Filtrer la journée"
+                      >
+                        <Filter className="w-3 h-3" />
+                      </button>
+                    </div>
+                    {/* Filter Popup */}
+                    {activeHeaderPopup === "round" && (
+                      <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 w-48 bg-slate-900 border border-amber-500/50 rounded-2xl p-3 shadow-2xl z-50 text-xs normal-case font-normal text-slate-200 space-y-2">
+                        <div className="flex items-center justify-between font-bold text-amber-400 text-[11px]">
+                          <span>Filtrer Journée</span>
+                          <X className="w-3.5 h-3.5 cursor-pointer text-slate-400 hover:text-white" onClick={() => setActiveHeaderPopup(null)} />
+                        </div>
+                        <input
+                          type="text"
+                          placeholder="ex: 1, 5, 12..."
+                          value={colFilterRound}
+                          onChange={(e) => setColFilterRound(e.target.value)}
+                          className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-amber-500"
+                        />
+                        <div className="flex justify-between items-center pt-1 border-t border-slate-800">
+                          <button onClick={() => setColFilterRound("")} className="text-[10px] text-slate-400 hover:text-amber-300">Effacer</button>
+                          <button onClick={handleResetFilters} className="text-[10px] text-amber-400 hover:underline">Réinitialiser Tout</button>
+                        </div>
+                      </div>
+                    )}
                   </th>
-                  <th onClick={() => handleSort("homeTeamName")} className="p-2.5 cursor-pointer hover:bg-slate-800/80 transition-colors">
-                    <span>Équipe Domicile</span>
+
+                  {/* Équipe Domicile */}
+                  <th className="p-2.5 relative">
+                    <div className="flex items-center justify-between gap-1">
+                      <span onClick={() => handleSort("homeTeamName")} className="cursor-pointer hover:text-white transition-colors">Équipe Domicile</span>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setActiveHeaderPopup(activeHeaderPopup === "home" ? null : "home"); }}
+                        className={`p-1 rounded transition-colors ${colFilterHomeTeam ? "bg-amber-500 text-slate-950 font-bold" : "text-slate-400 hover:text-amber-400"}`}
+                        title="Filtrer Équipe Domicile"
+                      >
+                        <Filter className="w-3 h-3" />
+                      </button>
+                    </div>
+                    {/* Filter Popup */}
+                    {activeHeaderPopup === "home" && (
+                      <div className="absolute left-0 top-full mt-1 w-56 bg-slate-900 border border-amber-500/50 rounded-2xl p-3 shadow-2xl z-50 text-xs normal-case font-normal text-slate-200 space-y-2">
+                        <div className="flex items-center justify-between font-bold text-amber-400 text-[11px]">
+                          <span>Nom Équipe Domicile</span>
+                          <X className="w-3.5 h-3.5 cursor-pointer text-slate-400 hover:text-white" onClick={() => setActiveHeaderPopup(null)} />
+                        </div>
+                        <input
+                          type="text"
+                          placeholder="ex: Arsenal, Real..."
+                          value={colFilterHomeTeam}
+                          onChange={(e) => setColFilterHomeTeam(e.target.value)}
+                          className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-amber-500"
+                        />
+                        <div className="flex justify-between items-center pt-1 border-t border-slate-800">
+                          <button onClick={() => setColFilterHomeTeam("")} className="text-[10px] text-slate-400 hover:text-amber-300">Effacer</button>
+                          <button onClick={handleResetFilters} className="text-[10px] text-amber-400 hover:underline">Réinitialiser Tout</button>
+                        </div>
+                      </div>
+                    )}
                   </th>
+
+                  {/* Rang D. */}
                   <th className="p-2.5 text-center text-slate-400">Rang D.</th>
+
+                  {/* Score FT */}
                   <th onClick={() => handleSort("score")} className="p-2.5 text-center cursor-pointer hover:bg-slate-800/80 transition-colors">
                     <span>Score FT</span>
                   </th>
+
+                  {/* Score HT */}
                   <th className="p-2.5 text-center text-slate-400">Score HT</th>
-                  <th onClick={() => handleSort("outcome")} className="p-2.5 text-center cursor-pointer hover:bg-slate-800/80 transition-colors">
-                    <span>Issue</span>
+
+                  {/* Issue */}
+                  <th className="p-2.5 text-center relative">
+                    <div className="flex items-center justify-center gap-1">
+                      <span onClick={() => handleSort("outcome")} className="cursor-pointer hover:text-white transition-colors">Issue</span>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setActiveHeaderPopup(activeHeaderPopup === "outcome" ? null : "outcome"); }}
+                        className={`p-1 rounded transition-colors ${selectedOutcome !== "ALL" ? "bg-amber-500 text-slate-950 font-bold" : "text-slate-400 hover:text-amber-400"}`}
+                        title="Filtrer par Issue"
+                      >
+                        <Filter className="w-3 h-3" />
+                      </button>
+                    </div>
+                    {/* Filter Popup */}
+                    {activeHeaderPopup === "outcome" && (
+                      <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 w-48 bg-slate-900 border border-amber-500/50 rounded-2xl p-3 shadow-2xl z-50 text-xs normal-case font-normal text-slate-200 space-y-2">
+                        <div className="flex items-center justify-between font-bold text-amber-400 text-[11px]">
+                          <span>Filtrer par Issue</span>
+                          <X className="w-3.5 h-3.5 cursor-pointer text-slate-400 hover:text-white" onClick={() => setActiveHeaderPopup(null)} />
+                        </div>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          <button
+                            onClick={() => setSelectedOutcome("ALL")}
+                            className={`py-1 rounded text-xs font-bold ${selectedOutcome === "ALL" ? "bg-amber-500 text-slate-950" : "bg-slate-800 text-slate-300"}`}
+                          >
+                            Toutes
+                          </button>
+                          <button
+                            onClick={() => setSelectedOutcome("1")}
+                            className={`py-1 rounded text-xs font-bold ${selectedOutcome === "1" ? "bg-emerald-500 text-slate-950" : "bg-slate-800 text-emerald-400"}`}
+                          >
+                            1 (Dom)
+                          </button>
+                          <button
+                            onClick={() => setSelectedOutcome("X")}
+                            className={`py-1 rounded text-xs font-bold ${selectedOutcome === "X" ? "bg-amber-500 text-slate-950" : "bg-slate-800 text-amber-400"}`}
+                          >
+                            X (Nul)
+                          </button>
+                          <button
+                            onClick={() => setSelectedOutcome("2")}
+                            className={`py-1 rounded text-xs font-bold ${selectedOutcome === "2" ? "bg-blue-500 text-white" : "bg-slate-800 text-blue-400"}`}
+                          >
+                            2 (Ext)
+                          </button>
+                        </div>
+                        <div className="flex justify-between items-center pt-1 border-t border-slate-800">
+                          <button onClick={() => setSelectedOutcome("ALL")} className="text-[10px] text-slate-400 hover:text-amber-300">Effacer</button>
+                          <button onClick={handleResetFilters} className="text-[10px] text-amber-400 hover:underline">Réinitialiser Tout</button>
+                        </div>
+                      </div>
+                    )}
                   </th>
-                  <th className="p-2.5 text-center text-slate-400">Buts</th>
+
+                  {/* Buts */}
+                  <th className="p-2.5 text-center relative">
+                    <div className="flex items-center justify-center gap-1">
+                      <span className="text-slate-400">Buts</span>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setActiveHeaderPopup(activeHeaderPopup === "goals" ? null : "goals"); }}
+                        className={`p-1 rounded transition-colors ${selectedGoalMarket !== "ALL" ? "bg-cyan-500 text-slate-950 font-bold" : "text-slate-400 hover:text-cyan-400"}`}
+                        title="Filtrer Marché Buts"
+                      >
+                        <Filter className="w-3 h-3" />
+                      </button>
+                    </div>
+                    {/* Filter Popup */}
+                    {activeHeaderPopup === "goals" && (
+                      <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 w-52 bg-slate-900 border border-cyan-500/50 rounded-2xl p-3 shadow-2xl z-50 text-xs normal-case font-normal text-slate-200 space-y-2">
+                        <div className="flex items-center justify-between font-bold text-cyan-400 text-[11px]">
+                          <span>Filtrer Marché Buts</span>
+                          <X className="w-3.5 h-3.5 cursor-pointer text-slate-400 hover:text-white" onClick={() => setActiveHeaderPopup(null)} />
+                        </div>
+                        <select
+                          value={selectedGoalMarket}
+                          onChange={(e) => setSelectedGoalMarket(e.target.value as any)}
+                          className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-cyan-500 cursor-pointer"
+                        >
+                          <option value="ALL">Tous les marchés buts</option>
+                          <option value="OVER_25">Over 2.5 Buts (&gt; 2.5)</option>
+                          <option value="UNDER_25">Under 2.5 Buts (&lt; 2.5)</option>
+                          <option value="BTTS_YES">Les 2 Équipes Marquent (GG)</option>
+                          <option value="BTTS_NO">Au Moins Une Ne Marque Pas (NG)</option>
+                        </select>
+                        <div className="flex justify-between items-center pt-1 border-t border-slate-800">
+                          <button onClick={() => setSelectedGoalMarket("ALL")} className="text-[10px] text-slate-400 hover:text-cyan-300">Effacer</button>
+                          <button onClick={handleResetFilters} className="text-[10px] text-cyan-400 hover:underline">Réinitialiser Tout</button>
+                        </div>
+                      </div>
+                    )}
+                  </th>
+
+                  {/* Rang E. */}
                   <th className="p-2.5 text-center text-slate-400">Rang E.</th>
-                  <th onClick={() => handleSort("awayTeamName")} className="p-2.5 cursor-pointer hover:bg-slate-800/80 transition-colors">
-                    <span>Équipe Extérieur</span>
+
+                  {/* Équipe Extérieur */}
+                  <th className="p-2.5 relative">
+                    <div className="flex items-center justify-between gap-1">
+                      <span onClick={() => handleSort("awayTeamName")} className="cursor-pointer hover:text-white transition-colors">Équipe Extérieur</span>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setActiveHeaderPopup(activeHeaderPopup === "away" ? null : "away"); }}
+                        className={`p-1 rounded transition-colors ${colFilterAwayTeam ? "bg-amber-500 text-slate-950 font-bold" : "text-slate-400 hover:text-amber-400"}`}
+                        title="Filtrer Équipe Extérieur"
+                      >
+                        <Filter className="w-3 h-3" />
+                      </button>
+                    </div>
+                    {/* Filter Popup */}
+                    {activeHeaderPopup === "away" && (
+                      <div className="absolute left-0 top-full mt-1 w-56 bg-slate-900 border border-amber-500/50 rounded-2xl p-3 shadow-2xl z-50 text-xs normal-case font-normal text-slate-200 space-y-2">
+                        <div className="flex items-center justify-between font-bold text-amber-400 text-[11px]">
+                          <span>Nom Équipe Extérieur</span>
+                          <X className="w-3.5 h-3.5 cursor-pointer text-slate-400 hover:text-white" onClick={() => setActiveHeaderPopup(null)} />
+                        </div>
+                        <input
+                          type="text"
+                          placeholder="ex: Barcelona, Chelsea..."
+                          value={colFilterAwayTeam}
+                          onChange={(e) => setColFilterAwayTeam(e.target.value)}
+                          className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-amber-500"
+                        />
+                        <div className="flex justify-between items-center pt-1 border-t border-slate-800">
+                          <button onClick={() => setColFilterAwayTeam("")} className="text-[10px] text-slate-400 hover:text-amber-300">Effacer</button>
+                          <button onClick={handleResetFilters} className="text-[10px] text-amber-400 hover:underline">Réinitialiser Tout</button>
+                        </div>
+                      </div>
+                    )}
                   </th>
+
+                  {/* Cote 1 */}
                   <th onClick={() => handleSort("homeOdds")} className="p-2.5 text-center text-emerald-400 cursor-pointer hover:bg-slate-800/80 transition-colors">
                     Cote 1
                   </th>
+
+                  {/* Cote X */}
                   <th onClick={() => handleSort("drawOdds")} className="p-2.5 text-center text-amber-400 cursor-pointer hover:bg-slate-800/80 transition-colors">
                     Cote X
                   </th>
+
+                  {/* Cote 2 */}
                   <th onClick={() => handleSort("awayOdds")} className="p-2.5 text-center text-blue-400 cursor-pointer hover:bg-slate-800/80 transition-colors">
                     Cote 2
                   </th>
-                  <th className="p-2.5 text-center text-slate-300">1X</th>
+
+                  {/* Cotes Range Filter Button */}
+                  <th className="p-2.5 text-center text-slate-300 relative">
+                    <div className="flex items-center justify-center gap-1">
+                      <span>Cotes</span>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setActiveHeaderPopup(activeHeaderPopup === "odds" ? null : "odds"); }}
+                        className={`p-1 rounded transition-colors ${minOdds || maxOdds || selectedOddsMarket !== "ALL" ? "bg-emerald-500 text-slate-950 font-bold" : "text-slate-400 hover:text-emerald-400"}`}
+                        title="Filtrer plage de cotes"
+                      >
+                        <Filter className="w-3 h-3" />
+                      </button>
+                    </div>
+                    {/* Filter Popup */}
+                    {activeHeaderPopup === "odds" && (
+                      <div className="absolute right-0 top-full mt-1 w-64 bg-slate-900 border border-emerald-500/50 rounded-2xl p-3 shadow-2xl z-50 text-xs normal-case font-normal text-slate-200 space-y-2">
+                        <div className="flex items-center justify-between font-bold text-emerald-400 text-[11px]">
+                          <span>Filtrer Plage de Cotes</span>
+                          <X className="w-3.5 h-3.5 cursor-pointer text-slate-400 hover:text-white" onClick={() => setActiveHeaderPopup(null)} />
+                        </div>
+                        <select
+                          value={selectedOddsMarket}
+                          onChange={(e) => setSelectedOddsMarket(e.target.value as any)}
+                          className="w-full px-2 py-1 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white focus:outline-none"
+                        >
+                          {ODDS_MARKET_OPTIONS.map((o) => (
+                            <option key={o.id} value={o.id}>{o.label}</option>
+                          ))}
+                        </select>
+                        <div className="grid grid-cols-2 gap-2">
+                          <input
+                            type="number"
+                            step="0.05"
+                            placeholder="Cote Min"
+                            value={minOdds}
+                            onChange={(e) => setMinOdds(e.target.value)}
+                            className="px-2 py-1 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white focus:outline-none"
+                          />
+                          <input
+                            type="number"
+                            step="0.05"
+                            placeholder="Cote Max"
+                            value={maxOdds}
+                            onChange={(e) => setMaxOdds(e.target.value)}
+                            className="px-2 py-1 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white focus:outline-none"
+                          />
+                        </div>
+                        <div className="flex justify-between items-center pt-1 border-t border-slate-800">
+                          <button onClick={() => { setMinOdds(""); setMaxOdds(""); setSelectedOddsMarket("ALL"); }} className="text-[10px] text-slate-400 hover:text-emerald-300">Effacer</button>
+                          <button onClick={handleResetFilters} className="text-[10px] text-emerald-400 hover:underline">Réinitialiser Tout</button>
+                        </div>
+                      </div>
+                    )}
+                  </th>
+
                   <th className="p-2.5 text-center text-slate-300">12</th>
                   <th className="p-2.5 text-center text-slate-300">X2</th>
                   <th className="p-2.5 text-center text-cyan-400">&gt;2.5</th>
