@@ -501,6 +501,42 @@ export const MatchCard: React.FC<MatchCardProps> = ({ event, matchIndex, databas
         </div>
       </div>
 
+      {/* Simplified BDD Prediction Badge */}
+      {h2h && (
+        <div className="bg-gradient-to-r from-emerald-950/40 via-slate-900 to-teal-950/40 border border-emerald-500/30 rounded-xl p-2.5 shadow-md flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="p-1.5 rounded-lg bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 shrink-0">
+              <Sparkles className="w-4 h-4" />
+            </div>
+            <div className="min-w-0">
+              <div className="text-[10px] uppercase font-black tracking-wider text-emerald-400/90 flex items-center gap-1.5">
+                <span>PRONOSTIC BDD</span>
+                <span className="text-slate-500">•</span>
+                <span className="text-slate-400 font-normal font-mono">
+                  {h2h.directMatchesCount > 0 ? `${h2h.directMatchesCount} H2H BDD` : "Cotes & Profil BDD"}
+                </span>
+              </div>
+              <div className="text-xs font-black text-white truncate flex items-center gap-1.5 mt-0.5">
+                <span className="text-emerald-300 font-mono text-sm">
+                  {h2h.applicableRule?.actionBet || h2h.prediction}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-col items-end shrink-0">
+            <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 font-mono font-black text-[11px] shadow">
+              {h2h.confidence}% Confiance
+            </span>
+            <span className="text-[9px] text-slate-400 mt-0.5 font-bold">
+              {h2h.applicableRule?.riskLevel === "TRÈS FAIBLE" || h2h.applicableRule?.riskLevel === "FAIBLE"
+                ? "🟢 Risque Faible"
+                : "🟡 Risque Modéré"}
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Auto-Hide Stats Details Toggle Bar */}
       <div className="flex items-center justify-between px-1">
         <button
