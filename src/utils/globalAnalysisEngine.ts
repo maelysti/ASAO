@@ -532,6 +532,7 @@ export interface H2HMatchAnalysisResult {
   homeTeam: string;
   awayTeam: string;
   directMatchesCount: number;
+  directMatches?: ExtractedMatchRecord[];
   homeWins: number;
   draws: number;
   awayWins: number;
@@ -996,6 +997,7 @@ export function getH2HAnalysisForMatch(
     homeTeam: event.homeTeamName,
     awayTeam: event.awayTeamName,
     directMatchesCount: totH2H,
+    directMatches,
     homeWins: hWins,
     draws: dWins,
     awayWins: aWins,

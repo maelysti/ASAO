@@ -35,6 +35,7 @@ import { BulletView } from "./components/BulletView";
 import { ExtractionView } from "./components/ExtractionView";
 import { GlobalAnalysisView } from "./components/GlobalAnalysisView";
 import { ToolStrategyView } from "./components/ToolStrategyView";
+import { FindView } from "./components/FindView";
 import { enrichRecordsWithRoundRanks, computeSeasonRoundRankings } from "./utils/standingsEngine";
 import { SafeParlayBanner } from "./components/SafeParlayBanner";
 import { RuleStatsRibbon } from "./components/RuleStatsRibbon";
@@ -44,7 +45,7 @@ import { RuleItem, AIRecapPrediction, ExtractedMatchRecord } from "./types";
 import { DEFAULT_RULES, processAllRules, runAIModeAnalysis } from "./utils/ruleEngine";
 import { getH2HAnalysisForMatch, getRealMatchId, mergeExtractedRecords, convertRoundResultsToExtractedRecords } from "./utils/globalAnalysisEngine";
 
-import { AlertTriangle, Key, RefreshCw, Trophy, Layers, Activity, Database, Download, ListOrdered, Sliders, Zap, BarChart3, PanelLeftClose, PanelLeftOpen, ChevronLeft, ChevronRight, Wrench, Clock, Flame, Lock, Eye, BellRing, X } from "lucide-react";
+import { AlertTriangle, Key, RefreshCw, Trophy, Layers, Activity, Database, Download, ListOrdered, Sliders, Zap, BarChart3, PanelLeftClose, PanelLeftOpen, ChevronLeft, ChevronRight, Wrench, Clock, Flame, Lock, Eye, BellRing, X, Search } from "lucide-react";
 
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
@@ -98,7 +99,7 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [activeRuleFilter, setActiveRuleFilter] = useState<string | null>(null);
   const [activeBetFilter, setActiveBetFilter] = useState<string | null>(null);
-  const [activeMainView, setActiveMainView] = useState<"current" | "ranking" | "results" | "bullet" | "rules" | "extraction" | "database" | "global_analysis" | "tool">("current");
+  const [activeMainView, setActiveMainView] = useState<"current" | "ranking" | "results" | "bullet" | "rules" | "extraction" | "database" | "global_analysis" | "tool" | "find">("current");
 
   // Rules & AI State
   const [rules, setRules] = useState<RuleItem[]>(() => {
@@ -1321,6 +1322,28 @@ export default function App() {
               </button>
 
               <button
+                onClick={() => setActiveMainView("find")}
+                title="FIND (RECHERCHE BDD)"
+                className={`flex items-center ${
+                  isSidebarCollapsed ? "justify-center px-0 py-3" : "justify-between px-3.5 py-2.5"
+                } rounded-xl text-xs font-black transition-all cursor-pointer ${
+                  activeMainView === "find"
+                    ? "bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 text-slate-950 shadow-lg shadow-amber-500/25 ring-1 ring-amber-400/50"
+                    : "text-slate-400 hover:text-amber-300 hover:bg-slate-800/60"
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <Search className="w-4 h-4 text-amber-400 shrink-0" />
+                  {!isSidebarCollapsed && <span>FIND</span>}
+                </div>
+                {!isSidebarCollapsed && (
+                  <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold border border-amber-500/30">
+                    RECHERCHE
+                  </span>
+                )}
+              </button>
+
+              <button
                 onClick={() => setActiveMainView("global_analysis")}
                 title="ANALYSE & TOOL INTEL"
                 className={`flex items-center ${
@@ -1647,6 +1670,15 @@ export default function App() {
       ) : activeMainView === "tool" ? (
         <main className="flex-1 max-w-7xl w-full mx-auto px-4 lg:px-8 py-6">
           <ToolStrategyView
+            database={extractedDatabase}
+            entryPoints={validEntryPoints}
+            onCreateRuleFromDb={handleCreateRule}
+            onNavigateToView={(view) => setActiveMainView(view)}
+          />
+        </main>
+      ) : activeMainView === "find" ? (
+        <main className="flex-1 max-w-7xl w-full mx-auto px-4 lg:px-8 py-6">
+          <FindView
             database={extractedDatabase}
             entryPoints={validEntryPoints}
             onCreateRuleFromDb={handleCreateRule}
