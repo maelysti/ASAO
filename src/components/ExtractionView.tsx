@@ -901,10 +901,7 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
   }, [extractedDatabase]);
 
   // Unified File Import Handler (JSON, Excel .xlsx / .xls, CSV)
-  const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
+  const processImportedFile = (file: File) => {
     const fileName = file.name.toLowerCase();
     const reader = new FileReader();
 
@@ -1025,6 +1022,25 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
     }
   };
 
+  const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    processImportedFile(file);
+    // Reset the input value so the same file can be selected again
+    e.target.value = "";
+  };
+
+  const [isDragOver, setIsDragOver] = useState<boolean>(false);
+
+  const handleDropFile = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const file = e.dataTransfer.files[0];
+      processImportedFile(file);
+    }
+  };
+
   const filteredDatabase = extractedDatabase.filter((record) => {
     if (selectedLeagueFilter !== "ALL" && record.competitionId !== selectedLeagueFilter) {
       return false;
@@ -1049,6 +1065,15 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
 
   return (
     <div className="space-y-6 pb-12">
+      {/* Hidden file input always available regardless of active tab */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleImportFile}
+        accept=".json,.xlsx,.xls,.csv"
+        className="hidden"
+      />
+
       {/* Top Banner */}
       <div className="bg-gradient-to-r from-slate-900 via-slate-900 to-slate-950 border border-slate-800 rounded-3xl p-6 shadow-2xl relative overflow-hidden">
         <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 relative z-10">
@@ -1625,19 +1650,12 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   onClick={() => fileInputRef.current?.click()}
-                  className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-cyan-300 rounded-xl text-xs font-bold flex items-center gap-1.5 border border-slate-700 transition-all cursor-pointer"
-                  title="Importer des données depuis JSON, Excel (.xlsx/.xls) ou CSV"
+                  className="px-3 py-2 bg-cyan-600/30 hover:bg-cyan-600/50 text-cyan-200 border border-cyan-500/60 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-md shadow-cyan-950/40 transition-all cursor-pointer"
+                  title="Importer des données depuis JSON, Excel (.xlsx/.xls) ou CSV (ou glissez-déposez votre fichier sur la page)"
                 >
-                  <Upload className="w-3.5 h-3.5" />
-                  <span>Importer (JSON/Excel)</span>
+                  <Upload className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>Importer JSON / Excel</span>
                 </button>
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  onChange={handleImportFile}
-                  accept=".json,.xlsx,.xls,.csv"
-                  className="hidden"
-                />
 
                 <button
                   onClick={handleExportXLSX}
@@ -1748,6 +1766,34 @@ export const ExtractionView: React.FC<ExtractionViewProps> = ({
                 <option value="InPlay">En Direct (InPlay)</option>
                 <option value="PreEvent">À venir (PreEvent)</option>
               </select>
+            </div>
+
+            {/* Drag and Drop Zone Area */}
+            <div
+              onDragOver={(e) => {
+                e.preventDefault();
+                setIsDragOver(true);
+              }}
+              onDragLeave={() => setIsDragOver(false)}
+              onDrop={handleDropFile}
+              onClick={() => fileInputRef.current?.click()}
+              className={`p-4 border-2 border-dashed rounded-2xl flex flex-col sm:flex-row items-center justify-center gap-3 text-center transition-all cursor-pointer ${
+                isDragOver
+                  ? "border-cyan-400 bg-cyan-500/15 text-cyan-200 shadow-lg shadow-cyan-500/20"
+                  : "border-slate-800 hover:border-cyan-500/50 bg-slate-950/70 text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-cyan-400 shrink-0">
+                <Upload className="w-5 h-5" />
+              </div>
+              <div className="text-left">
+                <p className="text-xs font-black text-white">
+                  Zone Glisser-Déposer de Fichier (<span className="text-cyan-400 font-mono">.JSON</span>, <span className="text-emerald-400 font-mono">.XLSX</span>, <span className="text-amber-400 font-mono">.CSV</span>)
+                </p>
+                <p className="text-[11px] text-slate-400">
+                  Glissez simplement votre fichier ici ou cliquez pour ouvrir le gestionnaire de fichiers et charger vos matchs.
+                </p>
+              </div>
             </div>
 
             {/* Table */}
