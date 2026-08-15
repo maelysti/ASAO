@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Key, CheckCircle2, AlertTriangle, RefreshCw, X, Copy, ExternalLink } from "lucide-react";
-import { fetchEntryPoints, DEFAULT_BEARER_TOKEN } from "../services/sportyApi";
+import { fetchEntryPoints } from "../services/sportyApi";
 
 interface TokenSettingsModalProps {
   isOpen: boolean;
@@ -51,7 +51,7 @@ export const TokenSettingsModal: React.FC<TokenSettingsModalProps> = ({
   };
 
   const handleResetDefault = () => {
-    setTokenInput(DEFAULT_BEARER_TOKEN);
+    setTokenInput("");
     setTestResult({ status: "idle" });
   };
 
@@ -135,7 +135,7 @@ export const TokenSettingsModal: React.FC<TokenSettingsModalProps> = ({
               onClick={handleResetDefault}
               className="text-xs text-slate-400 hover:text-slate-200 underline underline-offset-2"
             >
-              Réinitialiser au jeton initial
+Utiliser le jeton serveur par défaut
             </button>
 
             <button
